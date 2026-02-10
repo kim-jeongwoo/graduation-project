@@ -1,0 +1,67 @@
+project:
+  workspace_root: /Users/kimjeongwoo/Desktop/졸업작품/workspace
+  project_dir: /Users/kimjeongwoo/Desktop/졸업작품/workspace/egg_from_mic
+  output_dir: /Users/kimjeongwoo/Desktop/졸업작품/workspace/outputs
+  results_dir: /Users/kimjeongwoo/Desktop/졸업작품/workspace/results
+  cache_dir: /Users/kimjeongwoo/Desktop/졸업작품/workspace/cache
+  metadata_csv: /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/processed/metadata.csv
+  metadata_aligned_csv: /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/processed/metadata_aligned.csv
+  aligned_egg_dir: /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/processed/aligned_egg
+  reports_dir: /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/processed/reports
+
+data:
+  open_glot_root: /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/raw/OpenGlot
+  ptdb_tug_root:  /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/raw/PTDB-TUG
+  aku_egg_root:   /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/raw/AKU-EGG
+  lm_ssd_root:    /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/raw/LM-SSD
+  avid_root:      /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/raw/AVID
+  singing_voice_root: /Users/kimjeongwoo/Desktop/졸업작품/workspace/data/raw/Singing-Voice/DATASET
+
+processing:
+  target_sr: 16000
+  mic_hp: 30
+  egg_hp: 80
+  egg_lp: 4000
+  egg_fir_taps: 1024
+  norm_mode: zscore  # options: zscore | peak
+  frame:
+    window: 192
+    hop: 32
+  # maximum frames sampled per utterance when building Dataset
+  max_frames_per_utt: 200
+
+channel_infer:
+  tmp_sr: 16000
+  mic_band: [300,3400]
+  egg_band: [0,500]
+  confidence_threshold: 0.2
+  exclude_on_low_confidence: false
+
+device:
+  prefer_mps: true
+  batch_size: 8
+  num_workers: 2
+
+train:
+  epochs: 50
+  lr: 0.001
+  weight_decay: 0.0
+
+split:
+  train: 0.7
+  val: 0.2
+  test: 0.1
+
+holdout_datasets: []
+
+# Which datasets to include when building metadata. Use this to limit scans during experiments.
+enabled_datasets:
+  - OpenGlot
+  - Singing-Voice
+
+# Paths or glob patterns to exclude during scanning. Patterns are matched
+# against both full absolute paths and relative paths used in metadata.
+exclude_dir_patterns:
+  - "*/copy/*"
+  - "*/.git/*"
+  - "*/OpenGlot/copy/*"

@@ -1,0 +1,28 @@
+# Data (too large for GitHub)
+data/
+egg_from_mic/processed_data/
+
+# Model checkpoints
+checkpoints/
+egg_from_mic/checkpoints/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Results (images, logs)
+results/
+egg_from_mic/results/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

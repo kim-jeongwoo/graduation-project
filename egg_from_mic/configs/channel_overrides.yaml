@@ -1,0 +1,6 @@
+# Example overrides
+# keys can be relative paths under dataset root or generated uid
+# format:
+# OpenGlot/F01_breathy_high.wav:
+#   mic_ch: 0
+#   egg_ch: 1
