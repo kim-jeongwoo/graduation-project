@@ -97,7 +97,7 @@ float32 변환 + [-1,1] 정규화
 
 ### 1. WaveNet (Baseline / Exp1 / Exp1b)
 
-**파일**: `model/wavenet_egg.py`
+**파일**: `ai-model/model/wavenet_egg.py`
 
 Google DeepMind의 WaveNet 구조를 기반으로 한 **causal(인과적) dilated convolution** 모델입니다.
 
@@ -130,7 +130,7 @@ Output [B, 1, T]
 
 ### 2. TCN-UNet (Exp2, 중단)
 
-**파일**: `model/tcn_unet.py`
+**파일**: `ai-model/model/tcn_unet.py`
 
 U-Net 인코더-디코더에 TCN(Temporal Convolutional Network) 블록을 결합한 모델입니다.
 
@@ -154,7 +154,7 @@ Multi-scale feature extraction이 핵심으로, 다양한 해상도에서 특징
 
 ### 3. EfficientEGGNet (Exp3, **최고 성능**)
 
-**파일**: `model/efficient_egg.py`
+**파일**: `ai-model/model/efficient_egg.py`
 
 Exp2의 교훈을 반영하여 설계한 **non-causal dilated CNN**입니다. WaveNet의 gated activation + skip connection 구조를 유지하되, causal 제약을 제거하고 GroupNorm을 사용합니다.
 
@@ -192,7 +192,7 @@ RF = 1 + Σ(stack) Σ(layer) 2 × 2^layer
 
 ### 4. MultiInputEGGNet (Exp4)
 
-**파일**: `model/multi_input_egg.py`
+**파일**: `ai-model/model/multi_input_egg.py`
 
 이중 경로 아키텍처로, raw waveform과 mel spectrogram을 동시에 입력받습니다.
 
@@ -511,50 +511,40 @@ DTW correlation 0.7이 우연인지 확인하기 위해, 1000번의 무작위 �
 
 ```
 egg_prediction/
-├── model/                          # 모델 정의
-│   ├── wavenet_egg.py              # WaveNet (Baseline/Exp1/Exp1b)
-│   ├── tcn_unet.py                 # TCN-UNet (Exp2, 중단)
-│   ├── efficient_egg.py            # EfficientEGGNet (Exp3, 최고 성능)
-│   └── multi_input_egg.py          # Multi-Input (Exp4)
+├── ai-model/                       # AI 모델 관련 코드
+│   ├── model/                      # 모델 아키텍처 정의
+│   │   ├── wavenet_egg.py          # WaveNet (Baseline/Exp1/Exp1b)
+│   │   ├── tcn_unet.py            # TCN-UNet (Exp2, 중단)
+│   │   ├── efficient_egg.py       # EfficientEGGNet (Exp3, 최고 성능)
+│   │   └── multi_input_egg.py     # Multi-Input (Exp4)
+│   ├── utils/                      # 유틸리티
+│   │   ├── dataset.py             # SVD 데이터셋 로더 + speaker split
+│   │   └── nsp_reader.py          # SVD NSP/EGG 파일 파서
+│   ├── configs/                    # 학습 설정 파일
+│   ├── train.py                    # Baseline 학습
+│   ├── train_exp1.py ~ exp4.py    # 각 실험 학습 스크립트
+│   ├── analyze_*.py               # 분석 스크립트
+│   ├── generate_figures.py        # 결과 시각화
+│   ├── EXPERIMENT_REPORT.md       # 실험 상세 보고서
+│   └── egg_from_mic/              # 초기 실험 코드 (PTDB 등)
 │
-├── utils/                          # 유틸리티
-│   ├── dataset.py                  # SVD 데이터셋 로더 + speaker split
-│   └── nsp_reader.py               # SVD NSP/EGG 파일 파서
+├── docs/                           # 프로젝트 문서 및 참고자료
+│   └── useful-info.md             # 유용한 도구/정보 모음
 │
-├── train.py                        # Baseline 학습
-├── train_exp1.py                   # Exp1 학습
-├── train_exp1b.py                  # Exp1b 학습
-├── train_exp2.py                   # Exp2 학습
-├── train_exp3.py                   # Exp3 학습 (최고 성능)
-├── train_exp4.py                   # Exp4 학습
+├── images/                         # 프로젝트 관련 이미지
+│                                   # (아키텍처 다이어그램, 결과 그래프 등)
 │
-├── analyze_similarity.py           # 발성 유사도 분석 (Raw)
-├── analyze_dtw_similarity.py       # DTW 시간 정렬 유사도
-├── analyze_spectrogram_validation.py # 스펙트로그램 + 셔플 검증
-├── generate_figures.py             # 결과 시각화 이미지 생성
+├── server/                         # 서버 코드 (추후 추가 예정)
 │
-├── configs/config.yaml             # Baseline 설정 파일
-├── EXPERIMENT_REPORT.md            # 실험 상세 보고서
-│
-├── egg_from_mic/                   # 초기 실험 코드 (PTDB 등)
-│   ├── model/                      # 초기 모델
-│   ├── utils/                      # 초기 유틸리티
-│   ├── configs/                    # 초기 설정
-│   └── ...
+├── app/                            # 앱 코드 (추후 추가 예정)
 │
 ├── data/                           # 데이터 (gitignore)
-│   ├── SVD_healthy/                # SVD 건강 화자 데이터
-│   └── rpi_recordings/             # 라즈베리파이 녹음
+│   ├── SVD_healthy/               # SVD 건강 화자 데이터
+│   └── rpi_recordings/            # 라즈베리파이 녹음
 │
 ├── checkpoints/                    # 모델 체크포인트 (gitignore)
-│   ├── best_model.pt               # Baseline
-│   ├── exp1_larger_model/          
-│   ├── exp3_efficient/             # 최고 성능 모델
-│   └── ...
 │
 └── results/                        # 결과물 (gitignore)
-    ├── validation/                 # 유사도 분석 결과
-    └── exp*/                       # 각 실험 결과
 ```
 
 ---
@@ -593,6 +583,8 @@ data/SVD_healthy/
 ### 학습
 
 ```bash
+cd ai-model/
+
 # Baseline
 python train.py
 
@@ -603,6 +595,8 @@ python train_exp3.py
 ### 유사도 분석
 
 ```bash
+cd ai-model/
+
 # DTW 기반 유사도 분석
 python analyze_dtw_similarity.py
 
