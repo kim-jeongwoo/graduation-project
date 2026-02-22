@@ -16,6 +16,11 @@ __pycache__/
 results/
 **/results/
 
+# Training logs
+*.log
+auto_exp*.log
+nohup.out
+
 # Jupyter
 .ipynb_checkpoints/
 
