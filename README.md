@@ -644,23 +644,37 @@ Train-Test gap 0.022로 **과적합 징후 없음**. 건전한 일반화 확인.
 - Window Size: 16384 samples (1024ms)
 - Speaker-Independent Evaluation (70 unseen speakers)
 
-### MIC → EGG 예측 비교
+> **샘플 선택 기준**: 모든 시각화 샘플은 **중앙값(Median) 및 사분위수(Quartile) 기반**으로 선택하였습니다. 가장 성능이 좋은 화자만 보여주는 cherry-picking을 배제하여, 실제 모델 성능을 공정하게 반영합니다.
+
+### MIC → EGG 예측 비교 (중앙값 근처 화자)
 
 ![Prediction Comparison](figures/prediction_comparison.png)
 
-테스트 화자 5명에 대해 MIC 입력(파란색), 정답 EGG(초록색), 예측 EGG(빨간 점선)를 비교한 결과입니다. 예측 EGG가 정답 EGG의 파형 패턴을 높은 정확도로 재현하고 있습니다.
+Median Corr(0.8532) 근처 화자 3명을 선택하여 MIC 입력(파란색), 정답 EGG(초록색), 예측 EGG(빨간 점선)를 비교한 결과입니다.
 
-### 정답 vs 예측 EGG 오버레이
+| 화자 | Corr | Median과의 거리 |
+|------|------|----------------|
+| Speaker 1612 | 0.8518 | 0.0014 |
+| Speaker 978 | 0.8546 | 0.0014 |
+| Speaker 28 | 0.8560 | 0.0027 |
 
-![EGG Overlay](figures/egg_overlay.png)
+### 예측 품질 범위 (Good / Typical / Challenging)
 
-정답(초록 실선)과 예측(빨간 점선)을 겹쳐서 보면, 성대 접촉의 개폐 패턴이 잘 일치하는 것을 확인할 수 있습니다. 회색 영역은 두 신호의 차이를 나타냅니다.
+![Prediction Range](figures/prediction_range.png)
+
+상위 25%(Q75), 중앙값(Median), 하위 25%(Q25)에 해당하는 화자를 각 1명씩 선택하여, 모델 성능의 **전체적인 범위**를 보여줍니다.
+
+| 분류 | 화자 | Corr |
+|------|------|------|
+| Good (Q75) | Speaker 10 | 0.8992 |
+| Typical (Median) | Speaker 1612 | 0.8518 |
+| Challenging (Q25) | Speaker 56 | 0.7711 |
 
 ### 화자별 Correlation 분포
 
 ![Speaker Distribution](figures/speaker_correlation_distribution.png)
 
-70명의 테스트 화자 중 **90%가 Correlation ≥ 0.7**, **71%가 ≥ 0.8**을 달성했습니다. Median = 0.8532로, 대부분의 화자에 대해 높은 예측 정확도를 보입니다.
+70명의 테스트 화자 중 **90%가 Correlation ≥ 0.7**, **71%가 ≥ 0.8**을 달성했습니다. Median = 0.8532로, 대부분의 화자에 대해 높은 예측 정확도를 보입니다. 다이아몬드(◆)와 삼각형(▲) 마커는 각각 Fig 1, Fig 2에서 사용한 샘플의 위치를 나타냅니다.
 
 ---
 
