@@ -636,6 +636,34 @@ Train-Test gap 0.022로 **과적합 징후 없음**. 건전한 일반화 확인.
 
 ---
 
+## 예측 결과 시각화
+
+### Best Model: Exp20 (Progressive Window)
+- **Test Correlation: 0.8249**
+- Model: EfficientEGGNet (5.99M params)
+- Window Size: 16384 samples (1024ms)
+- Speaker-Independent Evaluation (70 unseen speakers)
+
+### MIC → EGG 예측 비교
+
+![Prediction Comparison](figures/prediction_comparison.png)
+
+테스트 화자 5명에 대해 MIC 입력(파란색), 정답 EGG(초록색), 예측 EGG(빨간 점선)를 비교한 결과입니다. 예측 EGG가 정답 EGG의 파형 패턴을 높은 정확도로 재현하고 있습니다.
+
+### 정답 vs 예측 EGG 오버레이
+
+![EGG Overlay](figures/egg_overlay.png)
+
+정답(초록 실선)과 예측(빨간 점선)을 겹쳐서 보면, 성대 접촉의 개폐 패턴이 잘 일치하는 것을 확인할 수 있습니다. 회색 영역은 두 신호의 차이를 나타냅니다.
+
+### 화자별 Correlation 분포
+
+![Speaker Distribution](figures/speaker_correlation_distribution.png)
+
+70명의 테스트 화자 중 **90%가 Correlation ≥ 0.7**, **71%가 ≥ 0.8**을 달성했습니다. Median = 0.8532로, 대부분의 화자에 대해 높은 예측 정확도를 보입니다.
+
+---
+
 ## 발성 유사도 분석 (응용 실험)
 
 학습된 모델을 실제 녹음에 적용하여, 기준 노래와 사용자 노래의 **발성 유사도**를 비교하는 실험도 수행했습니다.
