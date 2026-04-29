@@ -14,7 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 type Props = NativeStackScreenProps<any, 'Signup'>;
 
 export default function SignupScreen({ navigation }: Props) {
-  const { signup } = useAuth();
+  const { signup, loginAsGuest } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
@@ -78,6 +78,12 @@ export default function SignupScreen({ navigation }: Props) {
       <TouchableOpacity onPress={() => navigation.goBack()}>
         <Text style={styles.link}>로그인으로 돌아가기</Text>
       </TouchableOpacity>
+
+      <View style={styles.divider} />
+      <Text style={styles.guestHint}>서버 미연결 시 게스트로 진행 가능</Text>
+      <TouchableOpacity style={styles.guestButton} onPress={loginAsGuest}>
+        <Text style={styles.guestButtonText}>게스트로 시작 (개발/시연용)</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -104,4 +110,14 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   link: { textAlign: 'center', color: COLORS.primaryLight, fontSize: 14 },
+  divider: { height: 1, backgroundColor: COLORS.divider, marginVertical: 24 },
+  guestHint: { textAlign: 'center', color: COLORS.textMuted, fontSize: 12, marginBottom: 10 },
+  guestButton: {
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  guestButtonText: { color: COLORS.textSecondary, fontSize: 15, fontWeight: '500' },
 });

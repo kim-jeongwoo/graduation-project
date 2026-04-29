@@ -13,9 +13,11 @@ import type { AuthResponse } from '../types/api';
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
+type UserInfo = Omit<AuthResponse, 'token'> & { isGuest?: boolean };
+
 interface AuthState {
   token: string | null;
-  user: Omit<AuthResponse, 'token'> | null;
+  user: UserInfo | null;
   isLoading: boolean;
 }
 
@@ -23,6 +25,7 @@ interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, nickname: string) => Promise<void>;
   logout: () => Promise<void>;
+  loginAsGuest: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -77,8 +80,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setState({ token: null, user: null, isLoading: false });
   }, []);
 
+  const loginAsGuest = useCallback(() => {
+    const ts = Date.now();
+    setState({
+      token: `guest_token_${ts}`,
+      user: { user_id: `guest_${ts}`, email: 'guest@local', nickname: '게스트', isGuest: true },
+      isLoading: false,
+    });
+    // SecureStore에 저장하지 않음 — 앱 재시작 시 자동 로그아웃
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, signup, logout }}>
+    <AuthContext.Provider value={{ ...state, login, signup, logout, loginAsGuest }}>
       {children}
     </AuthContext.Provider>
   );
