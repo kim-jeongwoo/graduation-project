@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vocal.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +25,8 @@
       "predictiveBackGestureEnabled": false,
       "usesClearTextTraffic": true,
       "package": "com.vocal.app",
-      "permissions": ["RECORD_AUDIO"]
+      "versionCode": 1,
+      "permissions": ["RECORD_AUDIO", "INTERNET"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
