@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uvicorn *)",
+      "Bash(source vocalserver/bin/activate)",
+      "Bash(alembic *)",
+      "Bash(/opt/homebrew/Cellar/postgresql@17/17.8/bin/psql *)",
+      "Bash(pip install *)",
+      "Bash(pip list)",
+      "Bash(pip freeze)",
+      "Bash(pip show *)",
+      "Bash(lsof *)",
+      "Bash(kill *)",
+      "Bash(curl *)",
+      "Bash(find app -name __pycache__ -exec rm -rf {} +)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(echo *)",
+      "Bash(sleep *)",
+      "Bash(python3 *)",
+      "Read(**)",
+      "Edit(**)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force *)",
+      "Bash(cat .env)",
+      "Bash(cat .env.*)",
+      "Read(.env)",
+      "Read(.env.*)"
+    ]
+  }
+}

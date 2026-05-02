@@ -15,6 +15,11 @@ song/
 data/vocal_academy/singer_*/
 data/vocal_academy/validation/
 data/SVD_healthy/
+app/storage/songs/audio/
+app/storage/songs/lrc/
+app/storage/songs/pitch_guide/
+app/storage/songs/meta/
+app/storage/users/
 
 # ─── 평가지/평가표 (개인정보) ────────────────────────────────────────────
 data/vocal_academy/평가지*.docx
@@ -50,6 +55,7 @@ __pycache__/
 .venv/
 venv/
 env/
+vocalserver/
 node_modules/
 
 # ─── 환경변수 ─────────────────────────────────────────────────────────────
@@ -62,12 +68,10 @@ node_modules/
 auto_exp*.log
 nohup.out
 logs/
+/tmp/
 
 # ─── 에이전트 내부 메모리 ─────────────────────────────────────────────────
 .claude/
-
-# ─── 사용자 별도 관리 디렉토리 ───────────────────────────────────────────
-app/
 
 # ─── OS ──────────────────────────────────────────────────────────────────
 .DS_Store
