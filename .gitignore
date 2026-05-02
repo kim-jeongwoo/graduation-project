@@ -1,25 +1,85 @@
-# 가상환경
-vocalserver/
+# ─── 저작권 보호: 음원 파일 절대 포함 금지 ───────────────────────────────
+data/songs/audio/master/
+data/songs/audio/mr/
+data/songs/_uploads/
+data/songs/stems/
+song/
+songs/
+*.mp3
+*.wav
+*.flac
+*.m4a
+*.aac
+*.ogg
 
-# 대용량 오디오/데이터 파일 (rsync로 별도 관리)
+# ─── 개인정보 보호: 사용자 음성 데이터 ──────────────────────────────────
+data/vocal_academy/singer_*/
+data/vocal_academy/validation/
+data/SVD_healthy/
 app/storage/songs/audio/
 app/storage/songs/lrc/
 app/storage/songs/pitch_guide/
 app/storage/songs/meta/
-
-# 사용자 업로드 파일
 app/storage/users/
 
-# Python
+# ─── 평가지/평가표 (개인정보) ────────────────────────────────────────────
+data/vocal_academy/평가지*.docx
+data/vocal_academy/평가표*.docx
+data/vocal_academy/_new_eval*/
+data/vocal_academy/_archived*/
+data/vocal_academy/_new_upload*/
+data/vocal_academy/trainer_scores*.csv
+
+# ─── 모델 가중치 (대용량, 100MB+ GitHub 제한) ────────────────────────────
+checkpoints/
+**/*.pt
+**/*.pth
+**/*.ckpt
+**/*.safetensors
+
+# ─── Data (대용량) ────────────────────────────────────────────────────────
+data/
+**/processed_data/
+
+# ─── 학습 결과 ────────────────────────────────────────────────────────────
+results/
+**/results/
+
+# ─── Python 캐시 ─────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
-.env
+*.pyd
+.ipynb_checkpoints/
 
-# 테스트 임시
-/tmp/
+# ─── 가상환경 ─────────────────────────────────────────────────────────────
+.venv/
 venv/
-__pycache__/
-*.pyc
+env/
+vocalserver/
+node_modules/
+
+# ─── 환경변수 ─────────────────────────────────────────────────────────────
 .env
+.env.local
+.env.*.local
+
+# ─── 로그 ────────────────────────────────────────────────────────────────
+*.log
+auto_exp*.log
+nohup.out
+logs/
 /tmp/
+
+# ─── 에이전트 내부 메모리 ─────────────────────────────────────────────────
+.claude/
+
+# ─── OS ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+
+# ─── IDE ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.cursor/

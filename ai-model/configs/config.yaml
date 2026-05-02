@@ -1,0 +1,35 @@
+# 데이터 설정
+data:
+  svd_path: "~/projects/egg_prediction/data/SVD_healthy"
+  ptdb_path: "~/projects/egg_prediction/data/PTDB-TUG"
+  sample_rate: 16000
+  window_length: 192
+  hop_length: 192
+
+# 모델 설정
+model:
+  layers: 8
+  channels: 32
+  kernel_size: 3
+  use_attention: true
+  dropout: 0.5
+
+# 학습 설정
+training:
+  batch_size: 256
+  max_epochs: 100
+  learning_rate: 0.001
+  lr_decay: 0.95
+  weight_decay: 0.0001
+  early_stopping_patience: 10
+
+# 화자 분할
+split:
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
+
+# 저장 경로
+paths:
+  results: "~/projects/egg_prediction/results"
+  checkpoints: "~/projects/egg_prediction/checkpoints"

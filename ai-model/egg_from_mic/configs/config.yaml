@@ -1,0 +1,54 @@
+# WaveNet EGG 예측 모델 설정
+# 논문 기준
+
+# 모델 설정
+model:
+  input_length: 192       # 12ms @ 16kHz
+  num_channels: 32        # 논문 기준
+  kernel_size: 3          # 논문 기준
+  num_layers: 10          # dilation 2^0 ~ 2^9
+  num_stacks: 1
+  dropout: 0.3            # 논문 기준
+  use_attention: true
+  num_heads: 4
+
+# 학습 설정
+training:
+  batch_size: 512         # 논문 기준
+  epochs: 50              # 논문 기준
+  learning_rate: 0.001    # 논문 기준
+  lr_gamma: 0.95          # ExponentialLR decay
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+
+# 데이터 설정
+data:
+  datasets:
+    - OpenGlot            # 메인 (corr 0.70)
+    - Singing-Voice       # 보조 (corr 0.39)
+    - PMC                 # 보조 (corr 0.39)
+    # - PTDB-TUG          # 제외 (corr 0.03, 낮음)
+  window_length: 192      # 12ms @ 16kHz
+  hop_length: 32          # 2ms @ 16kHz
+  align: true
+  max_lag_ms: 50
+  train_ratio: 0.7
+  val_ratio: 0.2
+  # test_ratio: 0.1 (나머지)
+
+# 전처리 설정
+preprocessing:
+  target_sr: 16000
+  mic_highpass_hz: 30
+  egg_lowpass_hz: 4000
+  egg_highpass_hz: 80
+
+# 저장 설정
+output:
+  checkpoint_dir: checkpoints
+  results_dir: results
+  save_every_epoch: true
+  save_best_only: false
+
+# Device 설정
+device: auto  # auto, cpu, cuda, mps
