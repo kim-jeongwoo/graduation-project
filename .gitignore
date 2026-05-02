@@ -16,11 +16,11 @@ songs/
 data/vocal_academy/singer_*/
 data/vocal_academy/validation/
 data/SVD_healthy/
-app/storage/songs/audio/
-app/storage/songs/lrc/
-app/storage/songs/pitch_guide/
-app/storage/songs/meta/
-app/storage/users/
+vocal-server/app/storage/songs/audio/
+vocal-server/app/storage/songs/lrc/
+vocal-server/app/storage/songs/pitch_guide/
+vocal-server/app/storage/songs/meta/
+vocal-server/app/storage/users/
 
 # ─── 평가지/평가표 (개인정보) ────────────────────────────────────────────
 data/vocal_academy/평가지*.docx

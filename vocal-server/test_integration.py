@@ -4,7 +4,7 @@ import uuid
 import httpx
 
 BASE = "http://localhost:8000"
-WAV = "/Users/kimjeongwoo/vocal-server/songs/잔나비-주저하는_연인들을_위해-vocals.wav"
+WAV = "/Users/kimjeongwoo/vocal-server/vocal-server/songs/잔나비-주저하는_연인들을_위해-vocals.wav"
 
 PASS = "PASS"
 FAIL = "FAIL"

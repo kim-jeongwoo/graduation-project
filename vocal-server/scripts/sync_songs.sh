@@ -1,6 +1,6 @@
 #!/bin/bash
 # dmlserver의 노래방 산출물을 Mac Studio 서버에 동기화 (Mac Studio에서 실행)
-# 수동 실행: cd /Users/kimjeongwoo/vocal-server && bash scripts/sync_songs.sh
+# 수동 실행: cd /Users/kimjeongwoo/vocal-server/vocal-server && bash scripts/sync_songs.sh
 # 전제: ssh dmlserver@114.71.220.144 키 기반 인증 설정 완료
 
 set -e

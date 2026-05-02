@@ -2,22 +2,29 @@
 
 순천향대학교 사물인터넷학과 졸업작품. 딥러닝 기반 EGG 추정을 활용한 가창 발성 평가 + 보컬 트레이닝 피드백 시스템.
 
-## 프로젝트 구조
+## 프로젝트 구조 (모노레포)
 
 ```
-graduation-project/
-├── ai-model/         # EGG 추정 딥러닝 모델 학습 (EfficientEGGNet)
-├── model_server/     # FastAPI 추론 서버 (GPU, dmlserver)
-├── server/           # 백엔드 API (FastAPI, Mac Studio)
-├── scripts/          # 분석 파이프라인 (score_mapper, batch_analyze, ...)
-├── data-prep/        # 14곡 노래방 데이터 준비 (LRC + 음정 곡선)
-├── results/          # 검증 결과 JSON + 시각화
-├── figures/          # 학습/분석 시각화 PNG
-├── docs/             # 프로젝트 문서
-├── tests/            # 테스트 코드
-├── CLAUDE.md         # 코드 에이전트용 작업 컨텍스트
-├── PROJECT_LOG.md    # 프로젝트 진행 기록 (사용자용)
-└── README.md         # 본 파일
+graduation-project/           # 이 레포 루트
+├── vocal-server/             # 백엔드 API 서브프로젝트 (FastAPI, Mac Studio)
+│   ├── app/                  #   라우터, 서비스, ORM 모델
+│   ├── alembic/              #   DB 마이그레이션
+│   ├── scripts/              #   동기화·시드 스크립트
+│   ├── docs/                 #   API 문서
+│   ├── PROGRESS.md           #   진행 현황
+│   └── CLAUDE.md             #   vocal-server 전용 에이전트 컨텍스트
+├── server/                   # (구) 백엔드 — 레거시, 참조용
+├── ai-model/                 # EGG 추정 딥러닝 모델 학습 (EfficientEGGNet)
+├── model_server/             # FastAPI 추론 서버 (GPU, dmlserver)
+├── scripts/                  # 분석 파이프라인 (score_mapper, batch_analyze, ...)
+├── data-prep/                # 14곡 노래방 데이터 준비 (LRC + 음정 곡선)
+├── results/                  # 검증 결과 JSON + 시각화
+├── figures/                  # 학습/분석 시각화 PNG
+├── docs/                     # 프로젝트 공통 문서
+├── tests/                    # 테스트 코드
+├── CLAUDE.md                 # 코드 에이전트용 작업 컨텍스트 (공통)
+├── PROJECT_LOG.md            # 프로젝트 진행 기록 (사용자용)
+└── README.md                 # 본 파일
 ```
 
 ## 핵심 결과
