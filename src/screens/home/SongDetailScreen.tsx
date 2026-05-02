@@ -13,7 +13,7 @@ import type { Song } from '../../types/api';
 type HomeStackParams = {
   Home: undefined;
   SongDetail: { song: Song };
-  Karaoke: { songId: string };
+  Karaoke: { songId: string; title: string; artist: string; mrDurationSec: number };
   EvalResult: { runId?: string };
 };
 
@@ -70,7 +70,12 @@ export default function SongDetailScreen({ navigation, route }: Props) {
           <TouchableOpacity
             style={styles.startBtn}
             activeOpacity={0.8}
-            onPress={() => navigation.navigate('Karaoke', { songId: song.id })}
+            onPress={() => navigation.navigate('Karaoke', {
+              songId: song.id,
+              title: song.title,
+              artist: song.artist,
+              mrDurationSec: song.mrDurationSec,
+            })}
           >
             <Text style={styles.startBtnText}>녹음 시작</Text>
           </TouchableOpacity>

@@ -89,11 +89,6 @@ function HomeStackNavigator() {
         options={{ headerShown: false }}
       />
       <HomeStack.Screen
-        name="Karaoke"
-        component={KaraokeScreen as React.ComponentType<object>}
-        options={{ headerShown: false, presentation: 'fullScreenModal' }}
-      />
-      <HomeStack.Screen
         name="EvalResult"
         component={EvalResultScreen as React.ComponentType<object>}
         options={{ title: '발성 분석 결과' }}
@@ -192,6 +187,22 @@ function MainTabNavigator() {
   );
 }
 
+// ─── App Root Stack: MainTabs + fullscreen modals above bottom tabs ───
+const AppRootStack = createNativeStackNavigator();
+
+function AppRootNavigator() {
+  return (
+    <AppRootStack.Navigator screenOptions={{ headerShown: false }}>
+      <AppRootStack.Screen name="MainTabs" component={MainTabNavigator} />
+      <AppRootStack.Screen
+        name="Karaoke"
+        component={KaraokeScreen as React.ComponentType<object>}
+        options={{ presentation: 'fullScreenModal' }}
+      />
+    </AppRootStack.Navigator>
+  );
+}
+
 // ─── Root Navigator ───
 const RootStack = createNativeStackNavigator();
 
@@ -213,14 +224,11 @@ export default function AppNavigator() {
         <AuthNavigator />
       ) : !isTestCompleted ? (
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          <RootStack.Screen
-            name="VocalRangeTest"
-            component={VocalRangeTestScreen}
-          />
+          <RootStack.Screen name="VocalRangeTest" component={VocalRangeTestScreen} />
           <RootStack.Screen name="MainTabs" component={MainTabNavigator} />
         </RootStack.Navigator>
       ) : (
-        <MainTabNavigator />
+        <AppRootNavigator />
       )}
     </NavigationContainer>
   );
