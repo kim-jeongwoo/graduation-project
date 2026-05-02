@@ -150,6 +150,43 @@ r = httpx.get(f"{BASE}/sessions")
 check("토큰 없이 → 401", r.status_code == 401, f"status={r.status_code}")
 
 # ──────────────────────────────────────────────
+# 테스트 4: 노래방 통합
+# ──────────────────────────────────────────────
+print("\n=== 테스트 4: 노래방 통합 ===")
+
+# 정상 song_id(004)로 세션 생성 → GET으로 song.id 확인
+r = httpx.post(f"{BASE}/sessions", json={"song_id": "004"}, headers=headers_a)
+s4_id = r.json().get("session_id") if r.status_code == 201 else None
+if s4_id:
+    r2 = httpx.get(f"{BASE}/sessions/{s4_id}", headers=headers_a)
+    song_info = r2.json().get("song")
+    check("song_id=004 세션 → song.id==004", song_info and song_info.get("id") == "004", str(song_info))
+else:
+    check("song_id=004 세션 → song.id==004", False, f"create failed: status={r.status_code}")
+
+# 잘못된 song_id → 400
+r = httpx.post(f"{BASE}/sessions", json={"song_id": "999"}, headers=headers_a)
+check("잘못된 song_id → 400", r.status_code == 400, f"status={r.status_code}")
+
+# song_title만 있는 세션(테스트 1) → song.id null, song.title 일치
+r = httpx.get(f"{BASE}/sessions/{session_id}", headers=headers_a)
+song_info = r.json().get("song")
+check(
+    "song_title만 → song.id null, title 일치",
+    song_info is not None and song_info.get("id") is None and song_info.get("title") == "테스트곡",
+    str(song_info),
+)
+
+# 둘 다 없는 세션 → song null
+r = httpx.post(f"{BASE}/sessions", json={}, headers=headers_a)
+s5_id = r.json().get("session_id") if r.status_code == 201 else None
+if s5_id:
+    r2 = httpx.get(f"{BASE}/sessions/{s5_id}", headers=headers_a)
+    check("song 정보 없는 세션 → song null", r2.json().get("song") is None, str(r2.json().get("song")))
+else:
+    check("song 정보 없는 세션 → song null", False, f"create failed: status={r.status_code}")
+
+# ──────────────────────────────────────────────
 # 요약
 # ──────────────────────────────────────────────
 print("\n=== 결과 요약 ===")

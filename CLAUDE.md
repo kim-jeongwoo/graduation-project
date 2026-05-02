@@ -107,3 +107,8 @@ songs/             # MP3, vocals.wav, final.json, pitch.json
 - [2026-04-29] [DB 마이그레이션] NOT NULL 칼럼을 기존 데이터 있는 테이블에 추가할 때는
   alembic autogenerate가 server_default를 자동 생성하지 않으므로
   마이그레이션 파일에 server_default를 수동 추가해야 함.
+
+- [2026-05-03] [서버 재시작] uvicorn 재시작 시 "Address already in use" 발생하면
+  이전 프로세스가 살아있는 것. --reload가 켜져 있어도 코드 변경이 반영 안 될 수 있음.
+  해결: `pkill -f "uvicorn app.main"` 후 재시작.
+  또는 `lsof -i :8000`으로 PID 확인 후 kill.
