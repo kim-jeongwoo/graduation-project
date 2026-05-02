@@ -29,7 +29,7 @@ if Path(_NOTO).exists():
     fm.fontManager.addfont(_NOTO)
     matplotlib.rcParams["font.family"] = fm.FontProperties(fname=_NOTO).get_name()
 
-BASE       = Path(__file__).resolve().parents[2] / "data" / "songs"
+BASE       = Path(__file__).resolve().parents[3] / "data" / "songs"
 MASTER_DIR = BASE / "audio" / "master"
 MR_DIR     = BASE / "audio" / "mr"
 STEMS_DIR  = BASE / "stems"

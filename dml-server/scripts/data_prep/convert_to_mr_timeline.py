@@ -21,7 +21,7 @@ import json
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parents[2] / "data" / "songs"
+BASE = Path(__file__).resolve().parents[3] / "data" / "songs"
 META_PATH = BASE / "meta" / "songs.json"
 PG_DIR = BASE / "pitch_guide"
 LRC_DIR = BASE / "lrc" / "parsed"

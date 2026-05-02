@@ -15,7 +15,7 @@ import subprocess
 import unicodedata
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parents[2] / "data" / "songs"
+BASE = Path(__file__).resolve().parents[3] / "data" / "songs"
 UPLOADS = BASE / "_uploads"
 MASTER_DIR = BASE / "audio" / "master"
 MR_DIR = BASE / "audio" / "mr"

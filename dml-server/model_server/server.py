@@ -30,7 +30,7 @@ CHECKPOINT_PATH = os.getenv(
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8001"))
 
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CRITERIA_PATH = os.path.join(
     _PROJECT_ROOT, "data", "vocal_academy", "evaluation_criteria.json"
 )

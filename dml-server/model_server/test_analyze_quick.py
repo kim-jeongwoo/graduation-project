@@ -7,7 +7,7 @@ import soundfile as sf
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ai-model'))
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CHECKPOINT  = os.path.join(PROJECT_ROOT, 'checkpoints', 'exp20_progressive', 'best_model.pt')
 CRITERIA    = os.path.join(PROJECT_ROOT, 'data', 'vocal_academy', 'evaluation_criteria.json')
 MAPPINGS    = os.path.join(PROJECT_ROOT, 'data', 'vocal_academy', 'results', 'ai_scores.json')

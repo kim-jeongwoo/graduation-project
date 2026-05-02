@@ -15,7 +15,7 @@ import requests
 from pathlib import Path
 from difflib import SequenceMatcher
 
-BASE = Path(__file__).resolve().parents[2] / "data" / "songs"
+BASE = Path(__file__).resolve().parents[3] / "data" / "songs"
 LRC_RAW    = BASE / "lrc" / "raw"
 LRC_PARSED = BASE / "lrc" / "parsed"
 META_PATH  = BASE / "meta" / "songs.json"

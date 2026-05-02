@@ -45,6 +45,10 @@ data/
 results/
 **/results/
 
+# ─── demo_responses는 git에 포함 (앱 mock 데이터) ─────────────────────────
+!demo_responses/
+!demo_responses/*.json
+
 # ─── Python 캐시 ─────────────────────────────────────────────────────────
 __pycache__/
 *.pyc

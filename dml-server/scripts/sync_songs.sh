@@ -8,7 +8,9 @@ set -e
 REMOTE_USER="dmlserver"
 REMOTE_HOST="114.71.220.144"
 REMOTE_BASE="/home/dmlserver/projects/egg_prediction/data/songs"
+REMOTE_DEMO="/home/dmlserver/projects/egg_prediction/dml-server/results/demo_responses"
 LOCAL_BASE="app/storage/songs"
+LOCAL_DEMO="app/storage/demo_responses"
 
 echo "[sync] 시작: $(date)"
 
@@ -17,6 +19,7 @@ mkdir -p "$LOCAL_BASE/audio/master"
 mkdir -p "$LOCAL_BASE/audio/mr"
 mkdir -p "$LOCAL_BASE/lrc/parsed"
 mkdir -p "$LOCAL_BASE/pitch_guide"
+mkdir -p "$LOCAL_DEMO"
 
 # 1. 메타
 echo "[sync] 1/5 메타 동기화..."
@@ -55,13 +58,22 @@ rsync -avz --delete \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_BASE}/pitch_guide/" \
   "${LOCAL_BASE}/pitch_guide/"
 
+# 6. demo_responses (mock JSON — dml-server/results/demo_responses/)
+echo "[sync] 6/6 demo_responses 동기화..."
+rsync -avz --delete \
+  --include='*.json' \
+  --exclude='*' \
+  "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DEMO}/" \
+  "${LOCAL_DEMO}/"
+
 echo ""
 echo "[sync] 완료: $(date)"
 echo "[sync] 파일 수:"
-echo "  meta:        $(ls $LOCAL_BASE/meta/*.json 2>/dev/null | wc -l) json"
-echo "  audio/master:$(ls $LOCAL_BASE/audio/master/*.mp3 2>/dev/null | wc -l) mp3"
-echo "  audio/mr:    $(ls $LOCAL_BASE/audio/mr/*.mp3 2>/dev/null | wc -l) mp3"
-echo "  lrc/parsed:  $(ls $LOCAL_BASE/lrc/parsed/*.json 2>/dev/null | wc -l) json"
-echo "  pitch_guide: $(ls $LOCAL_BASE/pitch_guide/*.json 2>/dev/null | wc -l) json"
+echo "  meta:          $(ls $LOCAL_BASE/meta/*.json 2>/dev/null | wc -l) json"
+echo "  audio/master:  $(ls $LOCAL_BASE/audio/master/*.mp3 2>/dev/null | wc -l) mp3"
+echo "  audio/mr:      $(ls $LOCAL_BASE/audio/mr/*.mp3 2>/dev/null | wc -l) mp3"
+echo "  lrc/parsed:    $(ls $LOCAL_BASE/lrc/parsed/*.json 2>/dev/null | wc -l) json"
+echo "  pitch_guide:   $(ls $LOCAL_BASE/pitch_guide/*.json 2>/dev/null | wc -l) json"
 echo "  (pitch_guide *_mr: $(ls $LOCAL_BASE/pitch_guide/*_mr.json 2>/dev/null | wc -l), lrc *_mr: $(ls $LOCAL_BASE/lrc/parsed/*_mr.json 2>/dev/null | wc -l))"
-echo "[sync] 디스크 사용량: $(du -sh $LOCAL_BASE | cut -f1)"
+echo "  demo_responses: $(ls $LOCAL_DEMO/*.json 2>/dev/null | wc -l) json"
+echo "[sync] 디스크 사용량: songs=$(du -sh $LOCAL_BASE | cut -f1), demo=$(du -sh $LOCAL_DEMO | cut -f1)"

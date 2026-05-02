@@ -33,7 +33,10 @@ MR_DIR     = BASE / "data" / "songs" / "mr"  # MR 음원 경로 (cross-corr용)
 
 SONGS_WITHOUT_LRC = ["001", "007", "011"]
 CONFIDENCE_WARN   = 0.5   # 이 미만 → manual_review 표시
-MAX_CORRECTION_S  = 0.5   # cross-corr 보정 최대값 (±s)
+DEFAULT_MAX_CORRECTION_S = 0.5  # cross-corr 보정 기본 클램프 (±s)
+SNR_WARN          = 1.5   # 이 미만 → alignment_status에 _low_snr 접미사
+
+PITCH_GUIDE_DIR = BASE / "data" / "songs" / "pitch_guide"
 
 SR = 16000
 
@@ -45,18 +48,24 @@ def load_songs_meta() -> dict:
 
 
 # ── 타임스탬프 보정: RMS vs Whisper activity cross-correlation ──────
-def compute_timing_correction(audio: np.ndarray, segments: list) -> float:
+def compute_timing_correction(audio: np.ndarray, segments: list,
+                               max_correction_s: float,
+                               verbose: bool = False) -> tuple[float, float, float]:
     """
     vocals.wav의 RMS 에너지 포락선과 Whisper 활성 구간을 cross-correlation하여
     Whisper 타임스탬프의 전역 오프셋(초)을 추정한다.
-    반환값: positive → Whisper가 앞섬(timestamps += correction), negative → 뒤섬
+
+    반환: (raw_lag_s, clamped_correction_s, snr)
+      raw_lag_s: 클램프 전 실제 추정값
+      clamped:   ±max_correction_s 클램프 후 적용값
+      snr:       peak / zero-lag 비율 (신뢰도 지표)
+    positive → Whisper가 앞섬(timestamps += correction → 뒤로 이동)
     """
     hop = int(SR * 0.01)  # 10ms 단위
     n_frames = len(audio) // hop
-    duration = len(audio) / SR
 
-    # RMS 에너지 포락선
-    rms = librosa.feature.rms(y=audio, frame_length=hop * 2, hop_length=hop)[0]
+    # RMS 에너지 포락선 (vocal 활성 구간의 대리 신호)
+    rms = librosa.feature.rms(y=audio, frame_length=hop * 4, hop_length=hop)[0]
     rms = rms[:n_frames]
     rms = rms / (rms.max() + 1e-8)
 
@@ -71,21 +80,32 @@ def compute_timing_correction(audio: np.ndarray, segments: list) -> float:
             activity[s:e] = 1.0
 
     if activity.sum() == 0 or rms.sum() == 0:
-        return 0.0
+        return 0.0, 0.0, 0.0
 
-    # cross-correlation (검색 범위 ±MAX_CORRECTION_S)
-    max_lag = int(MAX_CORRECTION_S * SR / hop)
+    # ±max_correction_s 범위 전체를 탐색
+    max_lag = int(max_correction_s * SR / hop)
     min_len = min(len(rms), len(activity))
     rms_c = rms[:min_len] - rms[:min_len].mean()
     act_c = activity[:min_len] - activity[:min_len].mean()
 
     corr = np.correlate(rms_c, act_c, mode="full")
     center = len(corr) // 2
-    search_corr = corr[center - max_lag: center + max_lag + 1]
-    lag_idx = np.argmax(search_corr) - max_lag  # frames
-    correction = lag_idx * hop / SR  # 초
 
-    return float(np.clip(correction, -MAX_CORRECTION_S, MAX_CORRECTION_S))
+    # 클램프 전: 전체 범위 피크
+    search_corr = corr[center - max_lag: center + max_lag + 1]
+    lag_idx = int(np.argmax(search_corr)) - max_lag  # frames
+    raw_lag_s = lag_idx * hop / SR
+
+    peak_val = float(search_corr[lag_idx + max_lag])
+    zero_val = float(corr[center])
+    snr      = peak_val / (abs(zero_val) + 1e-8)
+
+    if verbose:
+        print(f"    corr peak={peak_val:.4f} @ lag={raw_lag_s:+.3f}s  "
+              f"zero={zero_val:.4f}  SNR={snr:.2f}")
+
+    clamped = float(np.clip(raw_lag_s, -max_correction_s, max_correction_s))
+    return raw_lag_s, clamped, snr
 
 
 # ── LRC 포맷 ──────────────────────────────────────────────────────
@@ -130,8 +150,38 @@ def segments_to_parsed(segments: list, correction: float,
     return result
 
 
+# ── 메타 갱신 ──────────────────────────────────────────────────────
+def update_meta(sid: str, alignment_status: str,
+                whisper_correction_s: float, whisper_snr: float) -> None:
+    """songs.json + pitch_guide/{sid}.json 에 Whisper 보정 결과 기록."""
+    # songs.json
+    with open(SONGS_JSON, encoding="utf-8") as f:
+        songs = json.load(f)
+    for s in songs:
+        if s["id"] == sid:
+            s["alignment_status"]   = alignment_status
+            s["has_lrc"]            = True
+            s["whisper_correction_s"] = round(whisper_correction_s, 3)
+            s["whisper_snr"]        = round(whisper_snr, 3)
+            break
+    with open(SONGS_JSON, "w", encoding="utf-8") as f:
+        json.dump(songs, f, ensure_ascii=False, indent=2)
+
+    # pitch_guide/{sid}.json (있을 때만)
+    pg_path = PITCH_GUIDE_DIR / f"{sid}.json"
+    if pg_path.exists():
+        with open(pg_path, encoding="utf-8") as f:
+            pg = json.load(f)
+        pg["alignment_status"] = alignment_status
+        pg["whisper_snr"]      = round(whisper_snr, 3)
+        with open(pg_path, "w", encoding="utf-8") as f:
+            json.dump(pg, f, ensure_ascii=False, indent=2)
+
+
 # ── 처리 ──────────────────────────────────────────────────────────
-def process_song(song: dict, model: whisper.Whisper) -> dict:
+def process_song(song: dict, model: whisper.Whisper,
+                 max_correction_s: float = DEFAULT_MAX_CORRECTION_S,
+                 verbose: bool = False) -> dict:
     sid = song["id"]
     lrc_offset = song["lrc_offset_sec"]
     mr_dur     = song["mr_duration_sec"]
@@ -156,8 +206,13 @@ def process_song(song: dict, model: whisper.Whisper) -> dict:
         return {"id": sid, "status": "error", "msg": "전사 결과 없음"}
 
     # 타임스탬프 보정 (cross-correlation)
-    correction = compute_timing_correction(audio, segments)
-    print(f"  cross-corr 보정: {correction:+.3f}s")
+    raw_lag, correction, snr = compute_timing_correction(
+        audio, segments, max_correction_s, verbose=verbose)
+    clamped_flag = " [CLAMPED]" if abs(raw_lag) > max_correction_s - 0.01 else ""
+    snr_flag = " ⚠LOW_SNR" if snr < SNR_WARN else ""
+    print(f"  cross-corr raw={raw_lag:+.3f}s → clamped={correction:+.3f}s{clamped_flag}  SNR={snr:.2f}{snr_flag}")
+
+    alignment_status = "whisper_auto" + ("_low_snr" if snr < SNR_WARN else "")
 
     # 라인별 통계
     low_conf_lines = sum(
@@ -209,6 +264,9 @@ def process_song(song: dict, model: whisper.Whisper) -> dict:
     with open(mr_path, "w", encoding="utf-8") as f:
         json.dump(mr_lines, f, ensure_ascii=False, indent=2)
 
+    # songs.json + pitch_guide 메타 갱신
+    update_meta(sid, alignment_status, correction, snr)
+
     return {
         "id": sid,
         "status": "ok",
@@ -216,7 +274,11 @@ def process_song(song: dict, model: whisper.Whisper) -> dict:
         "n_mr_lines": len(mr_lines),
         "avg_confidence": round(avg_conf, 3),
         "low_conf_lines": low_conf_lines,
+        "raw_lag_s": round(raw_lag, 3),
         "correction_s": round(correction, 3),
+        "clamped": abs(raw_lag) > max_correction_s - 0.01,
+        "snr": round(snr, 3),
+        "alignment_status": alignment_status,
         "lrc_offset_s": lrc_offset,
     }
 
@@ -230,10 +292,12 @@ def print_report(results: list) -> None:
             print(f"  [{r['id']}] ERROR: {r['msg']}")
             continue
         flag = " ⚠ manual_review 필요" if r["low_conf_lines"] > 0 else ""
+        clamp_flag = " [CLAMPED]" if r.get("clamped") else ""
         print(f"  [{r['id']}] {r['n_lines']}줄 (MR: {r['n_mr_lines']}줄) "
               f"| avg_conf={r['avg_confidence']:.2f} "
               f"| 저신뢰={r['low_conf_lines']}줄 "
-              f"| corr보정={r['correction_s']:+.3f}s{flag}")
+              f"| raw={r['raw_lag_s']:+.3f}s→corr={r['correction_s']:+.3f}s{clamp_flag} "
+              f"| SNR={r['snr']:.2f} | {r['alignment_status']}{flag}")
     print("─" * 60)
     print("출력: lrc/raw/{id}_whisper.lrc, lrc/parsed/{id}.json/aligned/mr")
 
@@ -244,23 +308,27 @@ def main() -> None:
                     help="처리할 곡 ID (쉼표 구분)")
     ap.add_argument("--model", default="large-v3",
                     help="Whisper 모델 (large-v3 | large-v3-turbo)")
+    ap.add_argument("--max-correction", type=float, default=DEFAULT_MAX_CORRECTION_S,
+                    help="cross-corr 클램프 범위 (±초, 기본 0.5)")
+    ap.add_argument("--verbose", action="store_true",
+                    help="cross-corr 진단 출력 활성화")
     args = ap.parse_args()
 
     target_ids = [s.strip() for s in args.songs.split(",")]
     songs_meta = load_songs_meta()
 
-    for sid in target_ids:
-        if sid not in songs_meta:
-            print(f"[{sid}] songs.json에 없음. 건너뜀.")
-            target_ids.remove(sid)
+    target_ids = [sid for sid in target_ids if sid in songs_meta or
+                  not print(f"[{sid}] songs.json에 없음. 건너뜀.")]
 
-    print(f"Whisper {args.model} 모델 로드 중...")
+    print(f"Whisper {args.model} 모델 로드 중... (max_correction=±{args.max_correction}s)")
     model = whisper.load_model(args.model)
     print("로드 완료.")
 
     results = []
     for sid in target_ids:
-        r = process_song(songs_meta[sid], model)
+        r = process_song(songs_meta[sid], model,
+                         max_correction_s=args.max_correction,
+                         verbose=args.verbose)
         results.append(r)
 
     print_report(results)
