@@ -103,7 +103,7 @@ export default function EvalResultScreen({ route }: Props) {
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>평가 결과</Text>
         <Text style={styles.headerMeta}>
-          처리 시간 {result.processing_time_ms}ms · {result.audio_info.duration_sec.toFixed(1)}초
+          처리 시간 {result.processing_time_ms}ms · {result.audio_info?.duration_sec?.toFixed(1) ?? '-'}초
           {runId ? ` · ${runId.slice(0, 8)}…` : ' · mock'}
         </Text>
       </View>

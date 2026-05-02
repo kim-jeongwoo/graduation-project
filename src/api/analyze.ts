@@ -18,7 +18,13 @@ function stripPrefix(key: string): EvaluationItemKey {
 function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResult {
   const inner: ServerAnalyzeResult = response.result_json;
   return {
-    ...inner,
+    run_id:              inner.run_id,
+    status:              inner.status,
+    processing_time_ms:  inner.processing_time_ms,
+    audio_info:          inner.audio_info,
+    registers:           inner.registers,
+    indicators:          inner.indicators,
+    register_boundaries: inner.register_boundaries,
     scores: Object.fromEntries(
       Object.entries(inner.scores).map(([k, v]) => [stripPrefix(k), v]),
     ) as Record<EvaluationItemKey, ScoreEntry>,

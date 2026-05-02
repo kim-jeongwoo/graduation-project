@@ -6,18 +6,25 @@ export interface AudioInfo {
   duration_sec: number;
   sample_rate: number;
   voiced_ratio: number;
-  f0_range: { min: number; max: number; mean: number };
+  voiced_duration_s?: number;
+  f0_min?: number;
+  f0_max?: number;
+  f0_mean?: number;
+  /** @deprecated server now uses f0_min/f0_max/f0_mean */
+  f0_range?: { min: number; max: number; mean: number };
 }
 
 export interface AcousticIndicators {
   cq_mean: number;
   cq_peak: number;
-  cpp: number;
-  spectral_centroid: number;
-  spectral_tilt: number;
-  h1_h2: number;
-  hnr: number;
-  a1_p0: number;
+  cpp_mean: number;
+  spectral_centroid_mean: number;
+  spectral_tilt_mean: number;
+  h1_h2_mean: number;
+  hnr_mean: number;
+  a1_p0_mean: number;
+  nasal_ratio?: number;
+  singers_formant_ratio_mean?: number;
 }
 
 export interface ScoreEntry {
@@ -53,6 +60,7 @@ export interface AnalyzeResult {
   run_id: string;
   status: string;
   processing_time_ms: number;
+  register_boundaries?: { low_max: number; mid_max: number };
 }
 
 // ─── 서버 raw 응답 타입 ───
