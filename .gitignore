@@ -4,6 +4,7 @@ data/songs/audio/mr/
 data/songs/_uploads/
 data/songs/stems/
 song/
+songs/
 *.mp3
 *.wav
 *.flac
