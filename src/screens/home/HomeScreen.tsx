@@ -44,8 +44,8 @@ export default function HomeScreen({ navigation }: Props) {
     return (
       <TouchableOpacity
         style={styles.songCard}
-        activeOpacity={ready ? 0.75 : 1}
-        disabled={!ready}
+        activeOpacity={0.75}
+        onPress={() => navigation.navigate('SongDetail', { song: item })}
       >
         <View style={styles.songLeft}>
           <Text style={styles.songIndex}>{String(index + 1).padStart(2, '0')}</Text>

@@ -15,13 +15,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getSessionDetail } from '../../api/sessions';
 import { startAnalysis } from '../../api/sessions';
-import { getSongLrc, getSongMrUrl, getSongPitchGuide } from '../../api/songs';
+import { getSongLrc, getSongMrUrl, getSongPitchGuideCompat } from '../../api/songs';
 
 // [deprecated] 구형 화면 aliases — P1에서 정리 예정
 const requestAnalysis = (sid: string) => startAnalysis(sid).then(r => ({ run_id: r.run_id, status: r.status }));
 const getSongLyrics = getSongLrc;
 const getSongAudioUrl = getSongMrUrl;
-const getSongPitch = (songId: string) => getSongPitchGuide(songId).catch(() => null);
+const getSongPitch = (songId: string) => getSongPitchGuideCompat(songId).catch(() => null);
 import { mockSessions } from '../../mock/mockData';
 import StatusBadge from '../../components/StatusBadge';
 import PitchVisualizer, { USER_HISTORY_MAX } from '../../components/PitchVisualizer';

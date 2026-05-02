@@ -10,6 +10,8 @@ import { COLORS } from '../utils/colors';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import HomeScreen from '../screens/home/HomeScreen';
+import SongDetailScreen from '../screens/home/SongDetailScreen';
+import KaraokeScreen from '../screens/karaoke/KaraokeScreen';
 import SessionDetailScreen from '../screens/home/SessionDetailScreen';
 import AnalysisResultScreen from '../screens/home/AnalysisResultScreen';
 import HistoryScreen from '../screens/history/HistoryScreen';
@@ -80,6 +82,16 @@ function HomeStackNavigator() {
         name="SongComparison"
         component={SongComparisonScreen}
         options={{ title: '곡 비교' }}
+      />
+      <HomeStack.Screen
+        name="SongDetail"
+        component={SongDetailScreen as React.ComponentType<object>}
+        options={{ headerShown: false }}
+      />
+      <HomeStack.Screen
+        name="Karaoke"
+        component={KaraokeScreen as React.ComponentType<object>}
+        options={{ headerShown: false, presentation: 'fullScreenModal' }}
       />
       <HomeStack.Screen
         name="EvalResult"
