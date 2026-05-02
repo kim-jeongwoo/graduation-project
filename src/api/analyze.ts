@@ -1,7 +1,7 @@
 import { BASE_URL } from './client';
 import { pollAnalysisStatus, getAnalysisResults } from './analysis';
 import { MOCK_FIXED_RESULT } from './mock';
-import type { AnalyzeResult, ServerAnalyzeResult, ScoreEntry, FeedbackEntry } from '../types/analyze';
+import type { AnalyzeResult, ServerAnalyzeResult, ServerAnalyzeResultsResponse, ScoreEntry, FeedbackEntry } from '../types/analyze';
 import type { EvaluationItemKey } from '../domain/evaluationItems';
 
 const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
@@ -15,19 +15,20 @@ function stripPrefix(key: string): EvaluationItemKey {
   return key.replace(/^\d+_/, '') as EvaluationItemKey;
 }
 
-function adaptServerResult(raw: ServerAnalyzeResult): AnalyzeResult {
+function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResult {
+  const inner: ServerAnalyzeResult = response.result_json;
   return {
-    ...raw,
+    ...inner,
     scores: Object.fromEntries(
-      Object.entries(raw.scores).map(([k, v]) => [stripPrefix(k), v]),
+      Object.entries(inner.scores).map(([k, v]) => [stripPrefix(k), v]),
     ) as Record<EvaluationItemKey, ScoreEntry>,
     feedback: Object.fromEntries(
-      Object.entries(raw.feedback).map(([k, v]) => [stripPrefix(k), v]),
+      Object.entries(inner.feedback).map(([k, v]) => [stripPrefix(k), v]),
     ) as Record<EvaluationItemKey, FeedbackEntry>,
     reliability: {
-      high_reliability:   raw.reliability.high_reliability.map(stripPrefix),
-      medium_reliability: raw.reliability.medium_reliability.map(stripPrefix),
-      unavailable:        raw.reliability.unavailable.map(stripPrefix),
+      high_reliability:   inner.reliability.high_reliability.map(stripPrefix),
+      medium_reliability: inner.reliability.medium_reliability.map(stripPrefix),
+      unavailable:        inner.reliability.unavailable.map(stripPrefix),
     },
   };
 }

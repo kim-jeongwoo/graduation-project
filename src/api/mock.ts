@@ -28,9 +28,9 @@ export const MOCK_FIXED_RESULT: AnalyzeResult = {
     nasal_oral_ratio:   { ai_score: 4, zone: 'excessive',    confidence: 'medium' },
     chest_head_voice:   { ai_score: 1, zone: 'insufficient', confidence: 'medium' },
     forward_resonance:  { ai_score: 3, zone: 'appropriate',  confidence: 'medium' },
-    velar_opening:      { ai_score: 2, zone: 'appropriate',  confidence: 'medium' },
+    soft_palate:        { ai_score: 2, zone: 'appropriate',  confidence: 'medium' },
     pressure_balance:   { ai_score: 4, zone: 'excessive',    confidence: 'medium' },
-    resonance_open:     { ai_score: null, zone: null,        confidence: 'unavailable' },
+    larynx_tongue_root: { ai_score: null, zone: null,        confidence: 'unavailable' },
     tongue_tension:     { ai_score: null, zone: null,        confidence: 'unavailable' },
   },
   feedback: {
@@ -64,7 +64,7 @@ export const MOCK_FIXED_RESULT: AnalyzeResult = {
       feedback_text: '전방 공명 포인트가 잘 유지되고 있습니다.',
       ai_indicator: { name: 'h1_h2', value: 2.1 },
     },
-    velar_opening: {
+    soft_palate: {
       name_ko: '연구개위치', ai_score: 2, zone: 'appropriate',
       score_description: '연구개가 적절한 위치에 있음',
       feedback_text: '연구개 포지션이 안정적입니다.',
@@ -76,7 +76,7 @@ export const MOCK_FIXED_RESULT: AnalyzeResult = {
       feedback_text: '성문 위아래 압력 균형을 낮추는 연습이 필요합니다.',
       ai_indicator: { name: 'hnr', value: 18.4 },
     },
-    resonance_open: {
+    larynx_tongue_root: {
       name_ko: '공명개방', ai_score: null, zone: null,
       score_description: '분석 데이터 부족',
       feedback_text: '아직 충분한 데이터가 없어 평가하기 어렵습니다.',
@@ -91,8 +91,8 @@ export const MOCK_FIXED_RESULT: AnalyzeResult = {
   },
   reliability: {
     high_reliability:   ['breathiness', 'vocal_fold_contact'],
-    medium_reliability: ['nasal_oral_ratio', 'chest_head_voice', 'forward_resonance', 'velar_opening', 'pressure_balance'],
-    unavailable:        ['resonance_open', 'tongue_tension'],
+    medium_reliability: ['nasal_oral_ratio', 'chest_head_voice', 'forward_resonance', 'soft_palate', 'pressure_balance'],
+    unavailable:        ['larynx_tongue_root', 'tongue_tension'],
   },
 };
 

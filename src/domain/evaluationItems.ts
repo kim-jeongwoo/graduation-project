@@ -4,9 +4,9 @@ export type EvaluationItemKey =
   | 'nasal_oral_ratio'
   | 'chest_head_voice'
   | 'forward_resonance'
-  | 'velar_opening'
+  | 'soft_palate'
   | 'pressure_balance'
-  | 'resonance_open'
+  | 'larynx_tongue_root'
   | 'tongue_tension';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'unavailable';
@@ -25,8 +25,8 @@ export const EVALUATION_ITEMS: EvaluationItemMeta[] = [
   { key: 'nasal_oral_ratio',   nameKo: '비강사용',   defaultConfidence: 'medium' },
   { key: 'chest_head_voice',   nameKo: '흉성두성',   defaultConfidence: 'medium' },
   { key: 'forward_resonance',  nameKo: '전방공명',   defaultConfidence: 'medium' },
-  { key: 'velar_opening',      nameKo: '연구개위치', defaultConfidence: 'medium' },
+  { key: 'soft_palate',        nameKo: '연구개위치', defaultConfidence: 'medium' },
   { key: 'pressure_balance',   nameKo: '상압하압',   defaultConfidence: 'medium' },
-  { key: 'resonance_open',     nameKo: '공명개방',   defaultConfidence: 'unavailable' },
+  { key: 'larynx_tongue_root', nameKo: '공명개방',   defaultConfidence: 'unavailable' },
   { key: 'tongue_tension',     nameKo: '혀경직도',   defaultConfidence: 'unavailable' },
 ];

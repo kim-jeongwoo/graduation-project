@@ -55,17 +55,27 @@ export interface AnalyzeResult {
   processing_time_ms: number;
 }
 
-// ─── 서버 raw 응답 타입 (키에 숫자 prefix 포함: "1_nasal_oral_ratio" 등) ───
-// 앱 내부에서는 이 타입을 직접 사용하지 않음 — analyze.ts 어댑터에서 AnalyzeResult로 변환
+// ─── 서버 raw 응답 타입 ───
+// GET /analysis/{run_id}/results 응답의 result_json 필드 구조
+// 키에 숫자 prefix 포함: "1_nasal_oral_ratio" 등
 export interface ServerAnalyzeResult
   extends Omit<AnalyzeResult, 'scores' | 'feedback' | 'reliability'> {
-  scores: Record<string, ScoreEntry>;     // key: "3_vocal_fold_contact" 등
+  scores: Record<string, ScoreEntry>;
   feedback: Record<string, FeedbackEntry>;
   reliability: {
-    high_reliability: string[];           // value: "3_vocal_fold_contact" 등
+    high_reliability: string[];
     medium_reliability: string[];
     unavailable: string[];
   };
+}
+
+// GET /analysis/{run_id}/results 응답 최상위 래퍼
+export interface ServerAnalyzeResultsResponse {
+  run_id: string;
+  session_id: string;
+  user_id: string;
+  metrics: Array<{ key: string; value: number; unit: string }>;
+  result_json: ServerAnalyzeResult;   // 실제 분석 데이터
 }
 
 // server 래핑 시 추가 예상 메타 (명세 확정 전, 선택적 필드)
