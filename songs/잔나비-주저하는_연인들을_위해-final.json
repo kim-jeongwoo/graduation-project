@@ -1,0 +1,296 @@
+{
+  "title": "주저하는 연인들을 위해",
+  "total_lines": 32,
+  "matched_lines": 23,
+  "estimated_lines": 9,
+  "lines": [
+    {
+      "line_number": 1,
+      "text": "나는 읽기 쉬운 마음이야",
+      "start_ms": 0,
+      "end_ms": 12120,
+      "start_time": "00:00.000",
+      "end_time": "00:12.120",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 2,
+      "text": "당신도 쓱 훑고 가셔요",
+      "start_ms": 12120,
+      "end_ms": 18400,
+      "start_time": "00:12.120",
+      "end_time": "00:18.400",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 3,
+      "text": "달랠 길 없는 외로운 마음 있지",
+      "start_ms": 18400,
+      "end_ms": 25640,
+      "start_time": "00:18.400",
+      "end_time": "00:25.640",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 4,
+      "text": "머물다 가셔요",
+      "start_ms": 25640,
+      "end_ms": 29620,
+      "start_time": "00:25.640",
+      "end_time": "00:29.620",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 5,
+      "text": "내게 긴 여운을 남겨줘요",
+      "start_ms": 29620,
+      "end_ms": 38920,
+      "start_time": "00:29.620",
+      "end_time": "00:38.920",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 6,
+      "text": "사랑을, 사랑을 해줘요",
+      "start_ms": 38920,
+      "end_ms": 44200,
+      "start_time": "00:38.920",
+      "end_time": "00:44.200",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 7,
+      "text": "할 수 있다면 그럴 수만 있다면",
+      "start_ms": 44200,
+      "end_ms": 51800,
+      "start_time": "00:44.200",
+      "end_time": "00:51.800",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 8,
+      "text": "새하얀 빛으로 그댈 비춰 줄게요",
+      "start_ms": 51800,
+      "end_ms": 57660,
+      "start_time": "00:51.800",
+      "end_time": "00:57.660",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 9,
+      "text": "그러다 밤이 찾아오면",
+      "start_ms": 57660,
+      "end_ms": 64760,
+      "start_time": "00:57.660",
+      "end_time": "01:04.760",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 10,
+      "text": "우리 둘만의 비밀을 새겨요",
+      "start_ms": 64760,
+      "end_ms": 70420,
+      "start_time": "01:04.760",
+      "end_time": "01:10.420",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 11,
+      "text": "추억할 그 밤 위에 갈피를 꽂고선",
+      "start_ms": 70420,
+      "end_ms": 78080,
+      "start_time": "01:10.420",
+      "end_time": "01:18.080",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 12,
+      "text": "남몰래 펼쳐보아요",
+      "start_ms": 78080,
+      "end_ms": 84080,
+      "start_time": "01:18.080",
+      "end_time": "01:24.080",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 13,
+      "text": "나의 자라나는 마음을",
+      "start_ms": 84700,
+      "end_ms": 103440,
+      "start_time": "01:24.700",
+      "end_time": "01:43.440",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 14,
+      "text": "못 본채 꺾어 버릴 순 없네",
+      "start_ms": 103440,
+      "end_ms": 109120,
+      "start_time": "01:43.440",
+      "end_time": "01:49.120",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 15,
+      "text": "미련 남길 바엔 그리워 아픈 게 나아",
+      "start_ms": 109120,
+      "end_ms": 117420,
+      "start_time": "01:49.120",
+      "end_time": "01:57.420",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 16,
+      "text": "서둘러 안겨본 그 품은 따스할 테니",
+      "start_ms": 117420,
+      "end_ms": 122920,
+      "start_time": "01:57.420",
+      "end_time": "02:02.920",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 17,
+      "text": "그러다 밤이 찾아오면",
+      "start_ms": 122920,
+      "end_ms": 130280,
+      "start_time": "02:02.920",
+      "end_time": "02:10.280",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 18,
+      "text": "우리 둘만의 비밀을 새겨요",
+      "start_ms": 130280,
+      "end_ms": 137040,
+      "start_time": "02:10.280",
+      "end_time": "02:17.040",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 19,
+      "text": "추억할 그 밤 위에 갈피를 꽂고선",
+      "start_ms": 137040,
+      "end_ms": 140380,
+      "start_time": "02:17.040",
+      "end_time": "02:20.380",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 20,
+      "text": "남몰래 펼쳐보아요",
+      "start_ms": 140380,
+      "end_ms": 148820,
+      "start_time": "02:20.380",
+      "end_time": "02:28.820",
+      "timestamp_source": "estimated"
+    },
+    {
+      "line_number": 21,
+      "text": "언젠가 또 그날이 온대도",
+      "start_ms": 148820,
+      "end_ms": 155800,
+      "start_time": "02:28.820",
+      "end_time": "02:35.800",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 22,
+      "text": "우린 서둘러 뒤돌지 말아요",
+      "start_ms": 155800,
+      "end_ms": 162960,
+      "start_time": "02:35.800",
+      "end_time": "02:42.960",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 23,
+      "text": "마주 보던 그대로 뒷걸음치면서",
+      "start_ms": 162960,
+      "end_ms": 171140,
+      "start_time": "02:42.960",
+      "end_time": "02:51.140",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 24,
+      "text": "서로의 안녕을 보아요",
+      "start_ms": 171140,
+      "end_ms": 174020,
+      "start_time": "02:51.140",
+      "end_time": "02:54.020",
+      "timestamp_source": "whisper"
+    },
+    {
+      "line_number": 25,
+      "text": "피고 지는 마음을 알아요",
+      "start_ms": 174020,
+      "end_ms": 185602,
+      "start_time": "02:54.020",
+      "end_time": "03:05.602",
+      "timestamp_source": "estimated"
+    },
+    {
+      "line_number": 26,
+      "text": "다시 돌아온 계절도",
+      "start_ms": 185602,
+      "end_ms": 197185,
+      "start_time": "03:05.602",
+      "end_time": "03:17.185",
+      "timestamp_source": "estimated"
+    },
+    {
+      "line_number": 27,
+      "text": "난 한동안 새 활짝 피었다 질래",
+      "start_ms": 197185,
+      "end_ms": 208767,
+      "start_time": "03:17.185",
+      "end_time": "03:28.767",
+      "timestamp_source": "estimated"
+    },
+    {
+      "line_number": 28,
+      "text": "또 한 번 영원히",
+      "start_ms": 208767,
+      "end_ms": 220350,
+      "start_time": "03:28.767",
+      "end_time": "03:40.350",
+      "timestamp_source": "estimated"
+    },
+    {
+      "line_number": 29,
+      "text": "그럼에도 내 사랑은 또 같은 꿈을 꾸고",
+      "start_ms": 220350,
+      "end_ms": 231932,
+      "start_time": "03:40.350",
+      "end_time": "03:51.932",
+      "timestamp_source": "estimated"
+    },
+    {
+      "line_number": 30,
+      "text": "(라 라라라 라랄라 랄라라라)",
+      "start_ms": 231932,
+      "end_ms": 243515,
+      "start_time": "03:51.932",
+      "end_time": "04:03.515",
+      "timestamp_source": "estimated"
+    },
+    {
+      "line_number": 31,
+      "text": "그럼에도 꾸던 꿈을 난 또 미루진 않을 거야",
+      "start_ms": 243515,
+      "end_ms": 255097,
+      "start_time": "04:03.515",
+      "end_time": "04:15.097",
+      "timestamp_source": "estimated"
+    },
+    {
+      "line_number": 32,
+      "text": "(라 라라라 라랄라 랄라라라)",
+      "start_ms": 255097,
+      "end_ms": 266680,
+      "start_time": "04:15.097",
+      "end_time": "04:26.680",
+      "timestamp_source": "estimated"
+    }
+  ]
+}
