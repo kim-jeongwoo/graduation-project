@@ -1,33 +1,35 @@
 # Vocal Server API 문서
 
-앱 개발자용 통합 가이드. Base URL: `http://<서버IP>:8000`
+앱 개발자용 통합 가이드.
 
 ---
 
-## 인증 방식
+## 1. 서버 기본 정보
 
-모든 인증 필요 API는 HTTP 헤더에 Bearer 토큰을 포함합니다.
+| 항목 | 값 |
+|------|-----|
+| 개발 Base URL | `http://localhost:8000` |
+| 시연 Base URL | ngrok 또는 Cloudflare Tunnel URL (별도 공유) |
+| 응답 형식 | JSON (UTF-8) |
+| 인증 방식 | Bearer JWT (`Authorization` 헤더) |
+| Swagger UI | `http://localhost:8000/docs` |
 
-```
+---
+
+## 2. 인증 방식
+
+모든 인증 필요 API는 요청 헤더에 Bearer 토큰을 포함합니다.
+
+```http
 Authorization: Bearer <token>
 ```
 
-토큰은 `POST /auth/login` 응답의 `token` 필드에서 획득합니다.  
+토큰은 `POST /auth/login` 또는 `POST /auth/signup` 응답의 `token` 필드에서 획득합니다.  
 만료 시간: 없음 (현재 정책). 재발급은 재로그인으로 처리.
 
 ---
 
-## 인증 흐름
-
-```
-1. POST /auth/signup  → 계정 생성
-2. POST /auth/login   → token 획득
-3. 이후 모든 API: Authorization: Bearer <token>
-```
-
----
-
-## 엔드포인트 목록
+## 3. 엔드포인트 목록
 
 | Method | Path | 인증 | 설명 |
 |--------|------|------|------|
@@ -35,26 +37,31 @@ Authorization: Bearer <token>
 | POST | `/auth/login` | 불필요 | 로그인 |
 | POST | `/sessions` | 필요 | 세션 생성 |
 | GET | `/sessions` | 필요 | 내 세션 목록 |
-| GET | `/sessions/{session_id}` | 필요 | 세션 상세 (분석 결과 포함) |
+| GET | `/sessions/{session_id}` | 필요 | 세션 상세 + 최근 분석 결과 |
 | POST | `/sessions/{session_id}/files` | 필요 | 오디오 파일 업로드 |
-| POST | `/sessions/{session_id}/analyze` | 필요 | 분석 요청 |
+| POST | `/sessions/{session_id}/analyze` | 필요 | AI 분석 요청 |
 | GET | `/analysis/{run_id}` | 필요 | 분석 실행 상태 조회 |
-| GET | `/analysis/{run_id}/results` | 필요 | 분석 결과 조회 |
-| POST | `/sessions/{session_id}/compare-pitch` | 필요 | 피치 비교 |
-| GET | `/songs` | 불필요 | 등록 곡 목록 |
-| GET | `/songs/{song_id}` | 불필요 | 곡 상세 |
-| GET | `/songs/{song_id}/pitch` | 불필요 | 곡 피치 데이터 |
-| GET | `/songs/{song_id}/lyrics` | 불필요 | 곡 가사 |
-| GET | `/songs/{song_id}/audio` | 불필요 | 곡 오디오 스트리밍 |
-| POST | `/songs/register` | 필요 | 곡 등록 (관리자용) |
+| GET | `/analysis/{run_id}/results` | 필요 | 분석 결과 전체 조회 |
+| GET | `/analysis/{run_id}/comparison` | 필요 | 숙련자 기준 비교 |
+| GET | `/songs` | 필요 | 노래방 곡 목록 |
+| GET | `/songs/{song_id}/lrc` | 필요 | 곡 가사 (동기화 LRC) |
+| GET | `/songs/{song_id}/pitch-guide` | 필요 | 곡 음정 가이드 |
+| GET | `/songs/{song_id}/mr` | 필요 | MR 음원 스트리밍 |
+
+> **노래방 API 권한 주의**: `/songs/*`는 인증(Bearer 토큰)이 필요하지만 user_id 검증은 없습니다 — 로그인된 사용자 누구나 접근 가능합니다.
 
 ---
 
-## 상세 엔드포인트
+## 4. 인증
 
 ### POST /auth/signup
 
-회원가입.
+회원가입. 성공 시 즉시 토큰을 반환합니다.
+
+```http
+POST /auth/signup
+Content-Type: application/json
+```
 
 **Request Body**
 ```json
@@ -78,14 +85,19 @@ Authorization: Bearer <token>
 **에러**
 | 코드 | 사유 |
 |------|------|
-| 422 | 필드 누락 또는 형식 오류 |
 | 400 | 이미 등록된 이메일 |
+| 422 | 필드 누락 또는 형식 오류 |
 
 ---
 
 ### POST /auth/login
 
 로그인 후 토큰 획득.
+
+```http
+POST /auth/login
+Content-Type: application/json
+```
 
 **Request Body**
 ```json
@@ -112,16 +124,33 @@ Authorization: Bearer <token>
 
 ---
 
+## 5. 세션
+
 ### POST /sessions
 
-분석 세션 생성. 파일 업로드 전에 먼저 호출.
+분석 세션 생성. 파일 업로드 전에 먼저 호출합니다.
 
-**Request Body**
+```http
+POST /sessions
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body** (모든 필드 optional)
 ```json
 {
-  "song_title": "테스트곡"  // optional
+  "song_id": "004",
+  "song_title": "테스트곡"
 }
 ```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `song_id` | `string` (3자리 숫자, optional) | 노래방 14곡 중 선택. `"001"`~`"014"` 형식 |
+| `song_title` | `string` (optional) | 자유 입력 곡 이름. `song_id`가 있으면 무시됨 |
+
+- `song_id`와 `song_title` 둘 다 없어도 됩니다.
+- 존재하지 않는 `song_id` 전달 시 400 반환.
 
 **Response 201**
 ```json
@@ -132,11 +161,21 @@ Authorization: Bearer <token>
 }
 ```
 
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 400 | 존재하지 않는 `song_id` |
+
 ---
 
 ### GET /sessions
 
 내 세션 목록 (최신순). `result_json` 미포함 — 상세는 `GET /sessions/{id}` 사용.
+
+```http
+GET /sessions
+Authorization: Bearer <token>
+```
 
 **Response 200**
 ```json
@@ -147,25 +186,43 @@ Authorization: Bearer <token>
     "status": "success",
     "analysis_status": "completed",
     "started_at": null,
-    "created_at": "2026-04-29T16:45:27.193640+09:00"
+    "created_at": "2026-04-29T16:45:27.193640+09:00",
+    "song": {
+      "id": "004",
+      "artist": "김범수",
+      "title": "보고싶다"
+    }
   }
 ]
 ```
 
+**`song` 필드 3가지 케이스**
+
+| 케이스 | `song` 값 | 설명 |
+|--------|-----------|------|
+| 노래방 14곡 선택 | `{"id": "004", "artist": "김범수", "title": "보고싶다"}` | `song_id`로 세션 생성 |
+| 자유 입력 곡명 | `{"id": null, "artist": null, "title": "테스트곡"}` | `song_title`만으로 생성 |
+| 곡 정보 없음 | `null` | `song_id`, `song_title` 모두 없이 생성 |
+
 **`analysis_status` 값**
 | 값 | 의미 |
 |----|------|
-| `no_analysis` | 분석 요청 없음 |
-| `queued` | 분석 대기 중 |
-| `running` | 분석 진행 중 |
-| `completed` | 분석 완료 |
-| `failed` | 분석 실패 |
+| `"no_analysis"` | 분석 요청 없음 |
+| `"queued"` | 분석 대기 중 |
+| `"running"` | 분석 진행 중 |
+| `"completed"` | 분석 완료 |
+| `"failed"` | 분석 실패 |
 
 ---
 
 ### GET /sessions/{session_id}
 
 세션 상세 + 가장 최근 분석 결과 포함.
+
+```http
+GET /sessions/{session_id}
+Authorization: Bearer <token>
+```
 
 **Response 200**
 ```json
@@ -177,11 +234,16 @@ Authorization: Bearer <token>
   "started_at": null,
   "ended_at": null,
   "created_at": "2026-04-29T16:45:27.193640+09:00",
+  "song": {
+    "id": "004",
+    "artist": "김범수",
+    "title": "보고싶다"
+  },
   "files": [
     {
       "file_id": "2d70c420-...",
       "file_type": "audio",
-      "storage_uri": "/Users/.../app/storage/users/{user_id}/sessions/{session_id}/vocals.wav",
+      "storage_uri": "/...storage/users/{user_id}/sessions/{session_id}/vocals.wav",
       "format": "wav",
       "sample_rate_hz": 16000,
       "duration_ms": 266040,
@@ -199,12 +261,14 @@ Authorization: Bearer <token>
       {"key": "processing_time_ms", "value": 19710.4, "unit": "ms"},
       {"key": "duration_sec", "value": 266.04, "unit": "sec"}
     ],
-    "result_json": { /* → result_json 구조 상세 섹션 참고 */ }
+    "result_json": { }
   }
 }
 ```
 
-`latest_analysis`는 분석이 없으면 `null`.
+`latest_analysis`는 분석이 없으면 `null`. `result_json` 구조는 [7. 공통 응답 모델](#7-공통-응답-모델) 참고.
+
+`song` 필드는 위 `GET /sessions` 섹션의 3가지 케이스와 동일합니다.
 
 **에러**
 | 코드 | 사유 |
@@ -214,14 +278,21 @@ Authorization: Bearer <token>
 
 ---
 
+## 6. 파일 업로드
+
 ### POST /sessions/{session_id}/files
 
 오디오 파일 업로드. `multipart/form-data`.
 
+```http
+POST /sessions/{session_id}/files
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
 **Request**
-- Content-Type: `multipart/form-data`
-- Field: `file` (WAV / MP3 / M4A)
-- Query param: `file_type=audio` (기본값)
+- Field: `file` — WAV / MP3 / M4A 파일
+- Query param: `file_type=audio` (기본값, 생략 가능)
 
 ```bash
 curl -X POST http://host:8000/sessions/{session_id}/files \
@@ -239,7 +310,7 @@ curl -X POST http://host:8000/sessions/{session_id}/files \
 }
 ```
 
-세션 `status`가 `uploading` → `uploaded`로 자동 변경됨.
+세션 `status`가 `uploading` → `uploaded`로 자동 변경됩니다.
 
 **에러**
 | 코드 | 사유 |
@@ -249,10 +320,17 @@ curl -X POST http://host:8000/sessions/{session_id}/files \
 
 ---
 
+## 7. 분석
+
 ### POST /sessions/{session_id}/analyze
 
-AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요.  
+AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요 (타임아웃 최소 60초 권장).  
 세션 `status`가 `uploaded` 상태여야 합니다.
+
+```http
+POST /sessions/{session_id}/analyze
+Authorization: Bearer <token>
+```
 
 **Response 201**
 ```json
@@ -267,7 +345,7 @@ AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요.
 **에러**
 | 코드 | 사유 |
 |------|------|
-| 400 | 세션 상태가 `uploaded`가 아님 (이미 분석됐거나 파일 미업로드) |
+| 400 | 세션 상태가 `uploaded`가 아님 (파일 미업로드 또는 이미 분석됨) |
 | 403 | 다른 사용자의 세션 |
 | 404 | 존재하지 않는 session_id |
 
@@ -275,7 +353,12 @@ AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요.
 
 ### GET /analysis/{run_id}
 
-분석 실행 상태 조회. 폴링 시 사용.
+분석 실행 상태 조회. 비동기 폴링 전환 시 사용.
+
+```http
+GET /analysis/{run_id}
+Authorization: Bearer <token>
+```
 
 **Response 200**
 ```json
@@ -304,6 +387,11 @@ AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요.
 
 분석 결과 전체 조회. `result_json`에 scores, feedback, indicators 포함.
 
+```http
+GET /analysis/{run_id}/results
+Authorization: Bearer <token>
+```
+
 **Response 200**
 ```json
 {
@@ -311,19 +399,235 @@ AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요.
   "session_id": "7cd855b1-...",
   "user_id": "183192a1-...",
   "metrics": [
-    {"key": "voiced_ratio", "value": 0.566, "unit": "ratio"},
-    {"key": "processing_time_ms", "value": 19710.4, "unit": "ms"},
-    {"key": "duration_sec", "value": 266.04, "unit": "sec"}
+    {"key": "voiced_ratio",       "value": 0.566,    "unit": "ratio"},
+    {"key": "processing_time_ms", "value": 19710.4,  "unit": "ms"},
+    {"key": "duration_sec",       "value": 266.04,   "unit": "sec"}
   ],
-  "result_json": { /* → result_json 구조 상세 섹션 참고 */ }
+  "result_json": { }
 }
 ```
 
+`result_json` 구조는 [7. 공통 응답 모델](#7-공통-응답-모델) 참고.
+
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 403 | 다른 사용자의 분석 |
+| 404 | 존재하지 않는 run_id |
+
 ---
 
-## result_json 구조 상세
+### GET /analysis/{run_id}/comparison
 
-`GET /analysis/{run_id}/results` 또는 `GET /sessions/{id}`의 `latest_analysis.result_json` 필드.
+숙련자 기준 데이터와 비교. **현재 reference profile 미구축 상태** → `comparisons`가 빈 배열로 반환됩니다.
+
+```http
+GET /analysis/{run_id}/comparison
+Authorization: Bearer <token>
+```
+
+**Response 200** (reference profile 없을 때 — 현재 상태)
+```json
+{
+  "run_id": "f199f109-8f96-4528-9b61-be811eef7ef1",
+  "reference_name": null,
+  "comparisons": []
+}
+```
+
+**Response 200** (reference profile 구축 후)
+```json
+{
+  "run_id": "f199f109-8f96-4528-9b61-be811eef7ef1",
+  "reference_name": "숙련자 기준 v1",
+  "comparisons": [
+    {
+      "key": "4_breathiness",
+      "user_value": 0.203,
+      "reference_mean": 0.512,
+      "z_score": -2.14,
+      "percentile": 1.62
+    }
+  ]
+}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `reference_name` | `string \| null` | 기준 프로필 이름. 미구축 시 `null` |
+| `comparisons` | `array` | 지표별 비교 결과. 미구축 시 빈 배열 `[]` |
+| `comparisons[].key` | `string` | 지표 키 (예: `"4_breathiness"`) |
+| `comparisons[].user_value` | `float` | 사용자 측정값 |
+| `comparisons[].reference_mean` | `float` | 숙련자 평균값 |
+| `comparisons[].z_score` | `float \| null` | 표준편차 기준 편차 |
+| `comparisons[].percentile` | `float \| null` | 백분위 (0~100) |
+
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 403 | 다른 사용자의 분석 |
+| 404 | 존재하지 않는 run_id |
+
+---
+
+## 8. 노래방
+
+> `song_id` 형식: 정확히 **3자리 숫자** (`"001"`~`"014"`). 형식 불일치 시 422 반환.
+
+### GET /songs
+
+노래방 14곡 메타 리스트.
+
+```http
+GET /songs
+Authorization: Bearer <token>
+```
+
+**Response 200**
+```json
+[
+  {
+    "id": "004",
+    "artist": "김범수",
+    "title": "보고싶다",
+    "master_duration_sec": 274.5,
+    "mr_duration_sec": 274.5,
+    "has_lrc": true,
+    "has_pitch_guide": true
+  },
+  {
+    "id": "001",
+    "artist": "한로로",
+    "title": "시간을 달리네",
+    "master_duration_sec": 231.2,
+    "mr_duration_sec": 231.2,
+    "has_lrc": false,
+    "has_pitch_guide": true
+  }
+]
+```
+
+| 필드 | 설명 |
+|------|------|
+| `has_lrc` | `true`이면 `/lrc` 호출 가능. `false`이면 404 반환 |
+| `has_pitch_guide` | `true`이면 `/pitch-guide` 호출 가능. `false`이면 404 반환 |
+| `master_duration_sec` | 원곡 길이(초). 없으면 `null` |
+| `mr_duration_sec` | MR 길이(초). 없으면 `null` |
+
+---
+
+### GET /songs/{song_id}/lrc
+
+해당 곡의 동기화 가사 데이터. `has_lrc: true`인 곡만 사용 가능.
+
+```http
+GET /songs/{song_id}/lrc
+Authorization: Bearer <token>
+```
+
+**Response 200** — 배열 직접 반환
+```json
+[
+  {"time_start": 12.45, "time_end": 15.80, "text": "그대가 떠나던 날"},
+  {"time_start": 15.80, "time_end": 19.20, "text": "하늘도 알았는지"}
+]
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `time_start` | `float` | 가사 시작 시각 (초, master 음원 기준) |
+| `time_end` | `float` | 가사 종료 시각 (초, master 음원 기준) |
+| `text` | `string` | 가사 텍스트 |
+
+> **MR 재생 시 타임라인 변환**: `t_mr = t_master - lrc_offset_sec`  
+> `lrc_offset_sec`은 향후 songs 메타 API에 포함 예정.
+
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 404 | 존재하지 않는 곡 또는 LRC 미준비 (`has_lrc: false`) |
+| 422 | song_id 형식 오류 (3자리 숫자가 아님) |
+
+---
+
+### GET /songs/{song_id}/pitch-guide
+
+해당 곡의 가수 음정 곡선. `has_pitch_guide: true`인 곡만 사용 가능.
+
+```http
+GET /songs/{song_id}/pitch-guide
+Authorization: Bearer <token>
+```
+
+**Response 200** — 객체 직접 반환
+```json
+{
+  "song_id": "004",
+  "lrc_offset_sec": 0.0,
+  "points": [
+    {
+      "t": 12.45,
+      "freq": 293.66,
+      "midi": 62,
+      "voiced": true,
+      "conf": 0.92
+    },
+    {
+      "t": 12.51,
+      "freq": null,
+      "midi": null,
+      "voiced": false,
+      "conf": 0.08
+    }
+  ]
+}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `points[].t` | `float` | 시각 (초, master 음원 기준) |
+| `points[].freq` | `float \| null` | 주파수 (Hz). `voiced: false`이면 `null` |
+| `points[].midi` | `int \| null` | MIDI 노트 번호. `voiced: false`이면 `null` |
+| `points[].voiced` | `bool` | 유성음 여부 |
+| `points[].conf` | `float` | CREPE 신뢰도 (0~1) |
+| `lrc_offset_sec` | `float` | LRC 오프셋 (초). MR 재생 시 `t_mr = t - lrc_offset_sec` |
+
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 404 | 존재하지 않는 곡 또는 pitch_guide 미준비 |
+| 422 | song_id 형식 오류 |
+
+---
+
+### GET /songs/{song_id}/mr
+
+MR 음원 파일 스트리밍 (MP3).
+
+```http
+GET /songs/{song_id}/mr
+Authorization: Bearer <token>
+```
+
+**Response 200**
+- Content-Type: `audio/mpeg`
+- 파일 바이너리 직접 반환 (FileResponse)
+
+> **주의**: 현재 range request 미구현. 앱에서 탐색(seek) 기능이 필요하면 별도 구현 요청 필요.
+
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 404 | 존재하지 않는 곡 또는 MR 파일 미준비 |
+| 422 | song_id 형식 오류 |
+
+---
+
+## 9. 공통 응답 모델
+
+### result_json 구조
+
+`GET /analysis/{run_id}/results`의 `result_json` 및 `GET /sessions/{id}`의 `latest_analysis.result_json` 공통 구조.
 
 ```json
 {
@@ -355,15 +659,15 @@ AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요.
   },
 
   "scores": {
-    "1_nasal_oral_ratio":    {"ai_score": null,  "rounded_score": null, "zone": null,          "confidence": "medium"},
-    "2_chest_head_voice":    {"ai_score": 1.83,  "rounded_score": 2,    "zone": "appropriate", "confidence": "medium"},
-    "3_vocal_fold_contact":  {"ai_score": 0.0,   "rounded_score": 0,    "zone": "insufficient","confidence": "high"},
-    "4_breathiness":         {"ai_score": 0.0,   "rounded_score": 0,    "zone": "insufficient","confidence": "high"},
-    "5_forward_resonance":   {"ai_score": 0.0,   "rounded_score": 0,    "zone": "insufficient","confidence": "medium"},
-    "6_soft_palate":         {"ai_score": null,  "rounded_score": null, "zone": null,          "confidence": "medium"},
-    "7_larynx_tongue_root":  {"ai_score": null,  "rounded_score": null, "zone": null,          "confidence": "unavailable"},
-    "8_tongue_tension":      {"ai_score": null,  "rounded_score": null, "zone": null,          "confidence": "unavailable"},
-    "9_pressure_balance":    {"ai_score": 1.91,  "rounded_score": 2,    "zone": "appropriate", "confidence": "medium"}
+    "1_nasal_oral_ratio":   {"ai_score": null, "rounded_score": null, "zone": null,           "confidence": "medium"},
+    "2_chest_head_voice":   {"ai_score": 1.83, "rounded_score": 2,    "zone": "appropriate",  "confidence": "medium"},
+    "3_vocal_fold_contact": {"ai_score": 0.0,  "rounded_score": 0,    "zone": "insufficient", "confidence": "high"},
+    "4_breathiness":        {"ai_score": 0.0,  "rounded_score": 0,    "zone": "insufficient", "confidence": "high"},
+    "5_forward_resonance":  {"ai_score": 0.0,  "rounded_score": 0,    "zone": "insufficient", "confidence": "medium"},
+    "6_soft_palate":        {"ai_score": null, "rounded_score": null, "zone": null,           "confidence": "medium"},
+    "7_larynx_tongue_root": {"ai_score": null, "rounded_score": null, "zone": null,           "confidence": "unavailable"},
+    "8_tongue_tension":     {"ai_score": null, "rounded_score": null, "zone": null,           "confidence": "unavailable"},
+    "9_pressure_balance":   {"ai_score": 1.91, "rounded_score": 2,    "zone": "appropriate",  "confidence": "medium"}
   },
 
   "feedback": {
@@ -373,13 +677,12 @@ AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요.
       "zone": "insufficient",
       "zone_label": "미달",
       "score_description": "호흡 소리가 매우 강하게 들리며 발성보다 숨소리가 두드러짐",
-      "feedback_text": "성대 접촉을 좀 더 확보하세요. 기식음이 과도하면 소리가 흐려지므로...",
+      "feedback_text": "성대 접촉을 좀 더 확보하세요. ...",
       "ai_indicator": {
         "name": "hnr",
         "value": 0.2031
       }
     }
-    // 나머지 8개 동일 구조
   },
 
   "reliability": {
@@ -390,50 +693,67 @@ AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요.
 }
 ```
 
-### scores.zone 값
-
-| 값 | 의미 |
-|----|------|
-| `"appropriate"` | 적절 |
-| `"insufficient"` | 부족 |
-| `"excessive"` | 과도 |
-| `null` | 신뢰도 부족으로 평가 불가 |
-
-### scores.confidence 값
-
-| 값 | 의미 |
-|----|------|
-| `"high"` | 높은 신뢰도 — UI에 강조 표시 권장 |
-| `"medium"` | 중간 신뢰도 |
-| `"unavailable"` | 평가 불가 — `ai_score: null`, UI에 "측정 불가" 표시 권장 |
-
-### 분석 항목 9개
-
-| 키 | 한국어 이름 |
-|----|------------|
-| `1_nasal_oral_ratio` | 비강, 구강 공명의 비율 |
-| `2_chest_head_voice` | 흉성, 두성의 비율 |
-| `3_vocal_fold_contact` | 성대 접촉률 |
-| `4_breathiness` | 호흡 소리 식별 |
-| `5_forward_resonance` | 전방 공명 |
-| `6_soft_palate` | 연구개 상태 |
-| `7_larynx_tongue_root` | 후두, 설근 긴장 |
-| `8_tongue_tension` | 혀 긴장 |
-| `9_pressure_balance` | 호흡압 균형 |
+`feedback`에는 `confidence: "unavailable"` 항목은 포함되지 않습니다.
 
 ---
 
-## 분석 요청 후 폴링 패턴
+### 평가 항목 9개
 
-현재 분석은 동기 처리(10~30초)이므로 `POST /analyze` 응답까지 기다리면 됩니다.  
-타임아웃 설정: **최소 60초** 권장.
+| 키 | 한국어 이름 | 신뢰도 |
+|----|------------|--------|
+| `1_nasal_oral_ratio` | 비강, 구강 공명의 비율 | medium |
+| `2_chest_head_voice` | 흉성, 두성의 비율 | medium |
+| `3_vocal_fold_contact` | 성대 접촉률 | high |
+| `4_breathiness` | 호흡 소리 식별 | high |
+| `5_forward_resonance` | 전방 공명 | medium |
+| `6_soft_palate` | 연구개 상태 | medium |
+| `7_larynx_tongue_root` | 후두, 설근 긴장 | unavailable |
+| `8_tongue_tension` | 혀 긴장 | unavailable |
+| `9_pressure_balance` | 호흡압 균형 | medium |
 
-비동기 처리로 전환 시를 대비한 폴링 패턴:
+### scores.zone 값
+
+| 값 | 의미 | 점수 범위 |
+|----|------|----------|
+| `"appropriate"` | 적절 | 2~3 |
+| `"insufficient"` | 부족 | 0~1 |
+| `"excessive"` | 과도 | 4~5 |
+| `null` | 평가 불가 (confidence: unavailable) | — |
+
+### scores.confidence 값
+
+| 값 | 의미 | UI 권장 |
+|----|------|---------|
+| `"high"` | 높은 신뢰도 | 강조 표시 |
+| `"medium"` | 중간 신뢰도 | 일반 표시 |
+| `"unavailable"` | 평가 불가 | "측정 불가" 표시, `ai_score: null` |
+
+---
+
+## 10. 에러 코드
+
+| 코드 | 사유 | 주요 발생 상황 |
+|------|------|---------------|
+| 400 | 잘못된 요청 | 존재하지 않는 `song_id`, 이미 등록된 이메일 |
+| 401 | 인증 필요 / 실패 | 토큰 없음, 만료, 비밀번호 불일치 |
+| 403 | 권한 없음 | 다른 사용자의 세션·파일·분석 결과 접근 |
+| 404 | 리소스 없음 | 없는 session_id / run_id / song_id, LRC·MR 미준비 |
+| 422 | 입력 형식 오류 | 필드 누락, 타입 불일치, song_id 형식 불일치 |
+| 500 | 서버 오류 | 예상치 못한 내부 오류 |
+
+---
+
+## 11. 폴링 가이드
+
+현재 분석은 **동기 처리** (10~30초). `POST /analyze` 응답까지 대기하면 됩니다.  
+타임아웃은 **최소 60초** 설정 권장.
+
+비동기 전환 시를 대비한 폴링 패턴:
 
 ```python
 import time, httpx
 
-run_id = "..."
+run_id = "f199f109-..."
 headers = {"Authorization": "Bearer <token>"}
 
 for _ in range(30):  # 최대 150초 대기
@@ -443,30 +763,30 @@ for _ in range(30):  # 최대 150초 대기
         break
     time.sleep(5)
 
-# 결과 조회
-results = httpx.get(f"http://host:8000/analysis/{run_id}/results", headers=headers).json()
+results = httpx.get(
+    f"http://host:8000/analysis/{run_id}/results", headers=headers
+).json()
 result_json = results["result_json"]
 ```
 
 ---
 
-## 권한 모델
+## 12. 권한 모델
 
-- 모든 세션, 파일, 분석 결과는 **생성한 사용자만 접근** 가능
-- 타인의 리소스 접근 시 `403 Forbidden` 반환
-- `GET /songs/*` 및 인증 없이 접근 가능한 곡 관련 API 제외
-
-**공통 에러 코드**
-
-| 코드 | 사유 |
-|------|------|
-| 401 | 토큰 없음 또는 유효하지 않은 토큰 |
-| 403 | 다른 사용자의 리소스 접근 |
-| 404 | 존재하지 않는 리소스 |
-| 422 | 요청 바디 유효성 검사 실패 |
+- 세션, 파일, 분석 결과는 **생성한 사용자만 접근** 가능. 타인 접근 시 `403`.
+- `/songs/*` 노래방 API는 인증(Bearer 토큰)만 필요. user_id 검증 없음 — 로그인한 누구나 동일 데이터 접근 가능.
+- 토큰 만료 / 유효하지 않은 토큰 → `401` → 재로그인 후 새 토큰 사용.
 
 ---
 
-## Swagger UI
+## 13. 폐기된 엔드포인트
 
-서버 실행 후 `http://localhost:8000/docs` 에서 직접 테스트 가능.
+아래 엔드포인트는 **현재 서버에 존재하지 않습니다**. 호출 시 404 또는 라우팅 오류 발생.
+
+| Method | Path | 폐기 사유 |
+|--------|------|----------|
+| POST | `/sessions/{id}/compare-pitch` | 구버전 노래방 (librosa 기반). 신규 songs API로 대체 |
+| POST | `/songs/register` | 구버전 곡 등록 엔드포인트. 현재 DB seed 방식으로 대체 |
+| GET | `/songs/{id}/audio` | 저작권 이슈로 영구 제거 (master 음원 노출 금지) |
+| GET | `/songs/{id}/pitch` | `/songs/{id}/pitch-guide`로 대체 |
+| GET | `/songs/{id}/lyrics` | `/songs/{id}/lrc`로 대체 |
