@@ -6,30 +6,30 @@
 
 ```
 graduation-project/           # 이 레포 루트
-├── vocal-server/             # 백엔드 API 서브프로젝트 (FastAPI, Mac Studio)
+├── vocal-server/             # FastAPI 백엔드 (Mac Studio)
 │   ├── app/                  #   라우터, 서비스, ORM 모델
 │   ├── alembic/              #   DB 마이그레이션
 │   ├── scripts/              #   동기화·시드 스크립트
 │   ├── docs/                 #   API 문서
-│   ├── PROGRESS.md           #   진행 현황
-│   └── CLAUDE.md             #   vocal-server 전용 에이전트 컨텍스트
-├── server/                   # (구) 백엔드 — 레거시, 참조용
-├── ai-model/                 # EGG 추정 딥러닝 모델 학습 (EfficientEGGNet)
-├── model_server/             # FastAPI 추론 서버 (GPU, dmlserver)
-├── scripts/                  # 분석 파이프라인 (score_mapper, batch_analyze, ...)
-├── data-prep/                # 14곡 노래방 데이터 준비 (LRC + 음정 곡선)
-├── results/                  # 검증 결과 JSON + 시각화
-├── figures/                  # 학습/분석 시각화 PNG
-├── docs/                     # 프로젝트 공통 문서
-├── tests/                    # 테스트 코드
-├── CLAUDE.md                 # 코드 에이전트용 작업 컨텍스트 (공통)
-├── PROJECT_LOG.md            # 프로젝트 진행 기록 (사용자용)
+│   ├── PROGRESS.md
+│   └── CLAUDE.md
+├── dml-server/               # AI 모델 + 추론 서버 (dmlserver GPU)
+│   ├── ai-model/             #   EGG 추정 모델 학습 (EfficientEGGNet)
+│   ├── model_server/         #   FastAPI 추론 서버 (port 8001)
+│   ├── scripts/              #   분석 파이프라인 + 노래방 데이터 준비
+│   ├── figures/, images/     #   시각화 PNG
+│   ├── docs/                 #   dml 관련 문서
+│   ├── tests/                #   테스트 코드
+│   ├── PROJECT_LOG.md
+│   └── CLAUDE.md
+├── app/                      # Expo 앱 (별도 작업)
+├── CLAUDE.md                 # 모노레포 공통 규칙
 └── README.md                 # 본 파일
 ```
 
 ## 핵심 결과
 
-- EGG 추정 모델: Test Corr 0.8249 (Exp20 Progressive)
+- EGG 추정 모델: Test Corr 0.8249 (Exp20 Progressive Window)
 - 평가자 ICC: 학습 0.875 / 검증 0.817 (우수 기준 0.75 초과)
 - 통계적으로 유의미한 평가 항목 2종:
   - 호흡식별 (CPP 기반): Pearson r=0.547, p<0.001
@@ -44,28 +44,12 @@ graduation-project/           # 이 레포 루트
 ```
 [사용자 스마트폰 앱]
   ↓ 녹음 + 업로드
-[server: 백엔드 API]
+[vocal-server: 백엔드 API (Mac Studio, port 8000)]
   ↓ 분석 요청
-[model_server: AI 추론 (GPU)]
+[dml-server/model_server: AI 추론 (dmlserver GPU, port 8001)]
   ↓ EGG 추정 + 음향 지표 + 점수 + 피드백
-[server에 결과 저장]
-  ↓ 응답
-[앱에서 시각화 + 피드백]
+[vocal-server에 결과 저장 → 앱에서 시각화]
 ```
-
-## 모듈별 설명
-
-### ai-model
-EfficientEGGNet 기반 EGG 신호 추정 모델. SVD_healthy 데이터셋(687명) + 보컬학원 자유곡 데이터(22명)로 학습. window 16384, 16kHz, non-causal dilated CNN.
-
-### model_server
-PyTorch 추론 서버. POST /predict (EGG wav 반환), POST /analyze (9개 항목 점수 + 피드백 JSON 반환).
-
-### server
-사용자 인증, 세션 관리, 녹음 저장, 분석 요청 라우팅, 사전/사후 비교 API.
-
-### data-prep
-14곡 자유곡에 대한 LRC 가사 + 가수 음정 곡선 추출 파이프라인. Demucs 보컬 분리 + CREPE F0 추출 + LRCLIB 가사 + cross-correlation 시간 정렬.
 
 ## 평가 항목 (9개)
 
@@ -88,7 +72,3 @@ PyTorch 추론 서버. POST /predict (EGG wav 반환), POST /analyze (9개 항�
 - 졸업작품용 비상업 코드
 - 14곡 음원/MR은 KOMCA 라이선스 별도 처리 (레포에 포함되지 않음)
 - 사용자 음성 데이터는 개인정보 보호로 레포에 포함되지 않음
-
-## 자세한 내용
-
-PROJECT_LOG.md 참조.
