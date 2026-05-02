@@ -42,7 +42,14 @@ class AdminUserResponse(BaseModel):
 # ─────────────────────────────────────────────
 # Session
 # ─────────────────────────────────────────────
+class SongInSession(BaseModel):
+    id: Optional[str]
+    artist: Optional[str]
+    title: Optional[str]
+
+
 class SessionCreateRequest(BaseModel):
+    song_id: Optional[str] = None
     song_title: Optional[str] = None
 
 
@@ -89,6 +96,7 @@ class LatestAnalysis(BaseModel):
 class SessionBrief(BaseModel):
     session_id: uuid.UUID
     song_title: Optional[str]
+    song: Optional[SongInSession] = None
     status: str
     analysis_status: str
     started_at: Optional[datetime]
@@ -101,6 +109,7 @@ class SessionDetail(BaseModel):
     session_id: uuid.UUID
     user_id: uuid.UUID
     song_title: Optional[str]
+    song: Optional[SongInSession] = None
     status: str
     started_at: Optional[datetime]
     ended_at: Optional[datetime]

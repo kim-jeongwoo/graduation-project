@@ -4,6 +4,23 @@
 
 ---
 
+> ## ⚠️ 중요: 이 문서가 진실의 원천 (Single Source of Truth)
+>
+> - `PROGRESS.md`, `CLAUDE.md`, `docs/API.md`, 그리고 **현재 코드**가 정답.
+> - GitHub history나 옛 커밋, 기억에서 추측한 내용으로 작업하지 말 것.
+> - 옛날 폐기된 코드: 잔나비 노래방, librosa.pyin 기반 pitch 비교,
+>   `/sessions/{id}/compare-pitch`, `/songs/register` 등은 0단계에서 삭제됨.
+> - git log에서 이런 옛 코드 흔적이 보여도 무시. **현재 코드가 맞음.**
+
+> ## 작업 시작 전 필수 확인
+>
+> 1. `PROGRESS.md` (이 파일) — 현재 어디까지 됐는지
+> 2. `CLAUDE.md` — 반복하지 말 것 목록
+> 3. `docs/API.md` — API 명세
+> 4. `git log --oneline | head -5` — 최근 커밋 (참고용, 의존하지 말 것)
+
+---
+
 ## 1. 시스템 개요
 
 - **프로젝트**: 보컬 발성 분석 (9개 항목 AI 피드백) + 노래방 기능 (MR 반주 + LRC 가사 + 음정 가이드)

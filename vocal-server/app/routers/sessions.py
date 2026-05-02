@@ -5,11 +5,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session as DBSession
+from sqlalchemy.orm import Session as DBSession, selectinload
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models.models import AnalysisRun, Session, SessionFile, User
+from app.models.models import AnalysisRun, Session, SessionFile, Song, User
 from app.schemas.schemas import (
     FileInfo,
     LatestAnalysis,
@@ -18,9 +18,19 @@ from app.schemas.schemas import (
     SessionCreateRequest,
     SessionCreateResponse,
     SessionDetail,
+    SongInSession,
 )
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+def _build_song_field(session_obj) -> SongInSession | None:
+    if session_obj.song is not None:
+        s = session_obj.song
+        return SongInSession(id=s.id, artist=s.artist, title=s.title)
+    if session_obj.song_title is not None:
+        return SongInSession(id=None, artist=None, title=session_obj.song_title)
+    return None
 
 
 @router.post(
@@ -35,8 +45,14 @@ def create_session(
     current_user: User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
+    if body.song_id is not None:
+        song = db.query(Song).filter(Song.id == body.song_id).first()
+        if not song:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 곡입니다.")
+
     session = Session(
         user_id=current_user.user_id,
+        song_id=body.song_id,
         song_title=body.song_title,
         status="uploading",
     )
@@ -64,13 +80,11 @@ def list_sessions(
     sessions = (
         db.query(Session)
         .filter(Session.user_id == current_user.user_id)
+        .options(selectinload(Session.song))
         .order_by(Session.created_at.desc())
         .all()
     )
 
-    # TODO: 사용자 증가 시 N+1 쿼리 최적화 필요
-    # subquery 또는 join으로 한 번에 가져오는 방식으로 리팩토링
-    # 현재는 시연 단계 단순 구현 (세션 수 적음)
     result = []
     for s in sessions:
         latest_run = (
@@ -91,6 +105,7 @@ def list_sessions(
         result.append(SessionBrief(
             session_id=s.session_id,
             song_title=s.song_title,
+            song=_build_song_field(s),
             status=s.status,
             analysis_status=analysis_status,
             started_at=s.started_at,
@@ -143,6 +158,7 @@ def get_session(
         session_id=session.session_id,
         user_id=session.user_id,
         song_title=session.song_title,
+        song=_build_song_field(session),
         status=session.status,
         started_at=session.started_at,
         ended_at=session.ended_at,
