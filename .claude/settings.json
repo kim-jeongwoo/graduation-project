@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Edit(**)",
+
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+
+      "Bash(npm install:*)",
+      "Bash(npm run start)",
+      "Bash(npm run start:go)",
+      "Bash(npm run android)",
+      "Bash(npm run ios)",
+      "Bash(npm run web)",
+
+      "Bash(npx expo start:*)",
+      "Bash(npx expo start --dev-client:*)",
+      "Bash(npx expo start --ios:*)",
+      "Bash(npx expo start --android:*)",
+      "Bash(npx expo start --web:*)",
+
+      "Bash(npx tsc:*)",
+      "Bash(npx tsc --noEmit:*)",
+
+      "Bash(eas build:*)",
+      "Bash(eas submit:*)",
+      "Bash(eas update:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Read(.env)",
+      "Read(.env.*)"
+    ]
+  }
+}

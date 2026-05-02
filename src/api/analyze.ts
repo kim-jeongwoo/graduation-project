@@ -1,20 +1,63 @@
-import apiClient from './client';
-import type { AnalyzeResult, UploadRecordingRequest } from '../types/analyze';
-import { mockAnalyze, MOCK_FIXED_RESULT } from './mock';
+import { BASE_URL } from './client';
+import { pollAnalysisStatus, getAnalysisResults } from './analysis';
+import { MOCK_FIXED_RESULT } from './mock';
+import type { AnalyzeResult, ServerAnalyzeResult, ScoreEntry, FeedbackEntry } from '../types/analyze';
+import type { EvaluationItemKey } from '../domain/evaluationItems';
 
-// TODO: 백엔드 명세 확정 시 false로 전환 후 realAnalyze 구현
-const USE_MOCK = true;
+const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
 
-async function realAnalyze(_request: UploadRecordingRequest): Promise<AnalyzeResult> {
-  // TODO: 엔드포인트 및 요청 형식은 server 명세 확정 후 구현
-  const response = await apiClient.post<AnalyzeResult>('/analyze', _request);
-  return response.data;
+// 부팅 시 환경 확인용 로그
+console.log('[boot] USE_MOCK=', USE_MOCK, 'API_URL=', BASE_URL);
+
+// ─── prefix 어댑터 ───
+// 서버 키 "1_nasal_oral_ratio" → 도메인 키 "nasal_oral_ratio"
+function stripPrefix(key: string): EvaluationItemKey {
+  return key.replace(/^\d+_/, '') as EvaluationItemKey;
 }
 
-export const analyzeApi = {
-  analyze: USE_MOCK
-    ? (request: UploadRecordingRequest) => mockAnalyze({ fileUri: request.fileUri })
-    : realAnalyze,
-};
+function adaptServerResult(raw: ServerAnalyzeResult): AnalyzeResult {
+  return {
+    ...raw,
+    scores: Object.fromEntries(
+      Object.entries(raw.scores).map(([k, v]) => [stripPrefix(k), v]),
+    ) as Record<EvaluationItemKey, ScoreEntry>,
+    feedback: Object.fromEntries(
+      Object.entries(raw.feedback).map(([k, v]) => [stripPrefix(k), v]),
+    ) as Record<EvaluationItemKey, FeedbackEntry>,
+    reliability: {
+      high_reliability:   raw.reliability.high_reliability.map(stripPrefix),
+      medium_reliability: raw.reliability.medium_reliability.map(stripPrefix),
+      unavailable:        raw.reliability.unavailable.map(stripPrefix),
+    },
+  };
+}
+
+// ─── P0 검증용: run_id로 직접 결과 조회 ───
+// USE_MOCK=true 이거나 runId 없으면 mock 반환
+export async function getResultsByRunId(runId?: string): Promise<AnalyzeResult> {
+  if (USE_MOCK || !runId) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 800));
+    return MOCK_FIXED_RESULT;
+  }
+  await pollAnalysisStatus(runId);
+  const raw = await getAnalysisResults(runId);
+  return adaptServerResult(raw);
+}
+
+// ─── P1에서 호출자 연결 예정: WAV 업로드 → 분석 시작 → 결과 조회 ───
+export interface AnalyzeRequest {
+  sessionId: string;
+  fileUri: string;
+  fileName: string;
+}
+
+export async function analyzeRecording(request: AnalyzeRequest): Promise<AnalyzeResult> {
+  if (USE_MOCK) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+    return MOCK_FIXED_RESULT;
+  }
+  // P1에서 구현: uploadSessionFile → startAnalysis → getResultsByRunId
+  throw new Error('analyzeRecording: P1에서 구현 예정');
+}
 
 export { MOCK_FIXED_RESULT };

@@ -137,8 +137,8 @@ export interface Song {
   title: string;
   artist: string;
   duration_sec: number;
-  has_lyrics: boolean;
-  has_pitch: boolean;
+  has_lrc: boolean;         // 가사 싱크 데이터 준비 여부
+  has_pitch_guide: boolean; // 음정 가이드 준비 여부
 }
 
 export interface LyricsLine {

@@ -16,7 +16,9 @@ const SERVER_URLS = {
 
 const CURRENT_SERVER: keyof typeof SERVER_URLS = 'local';
 
-export const BASE_URL = SERVER_URLS[CURRENT_SERVER];
+// EXPO_PUBLIC_API_URL 환경변수 우선, 없으면 SERVER_URLS 폴백
+export const BASE_URL: string =
+  process.env.EXPO_PUBLIC_API_URL ?? SERVER_URLS[CURRENT_SERVER];
 const TOKEN_KEY = 'auth_token';
 
 /**

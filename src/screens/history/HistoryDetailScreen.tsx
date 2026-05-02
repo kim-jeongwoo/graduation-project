@@ -9,11 +9,10 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getSessionDetail } from '../../api/sessions';
-import {
-  getAnalysisResults,
-  getAnalysisComparison,
-  getAnalysisFeedback,
-} from '../../api/analysis';
+// [deprecated] 구형 화면 - 모든 분석 API stub으로 유지. P1에서 EvalResultScreen으로 대체.
+const getAnalysisResults = (_runId: string) => Promise.resolve({ metrics: [] as never[] });
+const getAnalysisComparison = (_runId: string) => Promise.resolve(null as { comparisons: never[]; reference_name: string } | null);
+const getAnalysisFeedback = (_sessionId: string) => Promise.resolve(null);
 import { TouchableOpacity } from 'react-native';
 import MetricCard from '../../components/MetricCard';
 import ComparisonBar from '../../components/ComparisonBar';

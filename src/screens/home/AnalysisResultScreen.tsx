@@ -11,12 +11,12 @@ import {
 import { COLORS } from '../../utils/colors';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps, NativeStackNavigationProp } from '@react-navigation/native-stack';
-import {
-  getAnalysisResults,
-  getAnalysisComparison,
-  getAnalysisFeedback,
-} from '../../api/analysis';
-import { comparePitch } from '../../api/songs';
+import { getAnalysisResults } from '../../api/analysis';
+
+// [deprecated] 구형 화면 - 아래 함수들은 폐기됨. null 반환 stub으로 유지.
+const getAnalysisComparison = (_runId: string) => Promise.resolve(null);
+const getAnalysisFeedback = (_sessionId: string) => Promise.resolve(null);
+const comparePitch = (_sessionId: string, _songId: string) => Promise.resolve(null);
 import { useGoals } from '../../context/GoalsContext';
 import MetricCard from '../../components/MetricCard';
 import ComparisonBar from '../../components/ComparisonBar';

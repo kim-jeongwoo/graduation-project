@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm list *)",
+      "Bash(echo \"PID=$!\")",
+      "Bash(echo \"Metro PID=$!\")",
+      "Bash(curl -s http://localhost:8081/status)",
+      "Bash(curl -s \"http://localhost:8081/index.bundle?platform=ios&dev=true&hot=false&lazy=false\" -o /tmp/bundle_check.js)",
+      "Bash(echo \"exit=$? size=$\\(wc -c < /tmp/bundle_check.js\\)\")",
+      "Read(//private/tmp/**)",
+      "Bash(xcrun simctl *)",
+      "Bash(eas --version)",
+      "Bash(npx eas-cli *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('expo:', d.get\\('dependencies',{}\\).get\\('expo','없음'\\)\\); print\\('eas-cli\\(dev\\):', d.get\\('devDependencies',{}\\).get\\('eas-cli','없음'\\)\\); [print\\(k,':',v\\) for k,v in d.get\\('dependencies',{}\\).items\\(\\) if 'expo' in k.lower\\(\\) or 'eas' in k.lower\\(\\)]\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}

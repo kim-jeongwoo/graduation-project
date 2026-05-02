@@ -83,7 +83,7 @@ function HomeStackNavigator() {
       />
       <HomeStack.Screen
         name="EvalResult"
-        component={EvalResultScreen}
+        component={EvalResultScreen as React.ComponentType<object>}
         options={{ title: '발성 분석 결과' }}
       />
     </HomeStack.Navigator>
