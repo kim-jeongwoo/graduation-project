@@ -20,7 +20,7 @@ export async function pollAnalysisStatus(runId: string): Promise<AnalysisStatus>
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const status = await getAnalysisStatus(runId);
-    if (status.status === 'completed' || status.status === 'failed') {
+    if (status.status === 'success' || status.status === 'completed' || status.status === 'failed') {
       return status;
     }
     await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
