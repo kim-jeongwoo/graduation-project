@@ -40,7 +40,7 @@ export default function HomeScreen({ navigation }: Props) {
   useFocusEffect(useCallback(() => { loadSongs(); }, [loadSongs]));
 
   const renderSong = ({ item, index }: { item: Song; index: number }) => {
-    const ready = item.has_lrc && item.has_pitch_guide;
+    const ready = item.hasLrc && item.hasPitchGuide;
     return (
       <TouchableOpacity
         style={styles.songCard}
@@ -93,7 +93,7 @@ export default function HomeScreen({ navigation }: Props) {
       ) : (
         <FlatList
           data={songs}
-          keyExtractor={(item) => item.song_id}
+          keyExtractor={(item) => item.id}
           renderItem={renderSong}
           ListHeaderComponent={
             <Text style={styles.sectionTitle}>수록곡 {songs.length}</Text>

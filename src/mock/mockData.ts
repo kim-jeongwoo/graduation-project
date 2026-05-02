@@ -2,13 +2,12 @@ import type { Session, SessionFile, Metric, Comparison } from '../types/api';
 import type { Song, PitchFrame, ComparisonFrame, PitchData, PitchComparison } from '../types/api';
 
 // ─── 곡 목록 mock ───
-// ⚠️ mock song_id는 서버 UUID와 일치시켜야 함. "song-1" 같은 가짜 ID 사용 금지.
 export const mockSongs: Song[] = [
-  { song_id: 'efe04b77-532d-458a-8713-5f3b70c83465', title: '주저하는 연인들을 위해', artist: '잔나비', duration_sec: 267, has_lrc: true, has_pitch_guide: true },
-  { song_id: 'mock-song-2', title: '봄날', artist: 'BTS', duration_sec: 274, has_lrc: true, has_pitch_guide: true },
-  { song_id: 'mock-song-3', title: '좋은 날', artist: 'IU', duration_sec: 228, has_lrc: true, has_pitch_guide: true },
-  { song_id: 'mock-song-4', title: '사랑하기 때문에', artist: '유재하', duration_sec: 252, has_lrc: true, has_pitch_guide: false },
-  { song_id: 'mock-song-5', title: 'Hype Boy', artist: 'NewJeans', duration_sec: 179, has_lrc: true, has_pitch_guide: true },
+  { id: '001', title: '주저하는 연인들을 위해', artist: '잔나비', masterDurationSec: 267, mrDurationSec: 267, hasLrc: true, hasPitchGuide: true },
+  { id: '002', title: '봄날', artist: 'BTS', masterDurationSec: 274, mrDurationSec: 274, hasLrc: true, hasPitchGuide: true },
+  { id: '003', title: '좋은 날', artist: 'IU', masterDurationSec: 228, mrDurationSec: 228, hasLrc: true, hasPitchGuide: true },
+  { id: '004', title: '사랑하기 때문에', artist: '유재하', masterDurationSec: 252, mrDurationSec: 252, hasLrc: true, hasPitchGuide: false },
+  { id: '005', title: 'Hype Boy', artist: 'NewJeans', masterDurationSec: 179, mrDurationSec: 179, hasLrc: true, hasPitchGuide: true },
 ];
 
 // ─── 세션 목록 mock ───

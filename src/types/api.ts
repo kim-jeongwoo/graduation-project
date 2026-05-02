@@ -132,13 +132,15 @@ export interface FamousSinger {
 }
 
 // ─── Song ───
+// Server fields: id, artist, title, master_duration_sec, mr_duration_sec, has_lrc, has_pitch_guide
 export interface Song {
-  song_id: string;
+  id: string;
   title: string;
   artist: string;
-  duration_sec: number;
-  has_lrc: boolean;         // 가사 싱크 데이터 준비 여부
-  has_pitch_guide: boolean; // 음정 가이드 준비 여부
+  masterDurationSec: number;
+  mrDurationSec: number;
+  hasLrc: boolean;
+  hasPitchGuide: boolean;
 }
 
 export interface LyricsLine {

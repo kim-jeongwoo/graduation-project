@@ -3,9 +3,27 @@ import type { Song, LyricsData, PitchData } from '../types/api';
 import type { LyricLine, PitchGuide, ServerLrcLine, ServerPitchGuide } from '../types/karaoke';
 import { adaptLrc, adaptPitchGuide } from '../types/karaoke';
 
+interface ServerSong {
+  id: string;
+  title: string;
+  artist: string;
+  master_duration_sec: number;
+  mr_duration_sec: number;
+  has_lrc: boolean;
+  has_pitch_guide: boolean;
+}
+
 export async function getSongs(): Promise<Song[]> {
-  const res = await apiClient.get<Song[]>('/songs');
-  return res.data;
+  const res = await apiClient.get<ServerSong[]>('/songs');
+  return res.data.map((s) => ({
+    id:                s.id,
+    title:             s.title,
+    artist:            s.artist,
+    masterDurationSec: s.master_duration_sec,
+    mrDurationSec:     s.mr_duration_sec,
+    hasLrc:            s.has_lrc,
+    hasPitchGuide:     s.has_pitch_guide,
+  }));
 }
 
 // LRC: server returns array directly, timestamps in master time

@@ -21,9 +21,10 @@ type Props = NativeStackScreenProps<HomeStackParams, 'SongDetail'>;
 
 export default function SongDetailScreen({ navigation, route }: Props) {
   const { song } = route.params;
-  const ready = song.has_lrc && song.has_pitch_guide;
-  const durationMin = Math.floor(song.duration_sec / 60);
-  const durationSec = String(Math.round(song.duration_sec % 60)).padStart(2, '0');
+  const ready = song.hasLrc && song.hasPitchGuide;
+  const totalSec = song.mrDurationSec ?? 0;
+  const durationMin = Math.floor(totalSec / 60);
+  const durationSec = String(Math.round(totalSec % 60)).padStart(2, '0');
 
   return (
     <View style={styles.container}>
@@ -69,7 +70,7 @@ export default function SongDetailScreen({ navigation, route }: Props) {
           <TouchableOpacity
             style={styles.startBtn}
             activeOpacity={0.8}
-            onPress={() => navigation.navigate('Karaoke', { songId: song.song_id })}
+            onPress={() => navigation.navigate('Karaoke', { songId: song.id })}
           >
             <Text style={styles.startBtnText}>녹음 시작</Text>
           </TouchableOpacity>
