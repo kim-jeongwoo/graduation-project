@@ -62,13 +62,13 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
   const visibleGuide = useMemo(() => {
     const lo = currentTime - WINDOW_BEFORE_SEC - 0.5;
     const hi = currentTime + WINDOW_AFTER_SEC  + 0.5;
-    return guidePoints.filter((p) => p.t >= lo && p.t <= hi);
+    return guidePoints.filter((p) => p.time >= lo && p.time <= hi);
   }, [guidePoints, currentTime]);
 
   const visibleUser = useMemo(() => {
     const lo = currentTime - WINDOW_BEFORE_SEC - 0.5;
     return userPoints.filter(
-      (p) => p.t >= lo && p.t <= currentTime && p.midi !== null && p.voiced,
+      (p) => p.time >= lo && p.time <= currentTime && p.midi !== null && p.voiced,
     );
   }, [userPoints, currentTime]);
 
@@ -98,7 +98,7 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
       const c = colorFn(p);
       if (seg.length > 0 && c !== segColor) flush();
       segColor = c;
-      seg.push({ x: timeToX(p.t, currentTime), y: midiToY(p.midi) });
+      seg.push({ x: timeToX(p.time, currentTime), y: midiToY(p.midi) });
     }
     flush();
     return result;
@@ -116,7 +116,7 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
       const nearby = visibleGuide.reduce<PitchPoint | null>((best, g) => {
         if (!g.voiced || g.midi === null) return best;
         if (!best) return g;
-        return Math.abs(g.t - p.t) < Math.abs(best.t - p.t) ? g : best;
+        return Math.abs(g.time - p.time) < Math.abs(best.time - p.time) ? g : best;
       }, null);
       if (!nearby?.midi || p.midi === null) return COLORS.textMuted;
       const acc = getPitchAccuracy(p.midi, nearby.midi);
@@ -130,7 +130,7 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
     [visibleUser],
   );
   const nearestGuideMidi = useMemo(
-    () => visibleGuide.find((p) => p.voiced && p.midi !== null && p.t >= currentTime)?.midi ?? null,
+    () => visibleGuide.find((p) => p.voiced && p.midi !== null && p.time >= currentTime)?.midi ?? null,
     [visibleGuide, currentTime],
   );
 
@@ -197,10 +197,12 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         if (cancelled) return;
         // ─── [진단] pitch_guide 로드 확인 ───
         console.log('[KaraokeScreen] pitchGuide.points.length:', guide.points.length);
+        console.log('[KaraokeScreen] durationSec:', guide.durationSec, 'frameHz:', guide.frameHz);
         console.log('[KaraokeScreen] first 3 points:', JSON.stringify(guide.points.slice(0, 3)));
         console.log('[KaraokeScreen] last  3 points:', JSON.stringify(guide.points.slice(-3)));
         const voicedCount = guide.points.filter((p) => p.voiced).length;
-        console.log('[KaraokeScreen] voiced count:', voicedCount, '/ total:', guide.points.length);
+        const validTimeCount = guide.points.filter((p) => p.time !== null && p.time !== undefined).length;
+        console.log('[KaraokeScreen] voiced:', voicedCount, '/ valid_time:', validTimeCount, '/ total:', guide.points.length);
         console.log('[KaraokeScreen] lrcOffsetSec:', guide.lrcOffsetSec);
         const fake = generateFakeUserPitch(guide.points);
         setLyrics(lrc);
@@ -228,7 +230,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     const iv = setInterval(() => {
       const lo = currentTime - WINDOW_BEFORE_SEC - 0.5;
       const hi = currentTime + WINDOW_AFTER_SEC  + 0.5;
-      const visible = pitchGuide.points.filter((p) => p.t >= lo && p.t <= hi && p.voiced);
+      const visible = pitchGuide.points.filter((p) => p.time >= lo && p.time <= hi && p.voiced);
       console.log(`[KaraokeScreen] t=${currentTime.toFixed(2)}s  window=[${lo.toFixed(1)},${hi.toFixed(1)}]  voiced_visible=${visible.length}`);
     }, 1000);
     return () => clearInterval(iv);
@@ -309,7 +311,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   // mrDurationSec from params is authoritative; fall back to last pitch point
   const totalSec = mrDurationSec > 0
     ? mrDurationSec
-    : (pitchGuide?.points[pitchGuide.points.length - 1]?.t ?? 0);
+    : (pitchGuide?.points[pitchGuide.points.length - 1]?.time ?? 0);
   const progress = totalSec > 0 ? Math.min(currentTime / totalSec, 1) : 0;
   const fmt = (s: number) =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;

@@ -80,10 +80,10 @@ export async function getSongPitchGuideCompat(songId: string): Promise<PitchData
     song_id: guide.songId,
     resolution_ms: 10,
     frames: guide.points.map((p) => ({
-      time_ms: Math.round(p.t * 1000),
+      time_ms: Math.round(p.time * 1000),
       midi:    p.midi,
       note:    null,
-      freq:    p.freq ?? undefined,
+      freq:    p.freqHz ?? undefined,
     })),
   };
 }

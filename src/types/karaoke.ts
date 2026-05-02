@@ -7,16 +7,20 @@ export interface ServerLrcLine {
 }
 
 export interface ServerPitchPoint {
-  t: number;      // seconds, master timeline
-  freq: number | null;
+  time: number;          // seconds, master timeline (was mistakenly assumed 't')
   midi: number | null;
+  freq_hz: number | null; // (was mistakenly assumed 'freq')
   voiced: boolean;
-  conf: number;   // CREPE confidence 0~1
+  confidence: number;    // CREPE confidence 0~1 (was mistakenly assumed 'conf')
 }
 
 export interface ServerPitchGuide {
   song_id: string;
+  duration_sec: number;
+  frame_hz: number;
+  alignment_status: string;
   lrc_offset_sec: number;  // t_mr = t_master - lrc_offset_sec
+  review_segments: unknown[];
   points: ServerPitchPoint[];
 }
 
@@ -29,16 +33,20 @@ export interface LyricLine {
 }
 
 export interface PitchPoint {
-  t: number;           // seconds, MR-relative
-  freq: number | null;
+  time: number;           // seconds, MR-relative (camelCase matches server 'time')
   midi: number | null;
+  freqHz: number | null;  // camelCase of server 'freq_hz'
   voiced: boolean;
-  conf: number;
+  confidence: number;     // camelCase matches server 'confidence'
 }
 
 export interface PitchGuide {
   songId: string;
+  durationSec: number;
+  frameHz: number;
+  alignmentStatus: string;
   lrcOffsetSec: number;
+  reviewSegments: unknown[];
   points: PitchPoint[];  // all timestamps already converted to MR time
 }
 
@@ -55,14 +63,18 @@ export function adaptLrc(raw: ServerLrcLine[], lrcOffsetSec: number): LyricLine[
 export function adaptPitchGuide(raw: ServerPitchGuide): PitchGuide {
   const offset = raw.lrc_offset_sec;
   return {
-    songId:        raw.song_id,
-    lrcOffsetSec:  offset,
+    songId:          raw.song_id,
+    durationSec:     raw.duration_sec,
+    frameHz:         raw.frame_hz,
+    alignmentStatus: raw.alignment_status,
+    lrcOffsetSec:    offset,
+    reviewSegments:  raw.review_segments,
     points: raw.points.map((p) => ({
-      t:      p.t - offset,
-      freq:   p.freq,
-      midi:   p.midi,
-      voiced: p.voiced,
-      conf:   p.conf,
+      time:       p.time - offset,   // convert master-time → MR-time
+      midi:       p.midi,
+      freqHz:     p.freq_hz,
+      voiced:     p.voiced,
+      confidence: p.confidence,
     })),
   };
 }
