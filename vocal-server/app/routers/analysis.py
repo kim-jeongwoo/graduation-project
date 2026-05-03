@@ -3,7 +3,7 @@
 import math
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session as DBSession
 
 from app.database import get_db
@@ -32,6 +32,7 @@ router = APIRouter(tags=["analysis"])
 )
 def analyze_session(
     session_id: uuid.UUID,
+    song_id: str | None = Query(None, description="노래방 곡 ID (3자리). dml-server에 전달되어 timeline_scores 생성에 사용."),
     current_user: User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
@@ -57,8 +58,8 @@ def analyze_session(
     db.commit()
     db.refresh(analysis_run)
 
-    # 분석 실행 (현재 동기 + 더미)
-    analysis_run = run_analysis(analysis_run, session, db)
+    # 분석 실행 (현재 동기)
+    analysis_run = run_analysis(analysis_run, session, db, song_id=song_id)
 
     return AnalyzeResponse(run_id=analysis_run.run_id, status=analysis_run.status)
 

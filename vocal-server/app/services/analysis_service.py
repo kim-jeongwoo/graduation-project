@@ -17,7 +17,7 @@ logger = logging.getLogger("uvicorn.error")
 _ANALYZE_TIMEOUT = 120.0
 
 
-def run_analysis(run: AnalysisRun, session: Session, db: DBSession) -> AnalysisRun:
+def run_analysis(run: AnalysisRun, session: Session, db: DBSession, song_id: str | None = None) -> AnalysisRun:
     """세션의 오디오 파일을 모델서버에 전송하고 결과를 저장합니다."""
 
     # ── 1. 상태 → running ──
@@ -44,10 +44,13 @@ def run_analysis(run: AnalysisRun, session: Session, db: DBSession) -> AnalysisR
 
         # ── 3. 모델서버 호출 ──
         analyze_url = f"{MODEL_SERVER_URL}/analyze"
+        params: dict = {"run_id": str(run.run_id)}
+        if song_id:
+            params["song_id"] = song_id
         with open(file_path, "rb") as f:
             response = httpx.post(
                 analyze_url,
-                params={"run_id": str(run.run_id)},
+                params=params,
                 files={"file": (file_path.name, f, "audio/wav")},
                 timeout=_ANALYZE_TIMEOUT,
             )
