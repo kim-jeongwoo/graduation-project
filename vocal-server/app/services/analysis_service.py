@@ -87,7 +87,7 @@ def run_analysis(run: AnalysisRun, session: Session, db: DBSession, song_id: str
         run.result_json = data
 
         # ── 6. 핵심 메트릭 3개 AnalysisResult에 저장 ──
-        audio_info = data.get("audio_info", {})
+        audio_info = data.get("audio_info") or {}  # no_voice 등 audio_info=None 방어
         metric_rows = [
             ("voiced_ratio", audio_info.get("voiced_ratio"), "ratio"),
             ("processing_time_ms", data.get("processing_time_ms"), "ms"),
@@ -103,14 +103,19 @@ def run_analysis(run: AnalysisRun, session: Session, db: DBSession, song_id: str
                     unit=unit,
                 ))
 
-        # ── 7. 완료/실패 처리 ──
+        # ── 7. 완료/실패/no_voice 처리 ──
         server_status = data.get("status", "completed")
         run.status = server_status
         run.finished_at = datetime.now(timezone.utc)
-        session.status = server_status  # "completed" or "failed"
 
-        if server_status == "failed":
+        if server_status == "no_voice":
+            logger.info(f"[analyze] no_voice detected: run_id={run.run_id}, reason={data.get('reason')}")
+            session.status = "completed"
+        elif server_status == "failed":
             run.error_message = data.get("error_message", "모델서버가 failed 상태 반환")
+            session.status = "failed"
+        else:
+            session.status = server_status
 
         db.commit()
         db.refresh(run)

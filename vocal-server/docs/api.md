@@ -340,7 +340,7 @@ Authorization: Bearer <token>
 }
 ```
 
-분석 실패 시에도 201 반환, `status: "failed"`.
+분석 실패 시에도 201 반환, `status: "failed"`. 무음/잡음 감지 시 `status: "no_voice"` 반환.
 
 **에러**
 | 코드 | 사유 |
@@ -373,7 +373,15 @@ Authorization: Bearer <token>
 }
 ```
 
-**`status` 값**: `queued` → `running` → `success` / `failed`
+**`status` 값**
+
+| 값 | 의미 |
+|----|------|
+| `"queued"` | 분석 대기 중 |
+| `"running"` | 분석 진행 중 |
+| `"success"` | 정상 분석 완료 |
+| `"failed"` | 분석 중 에러 발생 |
+| `"no_voice"` | 무음/잡음 감지로 분석 스킵 (정상 흐름) |
 
 **에러**
 | 코드 | 사유 |
@@ -629,10 +637,24 @@ Authorization: Bearer <token>
 
 `GET /analysis/{run_id}/results`의 `result_json` 및 `GET /sessions/{id}`의 `latest_analysis.result_json` 공통 구조.
 
+**`result_json.status` 값**
+
+| 값 | 의미 | scores/feedback |
+|----|------|-----------------|
+| `"completed"` | 정상 분석 완료 | 정상 포함 |
+| `"failed"` | 분석 중 에러 발생 | `null` |
+| `"no_voice"` | 무음/잡음 감지로 분석 스킵 | `null` |
+
+> **앱 처리 권장**: `result_json.status` 분기 → `"no_voice"`이면 `reason` 텍스트 표시 + 재녹음 유도.
+
+---
+
+**정상 분석 응답 (`status: "completed"`)**
+
 ```json
 {
   "run_id": "f199f109-...",
-  "status": "success",
+  "status": "completed",
   "processing_time_ms": 19710.4,
 
   "audio_info": {
@@ -694,6 +716,37 @@ Authorization: Bearer <token>
 ```
 
 `feedback`에는 `confidence: "unavailable"` 항목은 포함되지 않습니다.
+
+---
+
+**무음/잡음 감지 응답 (`status: "no_voice"`)**
+
+```json
+{
+  "run_id": "f199f109-...",
+  "status": "no_voice",
+  "reason": "음성이 감지되지 않았거나 잡음만 녹음되었습니다. 다시 녹음해주세요.",
+  "processing_time_ms": 200,
+  "audio_info": {
+    "duration_sec": 60.0,
+    "sr": 16000,
+    "voiced_ratio": 0.00,
+    "f0_range": null
+  },
+  "indicators": { },
+  "registers": null,
+  "scores": null,
+  "feedback": null,
+  "reliability": null,
+  "timeline_scores": null,
+  "timeline_metadata": null
+}
+```
+
+- `Session.status`는 `"completed"`로 저장됨 (분석 가드가 정상 응답한 것)
+- `AnalysisRun.status`는 `"no_voice"`로 저장됨
+- `scores`, `feedback`, `reliability`는 모두 `null`
+- 앱: `result_json.status === "no_voice"` 감지 → `reason` 텍스트 표시 + 재녹음 유도
 
 ---
 
