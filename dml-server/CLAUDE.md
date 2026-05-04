@@ -119,6 +119,14 @@ results/               # 실험 결과 JSON
 
 ## ⚠️ 반복하지 말 것 (Known Pitfalls)
 
+- [2026-05-04] [외부 MIDI 옥타브] midiex.net 등 외부 MIDI의 Steinway Grand Piano 멜로디 트랙은 실제 보컬보다 +12 semitone(1옥타브) 높게 작성된 경우 있음. 자체 F0 추출(`f0_to_midi_segments.py --dry-run`)으로 먼저 비교 후 채택 결정.
+
+- [2026-05-04] [음역 진단] 가수 음역 이상하다고 바로 재처리하지 말 것. 가수 개별 정보 검색 먼저 (윤하 진성 A5까지, F#3 저음 발라드 시작 정상).
+
+- [2026-05-04] [model_server health] `health check timeout` 기본값 5초 부족 → 30초 + 3회 재시도로 설정.
+
+
+
 - [2026-05-03] [모노레포] dml-server 코드는 `dml-server/` 서브폴더 안.
   스크립트 실행: `cd ~/projects/egg_prediction && python dml-server/scripts/data_prep/run_all.py`
   data_prep 스크립트는 `parents[3]`으로 project root(`egg_prediction/`) 계산. `parents[2]` 아님.
@@ -135,21 +143,45 @@ results/               # 실험 결과 JSON
 
 ---
 
-## 🗓 프로젝트 현황 (2026-05-03)
+## 🗓 프로젝트 현황 (2026-05-04)
 
 ### AI 모델 — 완료 ✓
 Exp20 Progressive Window, Test Corr 0.8249. 체크포인트 보존됨.
 
 ### T1 데이터 파이프라인 — 완료 ✓
-14/14곡 Stage 0~2. pitch_guide + _mr.json 생성. Mac Studio 동기화 완료.
+14/14곡 Stage 0~2. pitch_guide (guide_source=f0) + _mr.json 생성. Mac Studio 동기화 완료.
+
+### model_server /analyze — 완료 ✓
+9개 항목 점수 + 신뢰도 분류 + timeline_scores (LRC 라인 단위, high 신뢰 항목만).
+`song_id` 파라미터로 타임라인 활성화. demo_responses 5종 mock JSON 생성 완료.
+
+### 자체 F0 추출 파이프라인 — 완료 ✓
+외부 MIDI Steinway 트랙 옥타브 +12 어긋남 발견 → 자체 vocals.wav F0 추출로 전환.
+004(214 segs B2~A5), 002(334 segs F#3~A#5) 처리 완료. 나머지 12곡은 5월 10일 이후 일괄 처리.
 
 ### 백엔드 서버 — vocal-server 페이지 담당
 진행 중. 이 페이지에서는 손대지 않음.
 
 ---
 
+## 🔑 결정 사항 누적
+
+- 라즈베리파이 → 미사용
+- 14곡 자유곡 + KOMCA 라이센스
+- CREPE CPU 사용 (RTX 5080 + TF 2.21 미호환)
+- LRC 미확보 3곡(001, 007, 011) → manual_required.txt 기록, Whisper 처리 미실행
+- timeline 분석은 high 신뢰 항목만 (접촉강도 `3_vocal_fold_contact`, 호흡식별 `4_breathiness`)
+- **guide_source 정책**: `"f0"` 우선 → `"midi"` fallback (옥타브 검증 필수) → `"crepe"` 최후
+- score_mapper per-session 매칭 채택은 5월 10일 데이터 후 결정 (현재 per-register 유지)
+- 외부 MIDI(midiex.net 등) 직접 사용 금지 — 옥타브 검증 없이 쓰면 +12 오류 발생
+
+---
+
 ## ✅ 다음 작업 큐
 
-- [ ] 5월 10일 평가 데이터 처리 자동화 (score_mapper 재학습 + 검증)
-- [ ] 시연용 모범 응답 JSON 준비 (validation/test_01~11 케이스 선별)
-- [ ] LRC 3곡 Whisper ASR (001/007/011)
+- [ ] **5월 10일**: `run_t2_pipeline.sh` 실행 + 13곡 MIDI 도착 시 `batch_f0_to_midi_segments.sh` 일괄 처리
+- [ ] **5월 10일**: score_mapper per-session 재학습 (흉성두성·접촉강도·호흡식별 우선)
+- [ ] **5월 10일**: demo_responses 5종 재생성 (song_id 파라미터 포함, timeline 데이터)
+- [ ] 14곡 활성화 (server DB 메타 갱신은 vocal-server 페이지 담당)
+- [ ] vocal-app 갤럭시 재검증 결과 대기 (002 가이드라인 피치 일치 여부)
+- [ ] LRC 3곡(001/007/011) Whisper ASR

@@ -1,5 +1,46 @@
 # PROJECT_LOG.md — 졸업작품 진행 일지
-순천향대 IoT학과 | 김정우 | 최종 갱신: 2026-05-03
+순천향대 IoT학과 | 김정우 | 최종 갱신: 2026-05-04
+
+---
+
+## 0. 현황 요약 (2026-05-04 — 새 채팅방용 빠른 참조)
+
+### 완료된 Phase
+
+| Phase | 내용 | 산출물 |
+|-------|------|--------|
+| **T1** | 14곡 Demucs 분리 + CREPE F0 + LRC 수집 + MR 정렬 | `data/songs/{audio,lrc,pitch_guide,stems}` |
+| **L** | model_server `/analyze` 9항목 + timeline_scores | `services/timeline_analysis.py`, `demo_responses/` |
+| **F** | 자체 F0 추출 파이프라인 (외부 MIDI 옥타브 오류 발견 → 전환) | `f0_to_midi_segments.py`, `batch_f0_to_midi_segments.sh` |
+| **T2 준비** | `run_t2_pipeline.sh` 3가지 모드 사전 검증 완료 | 5월 10일 데이터 도착 즉시 실행 가능 |
+| **진단** | score_mapper per-register vs per-session 매칭 아티팩트 규명 | `results/sidetrack/matching_diagnosis_*.png` |
+
+### 현재 상태 (2026-05-04)
+
+- **dml-server**: 대기 모드. 5월 10일 학원 데이터 도착 전까지 score_mapper 변경 금지.
+- **pitch_guide**: 002(F#3~A#5), 004(B2~A5) `guide_source=f0` 처리 완료. 나머지 12곡은 5월 10일 이후 일괄 처리.
+- **Mac Studio sync**: `cd /Users/kimjeongwoo/vocal-server && bash dml-server/scripts/sync_songs.sh`
+- **vocal-app**: 갤럭시 재검증 진행 중.
+
+### 다음 액션
+
+1. **5월 10일**: `run_t2_pipeline.sh` + 13곡 `batch_f0_to_midi_segments.sh`
+2. **5월 10~24일**: 학원 통제 실험 데이터 수집
+3. **5월 24일 이후**: 사전/사후 분석 + score_mapper 재학습
+4. **6월 초**: PPT 발표 자료 작성
+5. **6월 15일**: 발표
+
+### 발표 자료 후보 (기 생성)
+
+- `results/sidetrack/matching_diagnosis_bars/heatmap/focus.png` + `diagnosis_slides.md` (5종 슬라이드)
+- `results/sidetrack/004_midi_vs_f0_comparison.png` (외부 MIDI 옥타브 오류 시각화)
+- `results/timeline_validation_test_11.json` (타임라인 검증 데이터)
+
+### 미해결 의문점
+
+- score_mapper per-session 채택 시 9개 항목 영향 (5월 10일 데이터 후 결정)
+- 상압하압 마이크 차이 영향 정량화 (학원 스마트폰 환경으로 재검증 예정)
+- vocal-app 002/004 가이드라인 피치 일치 여부 (갤럭시 재검증 대기)
 
 ---
 
@@ -184,3 +225,198 @@ stems/{id}/
 | 날짜 | 내용 |
 |------|------|
 | 2026-05-03 | PROJECT_LOG.md 최초 작성. T1 파이프라인 완료 기준 현황 기록. |
+| 2026-05-03 | score_mapper per-register vs per-session 매칭 방식 진단. 아래 섹션 참조. |
+| 2026-05-04 | MIDI 파이프라인 + /analyze timeline 확장 + 자체 F0 추출 전환. 섹션 9·10 참조. |
+
+---
+
+## 8. Per-register vs Per-session 매칭 진단 (2026-05-03)
+
+`dml-server/scripts/sidetrack/chest_head_indicators.py` 실행 결과 기록.
+
+### 8-1. 발단
+
+흉성두성 검증 r=-0.215 (현재 AI 점수 기준) 문제 해결 시도.
+4가지 신규 CQ 지표 후보(cq_high-cq_low, cq_high/cq_low, cq_variance, cq_high_normalized) 탐색.
+
+**결론: 4종 모두 실패.** 음역대 간 CQ 변동은 흉성두성과 무관.
+
+### 8-2. 부수 발견: 매칭 방식 아티팩트
+
+흉성두성의 학습-검증 r 불일치 원인 규명.
+
+| 항목 | 학습 per-register (mapper 현행) | 학습 per-session | 검증 per-session (n=11) |
+|---|---|---|---|
+| 비강사용 | +0.025 (n=69) | +0.089 (n=23) | N/A |
+| **흉성두성** | **-0.282 (n=57)** | **+0.139 (n=28)** | **+0.554 (n=11)** |
+| **접촉강도** | **+0.087 (n=57)** | **-0.101 (n=19)** | **+0.627 (n=11)** |
+| 호흡식별 * | +0.569 (n=69) | +0.664 (n=23) | +0.314 (n=11) |
+| 전방공명 * | -0.317 (n=69) | -0.344 (n=23) | -0.456 (n=11) |
+| 연구개위치 | -0.210 (n=69) | -0.137 (n=23) | N/A |
+| 상압하압 | +0.556 (n=69) | +0.587 (n=23) | -0.240 (n=11) |
+
+\* 호흡식별(cpp)·전방공명(spectral_centroid)은 global-only 지표 → per-register n=69가 의사반복(pseudoreplication).  
+실제 독립 관측 수는 각 23회 (session 수).
+
+**흉성두성 원인 분석:**
+- per-register: 같은 가수 내 "저→고로 갈수록 CQ 변동"이 가수 간 차이로 오인됨
+- per-session: 가수당 1값 → 음역대 변동 평균화 → 이론적 양의 상관 (+0.139) 회복
+- 검증에서 +0.554로 더 강한 양의 상관 → 이론 방향 확인
+
+**추가 주목 항목:**
+- **상압하압**: 학습 +0.556/+0.587 → 강하고 일관. 검증 -0.240 → 방향 역전. n=11 과소 표본 가능성.
+- **접촉강도**: 학습 per-session -0.101이지만 검증 +0.627 → 불일치. 학습 데이터 singers 2-12(n=19)에서 per-session이 노이즈 발생.
+- **호흡식별**: 학습/검증 모두 양의 상관으로 가장 안정적인 항목.
+- **전방공명**: 모든 방식에서 음의 상관 → spectral_centroid 지표 방향 자체가 반대일 가능성.
+
+### 8-3. 결정 (2026-05-03)
+
+**5월 10일 데이터 수령 전 score_mapper 매칭 방식 변경 안 함.**
+
+근거:
+- 학습 per-session 흉성두성 r=+0.139는 통계적으로 약함 (95% CI: [-0.247, +0.486])
+- 검증 n=11에서 r=+0.554가 우연일 가능성 배제 불가
+- 접촉강도처럼 per-session이 오히려 악화되는 항목도 존재
+- 9개 항목에 일관 적용하려면 더 많은 데이터 필요
+
+### 8-4. 5월 10일 데이터 도착 시 후속 작업
+
+1. **per-session 재검증**: T2 데이터(10명 신규 가수) 추가 후 per-session r 재계산
+2. **일관 적용 여부 결정**: 흉성두성·접촉강도·상압하압 모두 방향 일치하면 per-session으로 전환
+3. **pseudoreplication 수정**: 호흡식별·전방공명을 per-session으로 통일
+4. **검증 n 확보**: 현재 n=11 → T2 추가로 n=21~22 → 통계 신뢰도 향상
+
+스크립트 위치: `dml-server/scripts/sidetrack/chest_head_indicators.py`
+
+### 8-5. 발표 자료 시각화 (2026-05-03 완료)
+
+---
+
+## 9. MIDI 파이프라인 + 타임라인 분석 (2026-05-04 완료)
+
+### 9-1. 구현 요약
+
+**MIDI → pitch_guide 변환**
+- `dml-server/scripts/data_prep/inspect_midi.py` — MIDI 트랙 구조 분석 + 멜로디 트랙 자동 추정
+  - 휴리스틱: poly_pct < 5%(+25점), 이름 키워드(+50점), 보컬 음역 [48,84](+20/10점), 평균 음표 길이 0.25~3.0s(+10점), 음표 수 > 400(-10점)
+  - 004.mid 결과: instrument #0 "Split Chan 1", score=65.0 → C4~C6, 265음표, onset=31.47s ✓
+- `dml-server/scripts/data_prep/midi_to_pitch_guide.py` — MIDI → `midi_segments` JSON 변환
+  - 화음 처리: 겹치는 음표에서 최고음 선택
+  - MIDI 범위 [36,96] 필터
+  - `{id}.json` 업데이트 (`guide_source:"midi"`, `midi_segments` 추가) + `{id}_mr.json` 생성
+- `dml-server/scripts/data_prep/batch_midi_to_pitch_guide.sh` — 전곡 일괄 변환
+
+**004.mid 검증 결과**
+- 265 segments, MIDI 60~84 (C4~C6), intro 공백 확인(31.469s 시작), poly=0%
+- `004_mr.json` 생성 완료 (lrc_offset_sec=0.0s)
+
+**타임라인 분석 (`/analyze` 확장)**
+- `dml-server/model_server/services/timeline_analysis.py` (신규)
+  - `build_chunks()`: LRC 세그먼트 병합(<2s) + 분할(>15s)
+  - `analyze_with_timeline()`: 청크별 파이프라인 호출, voiced 부족 시 null 처리
+- `schemas.py`: `TimelineScore`, `TimelineMetadata` 추가 (Optional, 하위 호환)
+- `server.py`: `song_id` 쿼리 파라미터 추가 → LRC 자동 로드 → 타임라인 분석 통합
+
+### 9-2. 타임라인 검증 결과 (test_11, 2026-05-04)
+
+**입력**: `data/vocal_academy/validation_t2/test_11.wav` (223.6s, excellent_high 케이스)
+**LRC**: `data/songs/lrc/parsed/004_aligned.json` (25 lines → 28 chunks 병합/분할)
+
+| 검증 항목 | 결과 | 판정 |
+|-----------|------|------|
+| Audio 내 skip 비율 | 4/22 = **18.2%** | ✓ (< 20%) |
+| 접촉강도 전곡↔chunk 일관성 | \|0.00 − 0.20\| = **0.20점** | ✓ (< 1.0점) |
+| 호흡식별 전곡↔chunk 일관성 | \|3.36 − 3.17\| = **0.19점** | ✓ (< 1.0점) |
+| 호흡식별 chunk별 변동 | 0.00~5.00 (음절/구문 단위 포착) | ✓ 음악적 합리적 |
+
+**처리 시간**: 전곡 17.3s + 타임라인 10.9s = **총 28.2s** (162~224s 오디오 기준)
+
+**한계 (예상됨)**: 접촉강도 대부분 0.00 클리핑 → per-register 아티팩트 잔존.
+5월 10일 score_mapper 재학습 후 재검증 필요.
+
+**산출물**: `dml-server/results/timeline_validation_test_11.json`
+
+### 9-3. 5월 10일 후속 작업 큐
+
+1. `bash dml-server/scripts/data_prep/batch_midi_to_pitch_guide.sh` — 나머지 13곡 MIDI 변환
+2. `bash dml-server/scripts/data_prep_t2/run_t2_pipeline.sh` — T2 데이터 처리
+3. per-session score_mapper 재학습 (흉성두성·접촉강도·호흡식별 우선)
+4. demo_responses 5종 재생성 (song_id 파라미터 포함)
+5. timeline 검증 재실행 — 접촉강도 클리핑 개선 확인
+
+**생성 파일**: `dml-server/results/sidetrack/`
+- `matching_diagnosis_bars.png` — 항목별 Pearson r 비교 (grouped bar + 95% CI, 흉성두성 금색 강조)
+- `matching_diagnosis_heatmap.png` — 7×3 히트맵 (RdYlGn, 흉성두성 행 금색 테두리)
+- `matching_diagnosis_focus.png` — 흉성두성 집중 분석 + 아티팩트 메커니즘 설명 패널
+- `diagnosis_summary.md` — 전체 진단 보고서 (항목별 해석 + 향후 작업)
+
+**슬라이드 활용 포인트**:
+1. heatmap → "AI 지표와 트레이너 점수의 상관계수 전체 조망" (한 장에 21개 데이터 포인트)
+2. focus → "흉성두성 음의 상관의 실체: 훈련 데이터 특이성, 독립 검증에서 +0.554로 반전"
+3. bars → "매칭 방식에 따른 r 변화: 5월 10일 데이터로 재학습 방향 결정"
+
+**학술적 가치 진술**:
+> "EGG 기반 AI 지표의 생리적 타당도는 독립 검증 데이터(n=11)에서 확인되었으나,
+> 기존 훈련 데이터(n=19~23)에서의 역상관은 매칭 방식의 방법론적 제약과 데이터 분포 특이성에서 기인한다.
+> 5월 10일 데이터(n≈10 추가) 수집 후 per-session 재학습으로 이 한계를 해소할 예정이다."
+
+---
+
+## 10. 외부 MIDI 옥타브 차이 발견 + 자체 F0 추출 전환 (2026-05-04)
+
+### 10-1. 발견
+
+앱 검증 중 외부 MIDI(midiex.net 등) 기반 pitch guide가 가수 실제 음역과 1옥타브 어긋나는 문제 발견.
+
+| 항목 | 외부 MIDI (Steinway) | 자체 F0 (vocals.wav) |
+|------|---------------------|---------------------|
+| segments 수 | 265 | 214 |
+| 음역대 min | C4 (MIDI 60) | B2 (MIDI 47) |
+| 음역대 max | C6 (MIDI 84) | A5 (MIDI 81) |
+| 평균 MIDI | 73.3 | 61.1 |
+| 차이 중앙값 | — | +12.0 (정확히 1옥타브) |
+
+**진단**: 외부 MIDI Steinway 트랙이 보컬 옥타브 위에 작성된 데이터.  
+자체 F0 음역 B2~A5 (MIDI 47~81)이 김범수 테너 음역과 일치.
+
+### 10-2. 결론 및 방향
+
+- **외부 카라오케 MIDI** (midiex.net 등)는 트랙 구조 표준화 부족 → 직접 사용 시 옥타브 transpose 검증 필수
+- **자체 vocals.wav F0 추출**이 가창 가이드라인으로 더 안전하고 정확
+- `guide_source` 필드: `"midi"` (외부) / `"f0"` (자체 추출) / `"crepe"` (raw)로 구분
+
+### 10-3. 구현
+
+**신규 스크립트**: `dml-server/scripts/data_prep/f0_to_midi_segments.py`
+- 입력: `pitch_guide/{id}.json`의 `points[]` (CREPE 재실행 불필요)
+- 알고리즘: voiced 프레임 추출 → 임계값 기반 경계 탐지 → 평균 MIDI 반올림 → 짧은 구간 제거 → 인접 동일음 병합
+- CLI: `--midi-threshold` (0.5), `--min-segment-ms` (100), `--voiced-gap-ms` (100), `--smoothing` (median 옵션), `--dry-run`
+- `--dry-run` 모드: JSON 수정 없이 비교 테이블 + PNG만 출력
+
+**일괄 처리**: `dml-server/scripts/data_prep/batch_f0_to_midi_segments.sh`
+
+### 10-4. 처리 결과 (2026-05-04)
+
+| 곡 | guide_source | segments | 음역 (MIDI) | lrc_offset |
+|----|-------------|----------|------------|-----------|
+| 004 김범수 보고싶다 | f0 | 214 | 47~81 (B2~A5) | 0.000s |
+| 002 윤하 기다리다 | f0 | 334 | 54~82 (F#3~A#5) | −0.069s |
+
+백업: `data/songs/pitch_guide/004_external_midi.json` (외부 MIDI 원본 보존)
+
+### 10-5. 발표 자료 활용
+
+- "외부 데이터 신뢰성 검증" 슬라이드 후보
+- 자체 F0 추출 파이프라인의 가치: "공개 MIDI 데이터의 옥타브 오류를 검출하고 보컬에서 직접 추출"
+- 졸업작품 분석 깊이 강조 포인트
+
+### 10-6. 5월 10일 학원 MIDI 도착 시 처리 방침
+
+외부 MIDI 받더라도 **옥타브 검증 필수**:
+```bash
+# 1. 외부 MIDI 비교 (dry-run)
+python dml-server/scripts/data_prep/f0_to_midi_segments.py --song NNN --dry-run
+
+# 2. 옥타브 차이 확인 후 자체 F0 채택
+bash dml-server/scripts/data_prep/batch_f0_to_midi_segments.sh
+```
