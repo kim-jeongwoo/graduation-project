@@ -146,3 +146,8 @@ vocal-server/          ← 이 폴더 (모노레포 내 서브프로젝트)
 - [2026-05-03] [모노레포] vocal-server 코드는 `vocal-server/` 서브폴더 안.
   서버 실행/테스트는 반드시 `cd vocal-server/vocal-server/` 후 진행.
   scripts/sync_songs.sh, seed_songs.py도 vocal-server/vocal-server/ 기준으로 실행.
+
+- [2026-05-04] [분석 상태] dml-server는 status='success' 반환, vocal-server DB에는 그대로 'success' 저장.
+  새 코드에서 분석 상태 분기할 때 'success'와 'completed' 둘 다 고려할 것.
+  (dml-server response 직후 처리 vs DB에서 읽은 후 처리 모두 해당)
+  이번 작업에서 캐싱 조건이 'completed'만 체크해 'success' 누락됐던 사례 있음.
