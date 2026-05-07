@@ -3,7 +3,7 @@
 import math
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session as DBSession
 
 from app.database import get_db
@@ -32,7 +32,6 @@ router = APIRouter(tags=["analysis"])
 )
 def analyze_session(
     session_id: uuid.UUID,
-    song_id: str | None = Query(None, description="노래방 곡 ID (3자리). dml-server에 전달되어 timeline_scores 생성에 사용."),
     current_user: User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
@@ -59,7 +58,7 @@ def analyze_session(
     db.refresh(analysis_run)
 
     # 분석 실행 (현재 동기)
-    analysis_run = run_analysis(analysis_run, session, db, song_id=song_id)
+    analysis_run = run_analysis(analysis_run, session, db)
 
     return AnalyzeResponse(run_id=analysis_run.run_id, status=analysis_run.status)
 
@@ -97,6 +96,7 @@ def get_analysis_run(
 )
 def get_analysis_results(
     run_id: uuid.UUID,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
@@ -107,6 +107,12 @@ def get_analysis_results(
     session = db.query(Session).filter(Session.session_id == run.session_id).first()
     if not session or session.user_id != current_user.user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")
+
+    if run.status in ("success", "completed", "no_voice"):
+        response.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+        response.headers["ETag"] = f'"{run_id}"'
+    else:
+        response.headers["Cache-Control"] = "no-cache"
 
     metrics = [
         MetricItem(key=r.metric_key, value=r.metric_value, unit=r.unit)
