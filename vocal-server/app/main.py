@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.routers import admin, analysis, auth, files, sessions, songs, training
+from app.state import app_state
 
 # 모델 import — alembic이 스키마 관리. create_all 사용 금지.
 import app.models.models  # noqa: F401
@@ -52,6 +53,12 @@ app.include_router(analysis.router)
 app.include_router(admin.router)
 app.include_router(songs.router)
 app.include_router(training.router)
+
+
+@app.on_event("startup")
+def _load_signup_state():
+    app_state.signup_enabled = os.getenv("SIGNUP_ENABLED", "true").lower() == "true"
+    logger.info(f"[startup] signup_enabled={app_state.signup_enabled}")
 
 
 @app.get("/health")

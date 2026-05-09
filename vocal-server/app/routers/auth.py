@@ -1,7 +1,5 @@
 """인증 API – 회원가입 / 로그인."""
 
-import os
-
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session as DBSession
@@ -11,6 +9,7 @@ from app.deps import create_access_token
 from app.event_store import add_event
 from app.models.models import User
 from app.schemas.schemas import AuthResponse, LoginRequest, SignupRequest
+from app.state import app_state
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -27,8 +26,8 @@ def _verify_password(plain: str, hashed: str) -> bool:
 
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def signup(body: SignupRequest, db: DBSession = Depends(get_db)):
-    # 회원가입 토글 (학원 실험/시연 기간 외부인 가입 차단)
-    if os.getenv("SIGNUP_ENABLED", "true").lower() != "true":
+    # 회원가입 토글 (학원 실험/시연 기간 외부인 가입 차단, admin 페이지 또는 .env로 변경)
+    if not app_state.signup_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="현재 회원가입이 비활성화되어 있습니다. 관리자에게 문의하세요.",

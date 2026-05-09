@@ -1105,8 +1105,13 @@ result_json = results["result_json"]
 | GET | `/admin/login` | 로그인 페이지 (HTML) |
 | POST | `/admin/login` | form `password` 제출 → 302 `/admin/dashboard` (성공) / `?error=invalid_password` (실패) |
 | POST | `/admin/logout` | 세션 clear → 302 `/admin/login` |
-| GET | `/admin/dashboard` | 대시보드 (인증 필요) |
-| GET | `/admin/users`, `/admin/users/{id}/sessions`, `/admin/events`, `/admin/events/stream` | 인증 필요 |
+| GET | `/admin/dashboard` | 실시간 활동 로그 대시보드 (HTML, 인증 필요) |
+| GET | `/admin/users` | 사용자 리스트 페이지 + 회원가입 토글 카드 (HTML, 인증 필요) |
+| POST | `/admin/signup-toggle` | 회원가입 ON/OFF 토글 (메모리 상태, 인증 필요) → 302 `/admin/users` |
+| GET | `/admin/api/users` | 사용자 리스트 JSON (dashboard JS용, 인증 필요) |
+| GET | `/admin/users/{id}/sessions`, `/admin/events`, `/admin/events/stream` | 인증 필요 |
+
+**회원가입 토글 동작**: `app_state.signup_enabled` 메모리 변수로 관리. 서버 startup 시 `.env`의 `SIGNUP_ENABLED`로 초기화. admin 페이지에서 `POST /admin/signup-toggle`로 즉시 변경되지만 **서버 재시작 시 .env 값으로 reset**됨 — 영구 변경은 `.env` 수정 + 재시작.
 
 **인증**: `SessionMiddleware` 기반 `admin_session` 쿠키 (24시간, https_only, lax). 미인증 시 401.
 

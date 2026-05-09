@@ -16,10 +16,19 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as DBSession
 from starlette.responses import StreamingResponse
 
+from sqlalchemy import func
+
 from app.database import get_db
 from app.event_store import get_events, subscribe, unsubscribe
-from app.models.models import Session, User
+from app.models.models import (
+    AnalysisRun,
+    Session,
+    TrainingAttempt,
+    TrainingFavorite,
+    User,
+)
 from app.schemas.schemas import AdminUserResponse, SessionBrief
+from app.state import app_state
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -129,7 +138,7 @@ def login_submit(request: Request, password: str = Form(...)):
     reset_attempts(client_ip)
     request.session["admin_authenticated"] = True
     request.session["admin_logged_in_at"] = datetime.utcnow().isoformat()
-    return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url="/admin/users", status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/logout", include_in_schema=False)
@@ -141,11 +150,73 @@ def logout(request: Request):
 # ─────────────────────────────────────────────
 # 기존 API
 # ─────────────────────────────────────────────
-@router.get("/users", response_model=list[AdminUserResponse], dependencies=[Depends(require_admin_auth)])
-def list_all_users(db: DBSession = Depends(get_db)):
-    """등록된 모든 사용자 목록을 최신순으로 반환합니다."""
+@router.get("/api/users", response_model=list[AdminUserResponse], dependencies=[Depends(require_admin_auth)], include_in_schema=False)
+def list_all_users_json(db: DBSession = Depends(get_db)):
+    """등록된 모든 사용자 목록 (JSON, dashboard JS용)."""
     users = db.query(User).order_by(User.created_at.desc()).all()
     return users
+
+
+@router.get("/users", response_class=HTMLResponse, dependencies=[Depends(require_admin_auth)], include_in_schema=False)
+def list_all_users_page(request: Request, db: DBSession = Depends(get_db)):
+    """사용자 리스트 HTML 페이지 + 토글 카드."""
+    # User + 카운트 (N+1 방지: subquery)
+    session_count = (
+        db.query(Session.user_id, func.count(Session.session_id).label("c"))
+        .group_by(Session.user_id).subquery()
+    )
+    fav_count = (
+        db.query(TrainingFavorite.user_id, func.count(TrainingFavorite.favorite_id).label("c"))
+        .group_by(TrainingFavorite.user_id).subquery()
+    )
+    att_count = (
+        db.query(TrainingAttempt.user_id, func.count(TrainingAttempt.attempt_id).label("c"))
+        .group_by(TrainingAttempt.user_id).subquery()
+    )
+    rows = (
+        db.query(
+            User,
+            func.coalesce(session_count.c.c, 0).label("sessions"),
+            func.coalesce(fav_count.c.c, 0).label("favorites"),
+            func.coalesce(att_count.c.c, 0).label("attempts"),
+        )
+        .outerjoin(session_count, session_count.c.user_id == User.user_id)
+        .outerjoin(fav_count, fav_count.c.user_id == User.user_id)
+        .outerjoin(att_count, att_count.c.user_id == User.user_id)
+        .order_by(User.created_at.desc())
+        .all()
+    )
+    users = [
+        {
+            "user_id": u.user_id,
+            "email": u.email,
+            "nickname": u.nickname,
+            "created_at": u.created_at,
+            "sessions": int(s),
+            "favorites": int(f),
+            "attempts": int(a),
+        }
+        for (u, s, f, a) in rows
+    ]
+    return templates.TemplateResponse(
+        "admin/users.html",
+        {
+            "request": request,
+            "users": users,
+            "total_users": len(users),
+            "signup_enabled": app_state.signup_enabled,
+        },
+    )
+
+
+@router.post("/signup-toggle", dependencies=[Depends(require_admin_auth)], include_in_schema=False)
+def toggle_signup(request: Request):
+    """admin 페이지에서 호출. 메모리 상태 토글 (재시작 시 .env 값으로 reset)."""
+    app_state.signup_enabled = not app_state.signup_enabled
+    new_state = app_state.signup_enabled
+    logger = __import__("logging").getLogger("uvicorn.error")
+    logger.info(f"[admin] signup_enabled toggled to {new_state} by ip={get_client_ip(request)}")
+    return RedirectResponse(url="/admin/users", status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/users/{user_id}/sessions", response_model=list[SessionBrief], dependencies=[Depends(require_admin_auth)])
@@ -296,7 +367,7 @@ function connectSSE(){
   es.onerror=()=>{sseDot.className='status-dot disconnected';sseStatus.innerHTML='<span class="status-dot disconnected"></span>연결 끊김 – 재연결 중…'};
 }
 async function loadUsers(){
-  try{const r=await fetch('/admin/users'),users=await r.json();totalEl.textContent=users.length;
+  try{const r=await fetch('/admin/api/users'),users=await r.json();totalEl.textContent=users.length;
   if(!users.length){userTbody.innerHTML='<tr><td colspan="3" class="empty">등록된 사용자 없음</td></tr>';return}
   userTbody.innerHTML=users.map(u=>'<tr><td>'+u.nickname+'</td><td>'+u.email+'</td><td>'+fmtDate(u.created_at)+'</td></tr>').join('')}catch(e){console.error(e)}
 }
