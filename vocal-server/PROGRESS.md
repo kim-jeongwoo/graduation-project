@@ -180,6 +180,56 @@ TrainingScreen 관련 작업이 5/9 데드라인 이후 vocal-server에도 영�
 
 ## 9. 운영 명령어
 
+### 5/10 운영 — 실행 방식 + 토글 (현재 상태)
+
+| 항목 | 상태 |
+|------|------|
+| 실행 방식 | **수동 백그라운드** (`launchd` 등록 ❌). 부모 프로세스 종료 후 PPID=1로 reparent됨 |
+| 재부팅 시 자동 시작 | ❌ — Mac Studio 재부팅 시 정우가 `bash scripts/restart_server.sh` 직접 실행 |
+| 실행 명령어 | `nohup vocalserver/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 &` |
+| `--reload` 플래그 | ❌ — 코드 변경 시 수동 재시작 필요 |
+| cloudflared | 별개 launchd 서비스. vocal-server 재시작과 무관 (재시작 4~5초 동안만 502) |
+| 진행 중인 요청 | 재시작 스크립트가 SIGTERM(graceful) → 10초 대기 → SIGKILL fallback. 정상 응답은 끊김 최소 |
+
+#### 안전 재시작
+```bash
+cd /Users/kimjeongwoo/vocal-server/vocal-server
+bash scripts/restart_server.sh
+# graceful shutdown (~2s) + 새 프로세스 + /admin/health 200 대기 (~2s) = 총 ~5s
+```
+
+#### SIGNUP_ENABLED 토글 (5/10 학원 배포 직전 OFF)
+```bash
+# 외부인 가입 차단 (학원 실험 시작 시)
+bash scripts/signup_toggle.sh off
+# → .env 수정 + 안전 재시작 + 검증 (curl POST /auth/signup → 403)
+
+# 다시 허용 (실험 종료 후)
+bash scripts/signup_toggle.sh on
+# → 검증 (curl POST /auth/signup → 201 또는 400 already-exists)
+```
+
+#### 수동 검증 (스크립트 안 쓰고)
+```bash
+# SIGNUP_ENABLED 상태 확인
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://api.vocal-fit.com/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"signup_check@test.com","password":"check1234","nickname":"check"}'
+# 201 또는 400 → ENABLED=true / 403 → ENABLED=false
+
+# 서버 + cloudflared 모두 살아있는지
+curl -s -o /dev/null -w "vocal-server: %{http_code}\n" https://api.vocal-fit.com/admin/health
+ps aux | grep -E "uvicorn app.main|cloudflared" | grep -v grep | wc -l  # 2 기대
+```
+
+#### Known limits
+- **재부팅 시 미기동**: Mac Studio 정전·강제재부팅 후에는 정우가 SSH/직접 접속하여 `restart_server.sh` 실행 필요. (Phase 후속: launchd plist 등록 검토)
+- **rate limit**: 메모리 기반이라 vocal-server 재시작 시 admin login 실패 카운터 초기화
+
+---
+
+## 9. 운영 명령어
+
 ```bash
 # 서버 시작 (vocal-server/ 에서)
 source vocalserver/bin/activate
