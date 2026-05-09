@@ -361,6 +361,13 @@ curl -X POST http://host:8000/sessions/{session_id}/training-analyze \
       "confidence": "high"
     }
   },
+  "reason": null,
+  "duration_sec": 7.0,
+  "indicators": {
+    "cpp_mean": 0.21,
+    "voiced_ratio": 0.78
+  },
+  "processing_time_ms": 412.3,
   "chunk_meta": {"chunk_index": 5, "start_sec": 24.0, "end_sec": 31.0}
 }
 ```
@@ -371,16 +378,45 @@ curl -X POST http://host:8000/sessions/{session_id}/training-analyze \
   "session_id": "7cd855b1-...",
   "status": "no_voice",
   "scores": null,
+  "reason": "잡음만 녹음되었습니다. 마이크는 동작하지만 사람 목소리가 감지되지 않았습니다. 다시 녹음해주세요.",
+  "duration_sec": 5.0,
+  "indicators": null,
+  "processing_time_ms": 66.6,
   "chunk_meta": {"chunk_index": 5}
 }
 ```
 
-`chunk_meta`는 클라이언트가 보낸 값을 그대로 echo. 보내지 않았으면 `null`.
+`chunk_meta`는 클라이언트가 보낸 값을 그대로 echo. 보내지 않았으면 `null`. `run_id`는 의도적으로 제외 (휘발 분석이므로 정식 `AnalysisRun.run_id`와 혼동 방지).
+
+**필드별 케이스**
+
+| 필드 | success | no_voice | 비고 |
+|------|---------|----------|------|
+| `scores` | dict (2개 항목) | `null` | `3_vocal_fold_contact`, `4_breathiness` |
+| `reason` | `null` | string (한국어 메시지) | 앱에서 사용자에게 표시 권장 |
+| `duration_sec` | float | float | 청크 길이 |
+| `indicators` | dict | `null` | cpp_mean, voiced_ratio 등 원시 지표 |
+| `processing_time_ms` | float | float | dml-server 처리 시간 |
+| `chunk_meta` | echo | echo | 클라이언트가 보낸 값 그대로 |
+
+**Response 400** (chunk_too_short)
+```json
+{
+  "detail": {
+    "error": "chunk_too_short",
+    "reason": "분석을 위해 최소 3초 이상 녹음이 필요합니다.",
+    "duration_sec": 0.5,
+    "min_required_sec": 3.0
+  }
+}
+```
+
+`detail`은 객체 형태. 앱에서 `error.detail.reason`으로 사용자 메시지 접근.
 
 **에러**
 | 코드 | 사유 |
 |------|------|
-| 400 | dml-server 검증 실패 (예: `chunk_too_short`) — detail 그대로 전달 |
+| 400 | dml-server 검증 실패 (예: `chunk_too_short`) — detail 객체 그대로 전달 |
 | 403 | 다른 사용자의 세션 |
 | 404 | 존재하지 않는 session_id |
 | 502 | dml-server 5xx 또는 응답 파싱 실패 |

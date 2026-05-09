@@ -246,5 +246,9 @@ def training_analyze(
         "session_id": str(session_id),
         "status": body.get("status"),
         "scores": body.get("scores"),
+        "reason": body.get("reason"),
+        "duration_sec": body.get("duration_sec"),
+        "indicators": body.get("indicators"),
+        "processing_time_ms": body.get("processing_time_ms"),
         "chunk_meta": parsed_meta,
     }
