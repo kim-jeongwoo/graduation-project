@@ -7,7 +7,8 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as DBSession
 from starlette.responses import StreamingResponse
 
@@ -17,6 +18,24 @@ from app.models.models import Session, User
 from app.schemas.schemas import AdminUserResponse, SessionBrief
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# Phase A-3, A-4에서 사용 예정
+templates = Jinja2Templates(directory="app/templates")
+
+
+# ─────────────────────────────────────────────
+# Phase A-2: scaffold
+# ─────────────────────────────────────────────
+@router.get("", include_in_schema=False)
+def admin_root():
+    """`/admin` 진입 시 로그인 페이지로 redirect (Phase A-3)."""
+    return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/health", include_in_schema=False)
+def admin_health():
+    """Phase A-2 검증용 헬스 체크."""
+    return {"admin": "ok"}
 
 
 # ─────────────────────────────────────────────

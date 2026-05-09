@@ -9,3 +9,5 @@ python-jose[cryptography]
 python-multipart
 pydantic[email]
 httpx
+itsdangerous
+jinja2

@@ -1,9 +1,11 @@
 import logging
+import os
 import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.routers import admin, analysis, auth, files, sessions, songs, training
 
@@ -13,6 +15,16 @@ import app.models.models  # noqa: F401
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Vocal Server", version="0.1.0")
+
+# Admin SessionMiddleware (admin.vocal-fit.com 로그인 세션용)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("ADMIN_SESSION_SECRET", "dev-only-change-me"),
+    session_cookie="admin_session",
+    max_age=24 * 60 * 60,  # 24시간
+    https_only=True,
+    same_site="lax",
+)
 
 # CORS 설정 (개발 단계 – 모든 origin 허용)
 app.add_middleware(
