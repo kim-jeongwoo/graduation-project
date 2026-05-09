@@ -1,13 +1,14 @@
 """공통 의존성 함수 – JWT 인증 등."""
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session as DBSession
 
-from app.config import ALGORITHM, SECRET_KEY
+from app.config import ALGORITHM, JWT_EXPIRE_DAYS, SECRET_KEY
 from app.database import get_db
 from app.models.models import User
 
@@ -44,6 +45,7 @@ def get_current_user(
 
 
 def create_access_token(user_id: uuid.UUID) -> str:
-    """JWT 액세스 토큰을 생성합니다."""
-    payload = {"sub": str(user_id)}
+    """JWT 액세스 토큰을 생성합니다. JWT_EXPIRE_DAYS만큼 후 만료."""
+    expire = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS)
+    payload = {"sub": str(user_id), "exp": expire}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)

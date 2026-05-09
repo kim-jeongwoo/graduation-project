@@ -25,7 +25,7 @@ Authorization: Bearer <token>
 ```
 
 토큰은 `POST /auth/login` 또는 `POST /auth/signup` 응답의 `token` 필드에서 획득합니다.  
-만료 시간: 없음 (현재 정책). 재발급은 재로그인으로 처리.
+만료 시간: 발급 후 **7일** (서버 환경변수 `JWT_EXPIRE_DAYS`로 조절). 만료 시 재로그인 필요.
 
 ---
 
