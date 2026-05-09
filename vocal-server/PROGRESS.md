@@ -25,8 +25,12 @@
 
 - **프로젝트**: 보컬 발성 분석 (9개 항목 AI 피드백) + 노래방 기능 (MR 반주 + LRC 가사 + 음정 가이드)
 - **서버 구성**:
-  - `server` (Mac Studio): FastAPI + PostgreSQL, `localhost:8000`
-  - `model_server` (dmlserver, `114.71.220.144:8001`): AI 분석 처리 `/analyze` 엔드포인트
+  - `vocal-server` (Mac Studio): FastAPI + PostgreSQL
+    - 로컬: `http://localhost:8000`
+    - 외부: `https://api.vocal-fit.com` (Cloudflare Tunnel)
+  - `dml-server` (dmlserver GPU): AI 분석 처리 `/analyze` 엔드포인트
+    - 외부: `https://dml.vocal-fit.com` (vocal-server가 호출하는 base URL)
+    - 로컬 (LAN): `http://114.71.220.144:8001` (참고용, 현재 미사용)
   - `앱`: iOS/Android, 별도 개발 중
 - **일정**: 5/6~7 앱 완성 → 5/10 학원 데이터 수집 시작 → 5/10~24 통제실험 → 6/15 발표
 
