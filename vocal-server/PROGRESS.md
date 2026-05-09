@@ -146,6 +146,34 @@ vocal-server/
 
 ## 9. 운영 명령어
 
+---
+
+## 10. 향후 백로그 (5/9 후 발생 예정)
+
+TrainingScreen 관련 작업이 5/9 데드라인 이후 vocal-server에도 영향 발생.
+지금은 작업 없음. 시점 도래 시 아래 항목 참고.
+
+### Phase 7: TrainingScreen 즐겨찾기 + 누적 시도 기록
+- 신규 DB 테이블 (예: `training_sessions`, `training_attempts`)
+- 신규 REST endpoint
+- **알림**: vocal-app 페이지가 5/10 이후 요청 예정
+
+### WebSocket vocal-server 경유 전환
+- 현재: 앱 → dml-server 직접 (LAN, 인증 없음)
+- 향후: 앱 → vocal-server proxy → dml-server (JWT 토큰 검증)
+- **트리거**: 6/15 발표 전 또는 학원 데이터 수집(외부 네트워크) 직전
+- 작업 범위: WebSocket endpoint 신규 + 토큰 relay + dml-server 호출
+
+### Cloudflare Tunnel 배포 + JWT 만료 정책 갱신
+- 현재: localhost 개발, JWT 기본 만료
+- 향후: Cloudflare Tunnel로 외부 접근 + JWT 7일 연장 (학원 데이터 수집용)
+- **트리거**: 5/10 학원 데이터 수집 시작 직전
+- 작업 범위: Cloudflare 설정 + JWT 만료 시간 환경변수화
+
+---
+
+## 9. 운영 명령어
+
 ```bash
 # 서버 시작 (vocal-server/ 에서)
 source vocalserver/bin/activate
