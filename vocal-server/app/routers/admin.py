@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -39,16 +40,28 @@ def admin_health():
 
 
 # ─────────────────────────────────────────────
+# Phase A-3 전 임시 차단 (ADMIN_TEMP_LOCK=true)
+# Phase A-3 비밀번호 인증 추가 후 제거 예정
+# ─────────────────────────────────────────────
+def require_admin_locked():
+    if os.getenv("ADMIN_TEMP_LOCK", "true").lower() == "true":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin endpoints temporarily locked. 비밀번호 인증 추가 작업 중.",
+        )
+
+
+# ─────────────────────────────────────────────
 # 기존 API
 # ─────────────────────────────────────────────
-@router.get("/users", response_model=list[AdminUserResponse])
+@router.get("/users", response_model=list[AdminUserResponse], dependencies=[Depends(require_admin_locked)])
 def list_all_users(db: DBSession = Depends(get_db)):
     """등록된 모든 사용자 목록을 최신순으로 반환합니다."""
     users = db.query(User).order_by(User.created_at.desc()).all()
     return users
 
 
-@router.get("/users/{user_id}/sessions", response_model=list[SessionBrief])
+@router.get("/users/{user_id}/sessions", response_model=list[SessionBrief], dependencies=[Depends(require_admin_locked)])
 def list_user_sessions(user_id: uuid.UUID, db: DBSession = Depends(get_db)):
     """특정 사용자의 모든 세션 목록을 최신순으로 반환합니다."""
     user = db.query(User).filter(User.user_id == user_id).first()
@@ -67,7 +80,7 @@ def list_user_sessions(user_id: uuid.UUID, db: DBSession = Depends(get_db)):
 # ─────────────────────────────────────────────
 # 이벤트 API (폴링)
 # ─────────────────────────────────────────────
-@router.get("/events")
+@router.get("/events", dependencies=[Depends(require_admin_locked)])
 def list_events():
     """최근 이벤트 리스트를 JSON으로 반환합니다."""
     return get_events()
@@ -76,7 +89,7 @@ def list_events():
 # ─────────────────────────────────────────────
 # SSE 스트림
 # ─────────────────────────────────────────────
-@router.get("/events/stream")
+@router.get("/events/stream", dependencies=[Depends(require_admin_locked)])
 async def event_stream(request: Request):
     """SSE 스트림 – 실시간 이벤트를 푸시합니다."""
     queue = subscribe()
@@ -207,7 +220,7 @@ loadUsers();loadInitialEvents();connectSSE();
 """
 
 
-@router.get("/dashboard", response_class=HTMLResponse)
+@router.get("/dashboard", response_class=HTMLResponse, dependencies=[Depends(require_admin_locked)])
 def dashboard():
     """관리자 대시보드 HTML 페이지를 반환합니다."""
     return HTMLResponse(content=_DASHBOARD_HTML)
