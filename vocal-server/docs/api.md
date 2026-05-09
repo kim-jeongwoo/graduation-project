@@ -1094,7 +1094,31 @@ result_json = results["result_json"]
 
 ---
 
-## 14. 폐기된 엔드포인트
+## 14. 관리자 웹 (Admin)
+
+> 앱과 무관. `https://admin.vocal-fit.com`에서 접근하며 별도 비밀번호 인증 사용. 앱 개발 참고용으로만 명시.
+
+| 메소드 | 경로 | 용도 |
+|--------|------|------|
+| GET | `/admin` | 302 → `/admin/login` |
+| GET | `/admin/health` | 인증 불필요 헬스 체크 (`{"admin":"ok"}`) |
+| GET | `/admin/login` | 로그인 페이지 (HTML) |
+| POST | `/admin/login` | form `password` 제출 → 302 `/admin/dashboard` (성공) / `?error=invalid_password` (실패) |
+| POST | `/admin/logout` | 세션 clear → 302 `/admin/login` |
+| GET | `/admin/dashboard` | 대시보드 (인증 필요) |
+| GET | `/admin/users`, `/admin/users/{id}/sessions`, `/admin/events`, `/admin/events/stream` | 인증 필요 |
+
+**인증**: `SessionMiddleware` 기반 `admin_session` 쿠키 (24시간, https_only, lax). 미인증 시 401.
+
+**Rate limit**: 5분 윈도우 내 실패 5회 → 5분 차단 (IP 기준, X-Forwarded-For 사용). `?error=rate_limited&retry={seconds}` redirect로 안내. 메모리 기반이라 서버 재시작 시 초기화.
+
+**환경변수** (`.env`, gitignored):
+- `ADMIN_PASSWORD` — 로그인 비밀번호
+- `ADMIN_SESSION_SECRET` — 세션 쿠키 서명 키 (`secrets.token_urlsafe(48)`)
+
+---
+
+## 15. 폐기된 엔드포인트
 
 아래 엔드포인트는 **현재 서버에 존재하지 않습니다**. 호출 시 404 또는 라우팅 오류 발생.
 

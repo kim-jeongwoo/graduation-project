@@ -6,8 +6,11 @@ import asyncio
 import json
 import os
 import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta
+from threading import Lock
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as DBSession
@@ -40,28 +43,112 @@ def admin_health():
 
 
 # ─────────────────────────────────────────────
-# Phase A-3 전 임시 차단 (ADMIN_TEMP_LOCK=true)
-# Phase A-3 비밀번호 인증 추가 후 제거 예정
+# Phase A-3: 비밀번호 인증 + IP rate limit
+# - 인증: SessionMiddleware 기반 admin_session 쿠키 (24h)
+# - rate limit: 메모리 기반 (단일 인스턴스 한정, 재시작 시 초기화)
 # ─────────────────────────────────────────────
-def require_admin_locked():
-    if os.getenv("ADMIN_TEMP_LOCK", "true").lower() == "true":
+_FAIL_LIMIT = 5
+_BLOCK_DURATION = timedelta(minutes=5)
+_FAIL_WINDOW = timedelta(minutes=5)
+_failed_attempts: dict[str, list[datetime]] = defaultdict(list)
+_rl_lock = Lock()
+
+
+def get_client_ip(request: Request) -> str:
+    """Cloudflare Tunnel 뒤 → X-Forwarded-For 첫 번째 IP 사용."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def check_rate_limit(ip: str) -> tuple[bool, int | None]:
+    with _rl_lock:
+        now = datetime.utcnow()
+        _failed_attempts[ip] = [t for t in _failed_attempts[ip] if now - t < _FAIL_WINDOW]
+        failures = _failed_attempts[ip]
+        if len(failures) >= _FAIL_LIMIT:
+            unblock_at = failures[-_FAIL_LIMIT] + _BLOCK_DURATION
+            if now < unblock_at:
+                return True, int((unblock_at - now).total_seconds())
+        return False, None
+
+
+def record_failed_attempt(ip: str) -> None:
+    with _rl_lock:
+        _failed_attempts[ip].append(datetime.utcnow())
+
+
+def reset_attempts(ip: str) -> None:
+    with _rl_lock:
+        _failed_attempts.pop(ip, None)
+
+
+def require_admin_auth(request: Request):
+    """세션 쿠키 기반 admin 인증."""
+    if not request.session.get("admin_authenticated"):
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Admin endpoints temporarily locked. 비밀번호 인증 추가 작업 중.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin authentication required",
+            headers={"Location": "/admin/login"},
         )
+
+
+# ─────────────────────────────────────────────
+# 로그인 페이지 + 폼 처리 + 로그아웃
+# ─────────────────────────────────────────────
+@router.get("/login", response_class=HTMLResponse, include_in_schema=False)
+def login_page(request: Request, error: str | None = None, retry: int | None = None):
+    return templates.TemplateResponse(
+        "admin/login.html",
+        {"request": request, "error": error, "retry": retry},
+    )
+
+
+@router.post("/login", include_in_schema=False)
+def login_submit(request: Request, password: str = Form(...)):
+    client_ip = get_client_ip(request)
+    blocked, retry_after = check_rate_limit(client_ip)
+    if blocked:
+        return RedirectResponse(
+            url=f"/admin/login?error=rate_limited&retry={retry_after}",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    if not admin_password:
+        raise HTTPException(status_code=500, detail="ADMIN_PASSWORD not configured")
+
+    if password != admin_password:
+        record_failed_attempt(client_ip)
+        return RedirectResponse(
+            url="/admin/login?error=invalid_password",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    reset_attempts(client_ip)
+    request.session["admin_authenticated"] = True
+    request.session["admin_logged_in_at"] = datetime.utcnow().isoformat()
+    return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/logout", include_in_schema=False)
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
 
 
 # ─────────────────────────────────────────────
 # 기존 API
 # ─────────────────────────────────────────────
-@router.get("/users", response_model=list[AdminUserResponse], dependencies=[Depends(require_admin_locked)])
+@router.get("/users", response_model=list[AdminUserResponse], dependencies=[Depends(require_admin_auth)])
 def list_all_users(db: DBSession = Depends(get_db)):
     """등록된 모든 사용자 목록을 최신순으로 반환합니다."""
     users = db.query(User).order_by(User.created_at.desc()).all()
     return users
 
 
-@router.get("/users/{user_id}/sessions", response_model=list[SessionBrief], dependencies=[Depends(require_admin_locked)])
+@router.get("/users/{user_id}/sessions", response_model=list[SessionBrief], dependencies=[Depends(require_admin_auth)])
 def list_user_sessions(user_id: uuid.UUID, db: DBSession = Depends(get_db)):
     """특정 사용자의 모든 세션 목록을 최신순으로 반환합니다."""
     user = db.query(User).filter(User.user_id == user_id).first()
@@ -80,7 +167,7 @@ def list_user_sessions(user_id: uuid.UUID, db: DBSession = Depends(get_db)):
 # ─────────────────────────────────────────────
 # 이벤트 API (폴링)
 # ─────────────────────────────────────────────
-@router.get("/events", dependencies=[Depends(require_admin_locked)])
+@router.get("/events", dependencies=[Depends(require_admin_auth)])
 def list_events():
     """최근 이벤트 리스트를 JSON으로 반환합니다."""
     return get_events()
@@ -89,7 +176,7 @@ def list_events():
 # ─────────────────────────────────────────────
 # SSE 스트림
 # ─────────────────────────────────────────────
-@router.get("/events/stream", dependencies=[Depends(require_admin_locked)])
+@router.get("/events/stream", dependencies=[Depends(require_admin_auth)])
 async def event_stream(request: Request):
     """SSE 스트림 – 실시간 이벤트를 푸시합니다."""
     queue = subscribe()
@@ -220,7 +307,7 @@ loadUsers();loadInitialEvents();connectSSE();
 """
 
 
-@router.get("/dashboard", response_class=HTMLResponse, dependencies=[Depends(require_admin_locked)])
+@router.get("/dashboard", response_class=HTMLResponse, dependencies=[Depends(require_admin_auth)])
 def dashboard():
     """관리자 대시보드 HTML 페이지를 반환합니다."""
     return HTMLResponse(content=_DASHBOARD_HTML)
