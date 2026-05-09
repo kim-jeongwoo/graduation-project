@@ -39,6 +39,7 @@ Authorization: Bearer <token>
 | GET | `/sessions` | 필요 | 내 세션 목록 |
 | GET | `/sessions/{session_id}` | 필요 | 세션 상세 + 최근 분석 결과 |
 | POST | `/sessions/{session_id}/files` | 필요 | 오디오 파일 업로드 |
+| POST | `/sessions/{session_id}/training-analyze` | 필요 | 훈련 청크 사후 측정 (휘발) |
 | POST | `/sessions/{session_id}/analyze` | 필요 | AI 분석 요청 |
 | GET | `/analysis/{run_id}` | 필요 | 분석 실행 상태 조회 |
 | GET | `/analysis/{run_id}/results` | 필요 | 분석 결과 전체 조회 |
@@ -317,6 +318,73 @@ curl -X POST http://host:8000/sessions/{session_id}/files \
 |------|------|
 | 403 | 다른 사용자의 세션 |
 | 404 | 존재하지 않는 session_id |
+
+---
+
+### POST /sessions/{session_id}/training-analyze
+
+TrainingScreen 사후 측정용 청크 분석. **DB 저장 안 함, 휘발성** — 호출 즉시 dml-server `/analyze-chunk` 결과를 그대로 전달합니다. 정식 분석 흐름(`/analyze`)과 별개.
+
+```http
+POST /sessions/{session_id}/training-analyze
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+**Request**
+- Field: `audio` — WAV 파일 (필수)
+- Field: `chunk_meta` — JSON 문자열 (선택). 클라이언트가 echo 받고 싶은 메타. 예: `{"chunk_index": 5, "start_sec": 24.0, "end_sec": 31.0, "original_run_id": "..."}`
+
+```bash
+curl -X POST http://host:8000/sessions/{session_id}/training-analyze \
+  -H "Authorization: Bearer <token>" \
+  -F "audio=@chunk.wav" \
+  -F 'chunk_meta={"chunk_index":5,"start_sec":24.0,"end_sec":31.0}'
+```
+
+**Response 200** (정상)
+```json
+{
+  "session_id": "7cd855b1-...",
+  "status": "success",
+  "scores": {
+    "3_vocal_fold_contact": {
+      "ai_score": 3.4,
+      "rounded_score": 3,
+      "zone": "appropriate",
+      "confidence": "high"
+    },
+    "4_breathiness": {
+      "ai_score": 2.8,
+      "rounded_score": 3,
+      "zone": "appropriate",
+      "confidence": "high"
+    }
+  },
+  "chunk_meta": {"chunk_index": 5, "start_sec": 24.0, "end_sec": 31.0}
+}
+```
+
+**Response 200** (무음/잡음)
+```json
+{
+  "session_id": "7cd855b1-...",
+  "status": "no_voice",
+  "scores": null,
+  "chunk_meta": {"chunk_index": 5}
+}
+```
+
+`chunk_meta`는 클라이언트가 보낸 값을 그대로 echo. 보내지 않았으면 `null`.
+
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 400 | dml-server 검증 실패 (예: `chunk_too_short`) — detail 그대로 전달 |
+| 403 | 다른 사용자의 세션 |
+| 404 | 존재하지 않는 session_id |
+| 502 | dml-server 5xx 또는 응답 파싱 실패 |
+| 504 | dml-server timeout 또는 연결 실패 |
 
 ---
 
