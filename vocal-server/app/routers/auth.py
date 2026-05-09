@@ -1,5 +1,7 @@
 """인증 API – 회원가입 / 로그인."""
 
+import os
+
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session as DBSession
@@ -25,6 +27,13 @@ def _verify_password(plain: str, hashed: str) -> bool:
 
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def signup(body: SignupRequest, db: DBSession = Depends(get_db)):
+    # 회원가입 토글 (학원 실험/시연 기간 외부인 가입 차단)
+    if os.getenv("SIGNUP_ENABLED", "true").lower() != "true":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="현재 회원가입이 비활성화되어 있습니다. 관리자에게 문의하세요.",
+        )
+
     # 이메일 중복 확인
     existing = db.query(User).filter(User.email == body.email).first()
     if existing:
