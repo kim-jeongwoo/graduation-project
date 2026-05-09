@@ -41,7 +41,11 @@ Authorization: Bearer <token>
 | GET | `/sessions` | 필요 | 내 세션 목록 |
 | GET | `/sessions/{session_id}` | 필요 | 세션 상세 + 최근 분석 결과 |
 | POST | `/sessions/{session_id}/files` | 필요 | 오디오 파일 업로드 |
-| POST | `/sessions/{session_id}/training-analyze` | 필요 | 훈련 청크 사후 측정 (휘발) |
+| POST | `/sessions/{session_id}/training-analyze` | 필요 | 훈련 청크 사후 측정 (휘발 응답, 누적 시도 자동 저장) |
+| GET | `/users/me/training-attempts` | 필요 | 누적 시도 기록 조회 (cursor pagination) |
+| GET | `/users/me/favorites` | 필요 | 즐겨찾기 목록 |
+| POST | `/users/me/favorites` | 필요 | 즐겨찾기 추가 |
+| DELETE | `/users/me/favorites/{favorite_id}` | 필요 | 즐겨찾기 삭제 |
 | POST | `/sessions/{session_id}/analyze` | 필요 | AI 분석 요청 |
 | GET | `/analysis/{run_id}` | 필요 | 분석 실행 상태 조회 |
 | GET | `/analysis/{run_id}/results` | 필요 | 분석 결과 전체 조회 |
@@ -269,7 +273,7 @@ Authorization: Bearer <token>
 }
 ```
 
-`latest_analysis`는 분석이 없으면 `null`. `result_json` 구조는 [7. 공통 응답 모델](#7-공통-응답-모델) 참고.
+`latest_analysis`는 분석이 없으면 `null`. `result_json` 구조는 [10. 공통 응답 모델](#10-공통-응답-모델) 참고.
 
 `song` 필드는 위 `GET /sessions` 섹션의 3가지 케이스와 동일합니다.
 
@@ -325,7 +329,9 @@ curl -X POST http://host:8000/sessions/{session_id}/files \
 
 ### POST /sessions/{session_id}/training-analyze
 
-TrainingScreen 사후 측정용 청크 분석. **DB 저장 안 함, 휘발성** — 호출 즉시 dml-server `/analyze-chunk` 결과를 그대로 전달합니다. 정식 분석 흐름(`/analyze`)과 별개.
+TrainingScreen 사후 측정용 청크 분석. **응답은 휘발성** — dml-server `/analyze-chunk` 결과를 그대로 전달합니다. 정식 분석 흐름(`/analyze`)과 별개.
+
+> **자동 저장**: status가 `"success"`이고 `chunk_meta`에 `original_run_id`, `chunk_index`가 포함되면 백엔드가 `training_attempts` 테이블에 자동 INSERT (응답 스키마 영향 없음). 누적 기록은 `GET /users/me/training-attempts`로 조회.
 
 ```http
 POST /sessions/{session_id}/training-analyze
@@ -521,7 +527,7 @@ Authorization: Bearer <token>
 }
 ```
 
-`result_json` 구조는 [7. 공통 응답 모델](#7-공통-응답-모델) 참고.
+`result_json` 구조는 [10. 공통 응답 모델](#10-공통-응답-모델) 참고.
 
 **에러**
 | 코드 | 사유 |
@@ -737,7 +743,154 @@ Authorization: Bearer <token>
 
 ---
 
-## 9. 공통 응답 모델
+## 9. Training Attempts and Favorites (Phase 7)
+
+TrainingScreen에서 사용하는 누적 시도 기록 + 즐겨찾기 API. 모든 엔드포인트는 토큰의 `user_id`를 사용하므로 URL에 user_id 노출 없음.
+
+### GET /users/me/training-attempts
+
+누적 시도 기록 조회. `attempted_at` DESC, cursor pagination.
+
+```http
+GET /users/me/training-attempts?indicator_key=4_breathiness&limit=50&cursor=<base64>
+Authorization: Bearer <token>
+```
+
+| Query | 설명 |
+|-------|------|
+| `indicator_key` | 지표 필터 (선택) |
+| `song_id` | 노래방 곡 필터 (선택, JOIN: AnalysisRun → Session) |
+| `original_run_id` | 특정 분석에 묶인 시도만 (선택) |
+| `cursor` | 다음 페이지용 (응답의 `next_cursor`) |
+| `limit` | 1~200, 기본 50 |
+
+**Response 200**
+```json
+{
+  "items": [
+    {
+      "attempt_id": "...",
+      "session_id": "...",
+      "original_run_id": "...",
+      "chunk_index": 5,
+      "chunk_start_sec": 24.0,
+      "chunk_end_sec": 31.0,
+      "indicator_key": "4_breathiness",
+      "before_ai_score": 2.1,
+      "before_rounded_score": 2,
+      "before_zone": "appropriate",
+      "after_ai_score": 3.4,
+      "after_rounded_score": 3,
+      "after_zone": "appropriate",
+      "improvement": 1.3,
+      "attempted_at": "2026-05-10T09:00:00+00:00"
+    }
+  ],
+  "next_cursor": "MjAyNi0wNS0xMFQwOTowMDowMHwuLi4=",
+  "has_more": true
+}
+```
+
+`improvement` = `after_ai_score - before_ai_score`. `before_ai_score`가 `null`이면 `improvement: null`.
+
+---
+
+### GET /users/me/favorites
+
+즐겨찾기 목록. `created_at` DESC. Song 테이블 JOIN으로 `song_title`, `song_artist` 포함.
+
+```http
+GET /users/me/favorites?indicator_key=4_breathiness&song_id=004
+Authorization: Bearer <token>
+```
+
+**Response 200**
+```json
+{
+  "items": [
+    {
+      "favorite_id": "b8c0a4df-...",
+      "song_id": "004",
+      "song_title": "보고싶다",
+      "song_artist": "김범수",
+      "original_run_id": "bdf18c1d-...",
+      "chunk_index": 5,
+      "chunk_start_sec": 24.0,
+      "chunk_end_sec": 31.0,
+      "chunk_lrc_text": "아무리 기다려도 나는 못가",
+      "indicator_key": "4_breathiness",
+      "created_at": "2026-05-10T09:00:00+00:00"
+    }
+  ]
+}
+```
+
+---
+
+### POST /users/me/favorites
+
+즐겨찾기 추가. **노래방 14곡 한정** — 자유녹음 세션은 400 반환.
+
+```http
+POST /users/me/favorites
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request**
+```json
+{
+  "original_run_id": "bdf18c1d-...",
+  "chunk_index": 5,
+  "indicator_key": "4_breathiness"
+}
+```
+
+**Response 201**
+- `GET /users/me/favorites` 응답의 `items[]` 한 항목과 동일 구조
+
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 400 | 자유녹음 세션 (`song_id` 없음) 또는 `chunk_index` 범위 초과 |
+| 403 | 다른 사용자의 분석 |
+| 404 | 존재하지 않는 `original_run_id` |
+| 409 | 이미 즐겨찾기된 chunk — `detail: {error, existing_favorite_id}` |
+
+**409 응답 예시**
+```json
+{
+  "detail": {
+    "error": "already_favorited",
+    "existing_favorite_id": "b8c0a4df-..."
+  }
+}
+```
+
+UNIQUE 키: `(user_id, song_id, chunk_index, indicator_key)`.
+
+---
+
+### DELETE /users/me/favorites/{favorite_id}
+
+즐겨찾기 삭제. 본인 데이터만 가능.
+
+```http
+DELETE /users/me/favorites/{favorite_id}
+Authorization: Bearer <token>
+```
+
+**Response 204** — No Content
+
+**에러**
+| 코드 | 사유 |
+|------|------|
+| 403 | 다른 사용자의 즐겨찾기 |
+| 404 | 존재하지 않는 `favorite_id` |
+
+---
+
+## 10. 공통 응답 모델
 
 ### result_json 구조
 
@@ -889,7 +1042,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 10. 에러 코드
+## 11. 에러 코드
 
 | 코드 | 사유 | 주요 발생 상황 |
 |------|------|---------------|
@@ -902,7 +1055,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 11. 폴링 가이드
+## 12. 폴링 가이드
 
 현재 분석은 **동기 처리** (10~30초). `POST /analyze` 응답까지 대기하면 됩니다.  
 타임아웃은 **최소 60초** 설정 권장.
@@ -930,7 +1083,7 @@ result_json = results["result_json"]
 
 ---
 
-## 12. 권한 모델
+## 13. 권한 모델
 
 - 세션, 파일, 분석 결과는 **생성한 사용자만 접근** 가능. 타인 접근 시 `403`.
 - `/songs/*` 노래방 API는 인증(Bearer 토큰)만 필요. user_id 검증 없음 — 로그인한 누구나 동일 데이터 접근 가능.
@@ -938,7 +1091,7 @@ result_json = results["result_json"]
 
 ---
 
-## 13. 폐기된 엔드포인트
+## 14. 폐기된 엔드포인트
 
 아래 엔드포인트는 **현재 서버에 존재하지 않습니다**. 호출 시 404 또는 라우팅 오류 발생.
 

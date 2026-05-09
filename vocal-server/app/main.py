@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.routers import admin, analysis, auth, files, sessions, songs
+from app.routers import admin, analysis, auth, files, sessions, songs, training
 
 # 모델 import — alembic이 스키마 관리. create_all 사용 금지.
 import app.models.models  # noqa: F401
@@ -39,6 +39,7 @@ app.include_router(files.router)
 app.include_router(analysis.router)
 app.include_router(admin.router)
 app.include_router(songs.router)
+app.include_router(training.router)
 
 
 @app.get("/health")

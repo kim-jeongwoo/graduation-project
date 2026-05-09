@@ -8,9 +8,11 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
@@ -208,3 +210,72 @@ class Song(Base):
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 
     sessions = relationship("Session", back_populates="song")
+
+
+# ─────────────────────────────────────────────
+# 9. TrainingAttempt (Phase 7: 누적 시도 기록)
+# ─────────────────────────────────────────────
+class TrainingAttempt(Base):
+    __tablename__ = "training_attempts"
+
+    attempt_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    # 세션 삭제 후에도 기록 보존 → ondelete=SET NULL
+    session_id = Column(
+        UUID(as_uuid=True), ForeignKey("sessions.session_id", ondelete="SET NULL"), nullable=True
+    )
+    original_run_id = Column(
+        UUID(as_uuid=True), ForeignKey("analysis_runs.run_id", ondelete="SET NULL"), nullable=True
+    )
+    chunk_index = Column(Integer, nullable=False)
+    chunk_start_sec = Column(Float, nullable=False)
+    chunk_end_sec = Column(Float, nullable=False)
+    indicator_key = Column(String(50), nullable=False)
+    before_ai_score = Column(Float, nullable=True)
+    before_rounded_score = Column(Integer, nullable=True)
+    before_zone = Column(String(20), nullable=True)
+    after_ai_score = Column(Float, nullable=False)
+    after_rounded_score = Column(Integer, nullable=False)
+    after_zone = Column(String(20), nullable=False)
+    attempted_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_training_attempts_user_attempted", "user_id", attempted_at.desc()),
+        Index(
+            "idx_training_attempts_user_indicator",
+            "user_id", "indicator_key", attempted_at.desc(),
+        ),
+        Index("idx_training_attempts_user_original_run", "user_id", "original_run_id"),
+    )
+
+
+# ─────────────────────────────────────────────
+# 10. TrainingFavorite (Phase 7: 즐겨찾기)
+# ─────────────────────────────────────────────
+class TrainingFavorite(Base):
+    __tablename__ = "training_favorites"
+
+    favorite_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    song_id = Column(String(8), ForeignKey("songs.id"), nullable=False)
+    original_run_id = Column(
+        UUID(as_uuid=True), ForeignKey("analysis_runs.run_id", ondelete="SET NULL"), nullable=True
+    )
+    chunk_index = Column(Integer, nullable=False)
+    chunk_start_sec = Column(Float, nullable=False)
+    chunk_end_sec = Column(Float, nullable=False)
+    chunk_lrc_text = Column(Text, nullable=True)
+    indicator_key = Column(String(50), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "song_id", "chunk_index", "indicator_key",
+            name="uq_training_favorites_user_chunk",
+        ),
+        Index("idx_training_favorites_user_created", "user_id", created_at.desc()),
+    )

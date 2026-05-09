@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session as DBSession, selectinload
 from app.config import MODEL_SERVER_URL
 from app.database import get_db
 from app.deps import get_current_user
-from app.models.models import AnalysisRun, Session, SessionFile, Song, User
+from app.models.models import AnalysisRun, Session, SessionFile, Song, TrainingAttempt, User
 from app.schemas.schemas import (
     FileInfo,
     LatestAnalysis,
@@ -241,6 +241,56 @@ def training_analyze(
         raise HTTPException(status_code=502, detail="분석 서버 응답 파싱 실패")
 
     logger.info(f"[training-analyze] session_id={session_id}, status={body.get('status')}")
+
+    # ── 누적 시도 자동 저장 (best-effort, 응답에 영향 없음) ──
+    saved_count = 0
+    try:
+        if body.get("status") == "success" and parsed_meta is not None:
+            original_run_id = parsed_meta.get("original_run_id")
+            chunk_index = parsed_meta.get("chunk_index")
+            after_scores = body.get("scores") or {}
+            if original_run_id and chunk_index is not None and after_scores:
+                original_run = (
+                    db.query(AnalysisRun)
+                    .filter(AnalysisRun.run_id == uuid.UUID(str(original_run_id)))
+                    .first()
+                )
+                timeline_scores = (original_run.result_json or {}).get("timeline_scores") if original_run else None
+                target_chunk = (
+                    timeline_scores[chunk_index]
+                    if timeline_scores and 0 <= chunk_index < len(timeline_scores)
+                    else None
+                )
+                before_scores = (target_chunk or {}).get("scores") or {}
+                chunk_start = (target_chunk or {}).get("start_sec") or (target_chunk or {}).get("chunk_start_sec") or 0.0
+                chunk_end = (target_chunk or {}).get("end_sec") or (target_chunk or {}).get("chunk_end_sec") or 0.0
+
+                for indicator_key, after in after_scores.items():
+                    if not isinstance(after, dict):
+                        continue
+                    before = before_scores.get(indicator_key) or {}
+                    db.add(TrainingAttempt(
+                        user_id=current_user.user_id,
+                        session_id=session.session_id,
+                        original_run_id=uuid.UUID(str(original_run_id)),
+                        chunk_index=int(chunk_index),
+                        chunk_start_sec=float(chunk_start),
+                        chunk_end_sec=float(chunk_end),
+                        indicator_key=indicator_key,
+                        before_ai_score=before.get("ai_score"),
+                        before_rounded_score=before.get("rounded_score"),
+                        before_zone=before.get("zone"),
+                        after_ai_score=float(after.get("ai_score") or 0),
+                        after_rounded_score=int(after.get("rounded_score") or 0),
+                        after_zone=str(after.get("zone") or ""),
+                    ))
+                    saved_count += 1
+                if saved_count:
+                    db.commit()
+        logger.info(f"[training-analyze] saved attempts: count={saved_count}")
+    except Exception as exc:
+        db.rollback()
+        logger.warning(f"[training-analyze] attempt save failed: {exc}")
 
     return {
         "session_id": str(session_id),
