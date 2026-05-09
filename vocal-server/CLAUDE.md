@@ -151,3 +151,9 @@ vocal-server/          ← 이 폴더 (모노레포 내 서브프로젝트)
   새 코드에서 분석 상태 분기할 때 'success'와 'completed' 둘 다 고려할 것.
   (dml-server response 직후 처리 vs DB에서 읽은 후 처리 모두 해당)
   이번 작업에서 캐싱 조건이 'completed'만 체크해 'success' 누락됐던 사례 있음.
+
+- [2026-05-09] [Cloudflare Tunnel] `cloudflared service install`이 plist에 `tunnel run` 인자를
+  자동으로 안 박는 경우 있음. 증상: 로그에 'Use cloudflared tunnel run to start tunnel' 무한 반복.
+  해결: plist 수동 작성으로 ProgramArguments에 `--config /etc/cloudflared/config.yml tunnel run` 명시.
+  또는 config.yml을 `/etc/cloudflared/` 시스템 위치에 복사 후 root 권한 접근 가능하게.
+  현재 설정: `~/.cloudflared/config.yml`, 터널 ID `b929f13d-0429-4fe6-aaa2-c4056b38b16f`.

@@ -8,8 +8,10 @@
 
 | 항목 | 값 |
 |------|-----|
-| 개발 Base URL | `http://localhost:8000` |
-| 시연 Base URL | ngrok 또는 Cloudflare Tunnel URL (별도 공유) |
+| 로컬 개발 Base URL | `http://localhost:8000` |
+| 외부 접근 Base URL | `https://api.vocal-fit.com` (학원 실험 + 시연용, 5/10~) |
+| HTTPS | 자동 (Cloudflare 인증서) |
+| 인프라 | Cloudflare Tunnel → Mac Studio `localhost:8000` |
 | 응답 형식 | JSON (UTF-8) |
 | 인증 방식 | Bearer JWT (`Authorization` 헤더) |
 | Swagger UI | `http://localhost:8000/docs` |

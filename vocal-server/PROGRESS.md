@@ -38,7 +38,11 @@
 - 가상환경: `vocalserver/` (Python 3.14), 실행 전 `source vocalserver/bin/activate`
 - DB: PostgreSQL 17, `vocal_db`, `localhost:5432`
 - Alembic 현재 head: `a1b2c3d4e5f6`
-- Cloudflare Tunnel 배포: 시연 직전 예정 (미완료)
+- Cloudflare Tunnel 배포: **완료** (2026-05-09)
+  - 외부 도메인: `https://api.vocal-fit.com` → `localhost:8000`
+  - 터널 ID: `b929f13d-0429-4fe6-aaa2-c4056b38b16f` (이름: `vocal-fit-api`)
+  - launchd 서비스 등록됨 (Mac 부팅 시 자동 실행)
+  - HTTPS 자동 (Cloudflare 인증서)
 
 ---
 
@@ -164,11 +168,9 @@ TrainingScreen 관련 작업이 5/9 데드라인 이후 vocal-server에도 영�
 - **트리거**: 6/15 발표 전 또는 학원 데이터 수집(외부 네트워크) 직전
 - 작업 범위: WebSocket endpoint 신규 + 토큰 relay + dml-server 호출
 
-### Cloudflare Tunnel 배포 + JWT 만료 정책 갱신
-- 현재: localhost 개발, JWT 기본 만료
-- 향후: Cloudflare Tunnel로 외부 접근 + JWT 7일 연장 (학원 데이터 수집용)
-- **트리거**: 5/10 학원 데이터 수집 시작 직전
-- 작업 범위: Cloudflare 설정 + JWT 만료 시간 환경변수화
+### ~~Cloudflare Tunnel 배포 + JWT 만료 정책 갱신~~ ✅ 완료 (2026-05-09)
+- Cloudflare Tunnel: `https://api.vocal-fit.com` (launchd 자동 실행)
+- JWT 만료: `JWT_EXPIRE_DAYS=7` 환경변수화
 
 ---
 
