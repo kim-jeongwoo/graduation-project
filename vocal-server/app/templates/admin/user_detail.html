@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ user.nickname }} — Vocal Fit Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f1320; }
+        .navbar { background: #16213e; padding: .5rem 1rem; }
+        .navbar-brand { color: #a0c4ff !important; font-weight: 600; font-size: 1rem; }
+        .card { background: #16213e; border: 1px solid #2a3550; border-radius: 10px; }
+        .nav-tabs { border-color: #2a3550; }
+        .nav-tabs .nav-link { color: #8899aa; border: none; padding: .5rem .9rem; }
+        .nav-tabs .nav-link.active { color: #a0c4ff; background: #16213e; border-bottom: 2px solid #4f7df0; }
+        .tab-content { background: #16213e; border: 1px solid #2a3550; border-top: none; border-radius: 0 0 10px 10px; padding: .75rem; }
+        .table { color: #e0e0e0; margin-bottom: 0; }
+        .table thead th { color: #8899aa; border-bottom: 1px solid #2a3550; font-size: .8rem; padding: .5rem .6rem; }
+        .table tbody td { border-color: #1f2c4d; vertical-align: middle; padding: .5rem .6rem; font-size: .85rem; }
+        .table tbody tr:hover td { background: #1a2540; }
+        .meta { color: #6b7b8d; font-size: .8rem; }
+        code.runid { color: #a0c4ff; font-size: .75rem; }
+        .badge-imp-pos { background: #064e3b; color: #6ee7b7; }
+        .badge-imp-neg { background: #7f1d1d; color: #fca5a5; }
+        .badge-imp-zero { background: #1a2540; color: #6b7b8d; }
+        @media (max-width: 768px) {
+            .hide-mobile { display: none !important; }
+            .table thead th, .table tbody td { padding: .4rem .4rem; font-size: .8rem; }
+            .nav-tabs .nav-link { padding: .4rem .6rem; font-size: .85rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar d-flex">
+        <span class="navbar-brand">🎤 Vocal Fit Admin</span>
+        <div class="ms-auto d-flex gap-2">
+            <a href="/admin/users" class="btn btn-sm btn-outline-light">← 사용자 리스트</a>
+            <form method="POST" action="/admin/logout" class="m-0">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">로그아웃</button>
+            </form>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3" style="max-width: 1100px;">
+
+        <!-- 사용자 정보 카드 -->
+        <div class="card mb-3">
+            <div class="card-body py-3">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <h4 class="mb-0" style="color:#a0c4ff;">{{ user.nickname }}</h4>
+                    <span class="meta">·</span>
+                    <span class="meta">{{ user.email }}</span>
+                </div>
+                <div class="meta mb-2">
+                    가입 {{ user.created_at.strftime('%Y-%m-%d %H:%M') }} · 마지막 활동: 추적 중 (Phase A-5-d 예정)
+                </div>
+                <div>
+                    <span class="badge bg-primary me-1">세션 {{ session_count }}</span>
+                    <span class="badge bg-info me-1">즐겨찾기 {{ favorite_count }}</span>
+                    <span class="badge bg-warning text-dark">누적시도 {{ attempt_count }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 탭 -->
+        <ul class="nav nav-tabs" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-sessions" type="button">분석 세션 ({{ session_count }})</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-favorites" type="button">즐겨찾기 ({{ favorite_count }})</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-attempts" type="button">누적 시도 ({{ attempt_count }})</button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <!-- 분석 세션 -->
+            <div class="tab-pane fade show active" id="tab-sessions">
+                {% if sessions %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>시작</th>
+                                <th>곡</th>
+                                <th>상태</th>
+                                <th class="hide-mobile">run_id</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in sessions %}
+                            <tr>
+                                <td class="meta">{{ s.created_at.strftime('%m-%d %H:%M') }}</td>
+                                <td>
+                                    {% if s.song %}
+                                        {{ s.song.title }} <span class="meta">· {{ s.song.artist }}</span>
+                                    {% elif s.song_title %}
+                                        {{ s.song_title }} <span class="meta">· 자유입력</span>
+                                    {% else %}
+                                        <span class="meta">자유녹음</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="badge bg-secondary">{{ s.status }}</span></td>
+                                <td class="hide-mobile"><code class="runid">{{ (s.session_id|string)[:8] }}</code></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if session_count > 50 %}
+                <p class="meta text-center my-2">최근 50개만 표시 (총 {{ session_count }})</p>
+                {% endif %}
+                {% else %}
+                <p class="meta text-center py-4">분석 세션 없음</p>
+                {% endif %}
+            </div>
+
+            <!-- 즐겨찾기 -->
+            <div class="tab-pane fade" id="tab-favorites">
+                {% if favorites %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>곡</th>
+                                <th>구간</th>
+                                <th class="hide-mobile">가사</th>
+                                <th>항목</th>
+                                <th class="hide-mobile">추가</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for f in favorites %}
+                            {% set song = fav_songs.get(f.song_id) %}
+                            <tr>
+                                <td>
+                                    {% if song %}{{ song.title }}<br><span class="meta">{{ song.artist }}</span>{% else %}{{ f.song_id }}{% endif %}
+                                </td>
+                                <td class="meta">{{ "%.1f"|format(f.chunk_start_sec) }}~{{ "%.1f"|format(f.chunk_end_sec) }}s</td>
+                                <td class="hide-mobile">{{ f.chunk_lrc_text or '-' }}</td>
+                                <td><span class="badge bg-info">{{ indicator_kr.get(f.indicator_key, f.indicator_key) }}</span></td>
+                                <td class="hide-mobile meta">{{ f.created_at.strftime('%m-%d %H:%M') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="meta text-center py-4">즐겨찾기 없음</p>
+                {% endif %}
+            </div>
+
+            <!-- 누적 시도 -->
+            <div class="tab-pane fade" id="tab-attempts">
+                {% if attempts %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>시점</th>
+                                <th class="hide-mobile">구간</th>
+                                <th>항목</th>
+                                <th>전→후</th>
+                                <th>변화</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in attempts %}
+                            <tr>
+                                <td class="meta">{{ a.attempted_at.strftime('%m-%d %H:%M') }}</td>
+                                <td class="hide-mobile meta">{{ "%.1f"|format(a.chunk_start_sec) }}~{{ "%.1f"|format(a.chunk_end_sec) }}s</td>
+                                <td><span class="badge bg-info">{{ indicator_kr.get(a.indicator_key, a.indicator_key) }}</span></td>
+                                <td>
+                                    {% if a.before_ai_score is not none %}{{ "%.2f"|format(a.before_ai_score) }}{% else %}-{% endif %}
+                                    →
+                                    {{ "%.2f"|format(a.after_ai_score) }}
+                                </td>
+                                <td>
+                                    {% if a.improvement is none %}
+                                        <span class="badge badge-imp-zero">-</span>
+                                    {% elif a.improvement > 0 %}
+                                        <span class="badge badge-imp-pos">+{{ "%.2f"|format(a.improvement) }}</span>
+                                    {% elif a.improvement < 0 %}
+                                        <span class="badge badge-imp-neg">{{ "%.2f"|format(a.improvement) }}</span>
+                                    {% else %}
+                                        <span class="badge badge-imp-zero">0.00</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if attempt_count > 100 %}
+                <p class="meta text-center my-2">최근 100개만 표시 (총 {{ attempt_count }})</p>
+                {% endif %}
+                {% else %}
+                <p class="meta text-center py-4">누적 시도 없음</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="meta text-center my-3">Vocal Fit Admin · Phase A-5-c</p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

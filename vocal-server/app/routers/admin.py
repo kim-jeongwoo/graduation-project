@@ -17,12 +17,14 @@ from sqlalchemy.orm import Session as DBSession
 from starlette.responses import StreamingResponse
 
 from sqlalchemy import func, not_, or_
+from sqlalchemy.orm import joinedload
 
 from app.database import get_db
 from app.event_store import get_events, subscribe, unsubscribe
 from app.models.models import (
     AnalysisRun,
     Session,
+    Song,
     TrainingAttempt,
     TrainingFavorite,
     User,
@@ -34,6 +36,19 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # Phase A-3, A-4에서 사용 예정
 templates = Jinja2Templates(directory="app/templates")
+
+# Phase A-5-c: 9개 평가 항목 한글 매핑 (앱과 동일)
+_INDICATOR_KR: dict[str, str] = {
+    "1_nasal_oral_ratio": "비강사용",
+    "2_chest_head_voice": "흉성두성",
+    "3_vocal_fold_contact": "접촉강도",
+    "4_breathiness": "호흡식별",
+    "5_forward_resonance": "전방공명",
+    "6_soft_palate": "연구개위치",
+    "7_larynx_tongue_root": "후두설근",
+    "8_tongue_tension": "혀경직도",
+    "9_pressure_balance": "상압하압",
+}
 
 # Phase A-5-b: 테스트 계정 식별 패턴 (이메일 prefix). 운영 계정 추가 시 영향 없음.
 # 새 테스트 패턴 생기면 여기에 추가. SQL LIKE 패턴 (% suffix).
@@ -248,6 +263,78 @@ def toggle_signup(request: Request):
     logger = __import__("logging").getLogger("uvicorn.error")
     logger.info(f"[admin] signup_enabled toggled to {new_state} by ip={get_client_ip(request)}")
     return RedirectResponse(url="/admin/users", status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/users/{user_id}", response_class=HTMLResponse, dependencies=[Depends(require_admin_auth)], include_in_schema=False)
+def get_user_detail(
+    user_id: uuid.UUID,
+    request: Request,
+    db: DBSession = Depends(get_db),
+):
+    """사용자 상세 페이지 — 분석 세션, 즐겨찾기, 누적 시도 통합 표시."""
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
+
+    session_count = db.query(func.count(Session.session_id)).filter(Session.user_id == user_id).scalar() or 0
+    favorite_count = db.query(func.count(TrainingFavorite.favorite_id)).filter(TrainingFavorite.user_id == user_id).scalar() or 0
+    attempt_count = db.query(func.count(TrainingAttempt.attempt_id)).filter(TrainingAttempt.user_id == user_id).scalar() or 0
+
+    sessions = (
+        db.query(Session)
+        .filter(Session.user_id == user_id)
+        .options(joinedload(Session.song))
+        .order_by(Session.created_at.desc())
+        .limit(50).all()
+    )
+    favorites = (
+        db.query(TrainingFavorite)
+        .filter(TrainingFavorite.user_id == user_id)
+        .order_by(TrainingFavorite.created_at.desc())
+        .all()
+    )
+    # TrainingFavorite.song relationship 없음 → song_id로 dict 매핑
+    fav_song_ids = list({f.song_id for f in favorites})
+    fav_songs = {s.id: s for s in db.query(Song).filter(Song.id.in_(fav_song_ids)).all()} if fav_song_ids else {}
+
+    attempts_raw = (
+        db.query(TrainingAttempt)
+        .filter(TrainingAttempt.user_id == user_id)
+        .order_by(TrainingAttempt.attempted_at.desc())
+        .limit(100).all()
+    )
+    attempts = []
+    for a in attempts_raw:
+        improvement = (
+            a.after_ai_score - a.before_ai_score
+            if a.before_ai_score is not None and a.after_ai_score is not None
+            else None
+        )
+        attempts.append({
+            "attempted_at": a.attempted_at,
+            "chunk_start_sec": a.chunk_start_sec,
+            "chunk_end_sec": a.chunk_end_sec,
+            "indicator_key": a.indicator_key,
+            "before_ai_score": a.before_ai_score,
+            "after_ai_score": a.after_ai_score,
+            "improvement": improvement,
+        })
+
+    return templates.TemplateResponse(
+        "admin/user_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "session_count": session_count,
+            "favorite_count": favorite_count,
+            "attempt_count": attempt_count,
+            "sessions": sessions,
+            "favorites": favorites,
+            "fav_songs": fav_songs,
+            "attempts": attempts,
+            "indicator_kr": _INDICATOR_KR,
+        },
+    )
 
 
 @router.get("/users/{user_id}/sessions", response_model=list[SessionBrief], dependencies=[Depends(require_admin_auth)])

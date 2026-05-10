@@ -1107,6 +1107,7 @@ result_json = results["result_json"]
 | POST | `/admin/logout` | 세션 clear → 302 `/admin/login` |
 | GET | `/admin/dashboard` | 실시간 활동 로그 대시보드 (HTML, 인증 필요) |
 | GET | `/admin/users` | 사용자 리스트 페이지 + 회원가입 토글 카드 (HTML, 인증 필요). Query: `show_test=true`로 테스트 계정 포함 |
+| GET | `/admin/users/{user_id}` | 사용자 상세 (HTML, 인증 필요): 분석 세션 50개 + 즐겨찾기 전체 + 누적 시도 100개 탭 |
 | POST | `/admin/signup-toggle` | 회원가입 ON/OFF 토글 (메모리 상태, 인증 필요) → 302 `/admin/users` |
 | GET | `/admin/api/users` | 사용자 리스트 JSON (dashboard JS용, 인증 필요) |
 | GET | `/admin/users/{id}/sessions`, `/admin/events`, `/admin/events/stream` | 인증 필요 |
