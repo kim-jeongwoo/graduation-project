@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 import uuid
 from collections import defaultdict
@@ -13,14 +11,11 @@ from threading import Lock
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session as DBSession
-from starlette.responses import StreamingResponse
-
 from sqlalchemy import func, not_, or_
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Session as DBSession, joinedload
 
 from app.database import get_db
-from app.event_store import get_events, subscribe, unsubscribe
+from app.event_store import get_events
 from app.models.models import (
     AnalysisRun,
     Session,
@@ -480,32 +475,74 @@ def list_user_sessions(user_id: uuid.UUID, db: DBSession = Depends(get_db)):
 # ─────────────────────────────────────────────
 @router.get("/events", dependencies=[Depends(require_admin_auth)])
 def list_events():
-    """최근 이벤트 리스트를 JSON으로 반환합니다."""
+    """최근 이벤트 리스트를 JSON으로 반환합니다 (기존 호환성)."""
     return get_events()
+
+
+# ─────────────────────────────────────────────
+# Phase A-5-e: 폴링 기반 실시간 로그 (SSE 폐기)
+# ─────────────────────────────────────────────
+@router.get("/logs", response_class=HTMLResponse, dependencies=[Depends(require_admin_auth)], include_in_schema=False)
+def logs_page(request: Request):
+    """실시간 로그 페이지 (5초 폴링)."""
+    return templates.TemplateResponse("admin/logs.html", {"request": request})
+
+
+@router.get("/api/events", dependencies=[Depends(require_admin_auth)], include_in_schema=False)
+def api_events(limit: int = 100, since: str | None = None):
+    """이벤트 리스트. since(ISO datetime) 이후만 + limit 제한."""
+    limit = max(1, min(limit, 500))
+    events = get_events()  # 이미 최신순 (deque appendleft)
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+            events = [e for e in events if datetime.fromisoformat(e["timestamp"]) > since_dt]
+        except (ValueError, TypeError):
+            pass  # 잘못된 since는 무시
+    return {
+        "events": events[:limit],
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/api/online-users", dependencies=[Depends(require_admin_auth)], include_in_schema=False)
+def api_online_users(db: DBSession = Depends(get_db)):
+    """5분 이내 활동한 사용자 목록 (현재 접속 중)."""
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=5)
+    users = (
+        db.query(User)
+        .filter(User.last_seen_at >= threshold)
+        .order_by(User.last_seen_at.desc())
+        .all()
+    )
+    return {
+        "users": [
+            {
+                "user_id": str(u.user_id),
+                "nickname": u.nickname,
+                "email": u.email,
+                "last_seen_at": u.last_seen_at.isoformat() if u.last_seen_at else None,
+                "last_endpoint": u.last_endpoint,
+                "activity_kr": _format_activity(u.last_endpoint),
+                "relative_time": _relative_time(u.last_seen_at),
+            }
+            for u in users
+        ],
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 # ─────────────────────────────────────────────
 # SSE 스트림
 # ─────────────────────────────────────────────
-@router.get("/events/stream", dependencies=[Depends(require_admin_auth)])
-async def event_stream(request: Request):
-    """SSE 스트림 – 실시간 이벤트를 푸시합니다."""
-    queue = subscribe()
-
-    async def _generate():
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
-        finally:
-            unsubscribe(queue)
-
-    return StreamingResponse(_generate(), media_type="text/event-stream")
+@router.get("/events/stream", dependencies=[Depends(require_admin_auth)], include_in_schema=False)
+def event_stream_deprecated():
+    """SSE 폐기 (Phase A-5-e). Cloudflare Tunnel(QUIC)에서 long-lived connection 끊김.
+    `/admin/logs` 페이지(5초 폴링)로 대체."""
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="SSE deprecated. Use /admin/logs (polling) instead.",
+    )
 
 
 # ─────────────────────────────────────────────

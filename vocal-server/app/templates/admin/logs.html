@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 로그 — Vocal Fit Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f1320; }
+        .navbar { background: #16213e; padding: .5rem 1rem; }
+        .navbar-brand { color: #a0c4ff !important; font-weight: 600; font-size: 1rem; }
+        .card { background: #16213e; border: 1px solid #2a3550; border-radius: 10px; }
+        .card-header { background: transparent; border-bottom: 1px solid #2a3550; padding: .6rem 1rem; font-size: .9rem; color: #a0c4ff; }
+        .table { color: #e0e0e0; margin-bottom: 0; }
+        .table thead th { color: #8899aa; border-bottom: 1px solid #2a3550; font-size: .8rem; padding: .5rem .6rem; }
+        .table tbody td { border-color: #1f2c4d; vertical-align: middle; padding: .5rem .6rem; font-size: .85rem; }
+        .table tbody tr.row-new { animation: flash 1.5s ease-out; }
+        @keyframes flash { from { background: #234c8a; } to { background: transparent; } }
+        .meta { color: #6b7b8d; font-size: .8rem; }
+        .badge-signup { background: #064e3b; color: #6ee7b7; }
+        .badge-login { background: #1e3a5f; color: #93c5fd; }
+        .online-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7; margin-right: 6px; }
+        .list-group-item { background: transparent; border-color: #1f2c4d; color: #e0e0e0; padding: .5rem .75rem; font-size: .9rem; }
+        @media (max-width: 768px) {
+            .hide-mobile { display: none !important; }
+            .table thead th, .table tbody td { padding: .4rem .4rem; font-size: .8rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar d-flex">
+        <span class="navbar-brand">🎤 Vocal Fit Admin</span>
+        <div class="ms-auto d-flex gap-2 align-items-center">
+            <span class="meta" id="last-update">대기 중...</span>
+            <a href="/admin/users" class="btn btn-sm btn-outline-light">← 사용자 리스트</a>
+            <form method="POST" action="/admin/logout" class="m-0">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">로그아웃</button>
+            </form>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3" style="max-width: 1100px;">
+
+        <!-- 현재 접속 중 -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>현재 접속 중 (5분 이내)</span>
+                <span class="meta"><span class="online-dot"></span><span id="online-count">0</span>명</span>
+            </div>
+            <ul class="list-group list-group-flush" id="online-users">
+                <li class="list-group-item meta">로딩 중...</li>
+            </ul>
+        </div>
+
+        <!-- 최근 이벤트 -->
+        <div class="card">
+            <div class="card-header">최근 이벤트 (회원가입 / 로그인)</div>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>시각</th>
+                            <th>이벤트</th>
+                            <th>닉네임</th>
+                            <th class="hide-mobile">이메일</th>
+                        </tr>
+                    </thead>
+                    <tbody id="events-tbody">
+                        <tr><td colspan="4" class="meta text-center py-3">로딩 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <p class="meta text-center my-3">5초마다 자동 갱신 · Vocal Fit Admin Phase A-5-e</p>
+    </div>
+
+    <script>
+        const POLL_MS = 5000;
+        let lastEventTimestamp = null;
+        let firstLoad = true;
+
+        function fmtTime(iso) {
+            const d = new Date(iso);
+            return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        }
+
+        function eventBadge(type) {
+            if (type === 'signup') return '<span class="badge badge-signup">🆕 회원가입</span>';
+            if (type === 'login')  return '<span class="badge badge-login">🔑 로그인</span>';
+            return `<span class="badge bg-secondary">${type}</span>`;
+        }
+
+        async function fetchEvents() {
+            try {
+                const url = '/admin/api/events?limit=100' + (lastEventTimestamp ? '&since=' + encodeURIComponent(lastEventTimestamp) : '');
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+
+                if (firstLoad) {
+                    // 전체 렌더
+                    renderAllEvents(data.events);
+                    firstLoad = false;
+                } else if (data.events.length > 0) {
+                    // 새 이벤트만 prepend (강조)
+                    prependNewEvents(data.events);
+                }
+                if (data.events.length > 0) {
+                    lastEventTimestamp = data.events[0].timestamp;
+                }
+                document.getElementById('last-update').textContent = '갱신 ' + fmtTime(data.server_time);
+            } catch (e) {
+                document.getElementById('last-update').textContent = '오류: ' + e.message;
+            }
+        }
+
+        function renderAllEvents(events) {
+            const tbody = document.getElementById('events-tbody');
+            if (events.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="meta text-center py-3">아직 이벤트 없음</td></tr>';
+                return;
+            }
+            tbody.innerHTML = events.map(e => `
+                <tr>
+                    <td class="meta">${fmtTime(e.timestamp)}</td>
+                    <td>${eventBadge(e.event_type)}</td>
+                    <td>${e.nickname || '-'}</td>
+                    <td class="hide-mobile meta">${e.email || '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function prependNewEvents(events) {
+            const tbody = document.getElementById('events-tbody');
+            // 빈 상태였으면 클리어
+            if (tbody.querySelector('.text-center.py-3')) tbody.innerHTML = '';
+            // 새 이벤트는 historical (server는 최신순) — 위에서부터 추가
+            events.reverse().forEach(e => {
+                const tr = document.createElement('tr');
+                tr.className = 'row-new';
+                tr.innerHTML = `
+                    <td class="meta">${fmtTime(e.timestamp)}</td>
+                    <td>${eventBadge(e.event_type)}</td>
+                    <td>${e.nickname || '-'}</td>
+                    <td class="hide-mobile meta">${e.email || '-'}</td>
+                `;
+                tbody.prepend(tr);
+            });
+            // 최대 100개 유지
+            while (tbody.children.length > 100) tbody.lastChild.remove();
+        }
+
+        async function fetchOnline() {
+            try {
+                const res = await fetch('/admin/api/online-users');
+                if (!res.ok) return;
+                const data = await res.json();
+                const ul = document.getElementById('online-users');
+                document.getElementById('online-count').textContent = data.users.length;
+                if (data.users.length === 0) {
+                    ul.innerHTML = '<li class="list-group-item meta">현재 접속 중인 사용자 없음</li>';
+                    return;
+                }
+                ul.innerHTML = data.users.map(u => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span><strong>${u.nickname}</strong> <span class="meta">· ${u.email}</span></span>
+                        <span class="meta">${u.relative_time} · ${u.activity_kr}</span>
+                    </li>
+                `).join('');
+            } catch (e) { /* silent */ }
+        }
+
+        // 시작 + 폴링
+        fetchEvents(); fetchOnline();
+        setInterval(fetchEvents, POLL_MS);
+        setInterval(fetchOnline, POLL_MS);
+    </script>
+</body>
+</html>

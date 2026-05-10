@@ -1105,7 +1105,11 @@ result_json = results["result_json"]
 | GET | `/admin/login` | 로그인 페이지 (HTML) |
 | POST | `/admin/login` | form `password` 제출 → 302 `/admin/dashboard` (성공) / `?error=invalid_password` (실패) |
 | POST | `/admin/logout` | 세션 clear → 302 `/admin/login` |
-| GET | `/admin/dashboard` | 실시간 활동 로그 대시보드 (HTML, 인증 필요) |
+| GET | `/admin/dashboard` | (구) SSE 대시보드 — 사용 비권장. `/admin/logs`로 대체 |
+| GET | `/admin/logs` | 실시간 로그 페이지 (HTML, 5초 폴링, 인증 필요) |
+| GET | `/admin/api/events` | 이벤트 JSON (`?limit=&since=`, 인증 필요) |
+| GET | `/admin/api/online-users` | 5분 이내 활동 사용자 JSON (인증 필요) |
+| GET | `/admin/events/stream` | **폐기** (410 Gone). Cloudflare Tunnel SSE 불안정 → 폴링 전환 |
 | GET | `/admin/users` | 사용자 리스트 페이지 + 회원가입 토글 카드 (HTML, 인증 필요). Query: `show_test=true`로 테스트 계정 포함 |
 | GET | `/admin/users/{user_id}` | 사용자 상세 (HTML, 인증 필요): 분석 세션 50개 + 즐겨찾기 전체 + 누적 시도 100개 탭 |
 | POST | `/admin/signup-toggle` | 회원가입 ON/OFF 토글 (메모리 상태, 인증 필요) → 302 `/admin/users` |
