@@ -41,6 +41,9 @@ class User(Base):
     updated_at = Column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
     )
+    # Phase A-5-d: 활동 추적 (admin 페이지 표시용, 5분 throttle)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    last_endpoint = Column(String(100), nullable=True)
 
     # relationships
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")

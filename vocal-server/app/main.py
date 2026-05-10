@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.middleware.activity_tracker import ActivityTrackerMiddleware
 from app.routers import admin, analysis, auth, files, sessions, songs, training
 from app.state import app_state
 
@@ -16,6 +17,9 @@ import app.models.models  # noqa: F401
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Vocal Server", version="0.1.0")
+
+# Phase A-5-d: 일반 사용자 활동 추적 (admin/health/docs 제외, 5분 throttle)
+app.add_middleware(ActivityTrackerMiddleware)
 
 # Admin SessionMiddleware (admin.vocal-fit.com 로그인 세션용)
 app.add_middleware(

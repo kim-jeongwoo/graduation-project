@@ -52,7 +52,11 @@
                     <span class="meta">{{ user.email }}</span>
                 </div>
                 <div class="meta mb-2">
-                    가입 {{ user.created_at.strftime('%Y-%m-%d %H:%M') }} · 마지막 활동: 추적 중 (Phase A-5-d 예정)
+                    가입 {{ user.created_at.strftime('%Y-%m-%d %H:%M') }} ·
+                    <span class="badge {{ activity_cls }}">{{ activity_label }}</span>
+                    {% if user.last_seen_at %}
+                    · {{ relative_time }}{% if user.last_endpoint %} · {{ activity_kr }}{% endif %}
+                    {% endif %}
                 </div>
                 <div>
                     <span class="badge bg-primary me-1">세션 {{ session_count }}</span>
@@ -102,7 +106,7 @@
                                         <span class="meta">자유녹음</span>
                                     {% endif %}
                                 </td>
-                                <td><span class="badge bg-secondary">{{ s.status }}</span></td>
+                                <td><span class="badge {{ s.status_cls }}">{{ s.status_label }}</span></td>
                                 <td class="hide-mobile"><code class="runid">{{ (s.session_id|string)[:8] }}</code></td>
                             </tr>
                             {% endfor %}

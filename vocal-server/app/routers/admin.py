@@ -7,7 +7,7 @@ import json
 import os
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -36,6 +36,98 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # Phase A-3, A-4에서 사용 예정
 templates = Jinja2Templates(directory="app/templates")
+
+# Phase A-5-d: 활동 endpoint 한글 매핑
+_ACTIVITY_KR: dict[str, str] = {
+    "POST /auth/login": "로그인",
+    "POST /auth/signup": "회원가입",
+    "POST /sessions": "세션 생성",
+    "GET /sessions": "세션 목록 조회",
+    "GET /sessions/{id}": "세션 상세 조회",
+    "POST /sessions/{id}/files": "파일 업로드",
+    "POST /sessions/{id}/analyze": "정식 분석 요청",
+    "GET /analysis/{id}": "분석 상태 조회",
+    "GET /analysis/{id}/results": "분석 결과 조회",
+    "GET /analysis/{id}/comparison": "비교 분석 조회",
+    "GET /analysis/{id}/user_f0": "F0 데이터 조회",
+    "POST /sessions/{id}/training-analyze": "사후 측정 (TrainingScreen)",
+    "GET /songs": "곡 목록 조회",
+    "GET /songs/{id}/lrc": "가사 조회",
+    "GET /songs/{id}/pitch-guide": "음정 가이드 조회",
+    "GET /songs/{id}/mr": "MR 음원 조회",
+    "GET /users/me/training-attempts": "누적 시도 조회",
+    "GET /users/me/favorites": "즐겨찾기 조회",
+    "POST /users/me/favorites": "즐겨찾기 추가",
+    "DELETE /users/me/favorites/{id}": "즐겨찾기 제거",
+}
+
+# Phase A-5-d: 분석 status 라벨 통일 (DB 값은 그대로, 화면만 한글)
+_STATUS_KR: dict[str | None, str] = {
+    "success": "완료",
+    "completed": "완료",
+    "no_voice": "무음",
+    "failed": "실패",
+    "queued": "대기 중",
+    "running": "분석 중",
+    "uploading": "업로드 중",
+    "uploaded": "업로드 완료",
+    "analyzing": "분석 중",
+    None: "-",
+}
+
+
+def _format_activity(method_path: str | None) -> str:
+    if not method_path:
+        return "-"
+    return _ACTIVITY_KR.get(method_path, method_path)
+
+
+def _format_status(s: str | None) -> str:
+    return _STATUS_KR.get(s, s or "-")
+
+
+def _status_badge_class(s: str | None) -> str:
+    if s in ("success", "completed"):
+        return "bg-success"
+    if s == "no_voice":
+        return "bg-secondary"
+    if s == "failed":
+        return "bg-danger"
+    if s in ("queued", "running", "uploading", "analyzing"):
+        return "bg-warning text-dark"
+    return "bg-secondary"
+
+
+def _relative_time(dt: datetime | None) -> str:
+    if dt is None:
+        return "사용 안 함"
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    elapsed = (now - dt).total_seconds()
+    if elapsed < 60:
+        return "방금"
+    if elapsed < 3600:
+        return f"{int(elapsed // 60)}분 전"
+    if elapsed < 86400:
+        return f"{int(elapsed // 3600)}시간 전"
+    return f"{int(elapsed // 86400)}일 전"
+
+
+def _activity_status(dt: datetime | None) -> tuple[str, str]:
+    """(라벨, badge class) — 사용 안 함 / 접속 중 / 최근 활동 / 미접속."""
+    if dt is None:
+        return ("사용 안 함", "bg-secondary")
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    elapsed = (now - dt).total_seconds()
+    if elapsed < 5 * 60:
+        return ("접속 중", "bg-success")
+    if elapsed < 30 * 60:
+        return ("최근 활동", "bg-warning text-dark")
+    return ("미접속", "bg-secondary")
+
 
 # Phase A-5-c: 9개 평가 항목 한글 매핑 (앱과 동일)
 _INDICATOR_KR: dict[str, str] = {
@@ -228,18 +320,27 @@ def list_all_users_page(
         q = q.filter(not_(test_email_filter))
 
     rows = q.order_by(User.created_at.desc()).all()
-    users = [
-        {
+    users = []
+    online_count = 0
+    for (u, s, f, a) in rows:
+        status_label, status_cls = _activity_status(u.last_seen_at)
+        if status_label == "접속 중":
+            online_count += 1
+        users.append({
             "user_id": u.user_id,
             "email": u.email,
             "nickname": u.nickname,
             "created_at": u.created_at,
+            "last_seen_at": u.last_seen_at,
+            "last_endpoint": u.last_endpoint,
+            "activity_label": status_label,
+            "activity_cls": status_cls,
+            "relative_time": _relative_time(u.last_seen_at),
+            "activity_kr": _format_activity(u.last_endpoint),
             "sessions": int(s),
             "favorites": int(f),
             "attempts": int(a),
-        }
-        for (u, s, f, a) in rows
-    ]
+        })
     return templates.TemplateResponse(
         "admin/users.html",
         {
@@ -249,6 +350,7 @@ def list_all_users_page(
             "total_all": total_all,
             "op_count": op_count,
             "test_count": test_count,
+            "online_count": online_count,
             "show_test": show_test,
             "signup_enabled": app_state.signup_enabled,
         },
@@ -320,6 +422,22 @@ def get_user_detail(
             "improvement": improvement,
         })
 
+    activity_label, activity_cls = _activity_status(user.last_seen_at)
+
+    # 세션 status 한글 + badge class를 미리 계산해서 템플릿에 전달
+    sessions_view = [
+        {
+            "session_id": s.session_id,
+            "created_at": s.created_at,
+            "song": s.song,
+            "song_title": s.song_title,
+            "status_raw": s.status,
+            "status_label": _format_status(s.status),
+            "status_cls": _status_badge_class(s.status),
+        }
+        for s in sessions
+    ]
+
     return templates.TemplateResponse(
         "admin/user_detail.html",
         {
@@ -328,11 +446,15 @@ def get_user_detail(
             "session_count": session_count,
             "favorite_count": favorite_count,
             "attempt_count": attempt_count,
-            "sessions": sessions,
+            "sessions": sessions_view,
             "favorites": favorites,
             "fav_songs": fav_songs,
             "attempts": attempts,
             "indicator_kr": _INDICATOR_KR,
+            "activity_label": activity_label,
+            "activity_cls": activity_cls,
+            "relative_time": _relative_time(user.last_seen_at),
+            "activity_kr": _format_activity(user.last_endpoint),
         },
     )
 

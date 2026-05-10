@@ -69,6 +69,9 @@
                 <span>
                     등록된 사용자 ·
                     <strong style="color:#a0c4ff;">{{ shown_users }}</strong>명
+                    {% if online_count > 0 %}
+                    · <span style="color:#6ee7b7;">접속 중 {{ online_count }}명</span>
+                    {% endif %}
                     {% if show_test %}
                     <span class="meta">(운영 {{ op_count }}, 테스트 {{ test_count }})</span>
                     {% endif %}
@@ -89,6 +92,8 @@
                         <tr>
                             <th>닉네임</th>
                             <th>이메일</th>
+                            <th>상태</th>
+                            <th>마지막 활동</th>
                             <th class="hide-mobile">가입일시</th>
                             <th class="text-center">세션</th>
                             <th class="text-center hide-mobile">즐겨찾기</th>
@@ -100,13 +105,17 @@
                         <tr onclick="location.href='/admin/users/{{ u.user_id }}'" style="cursor: pointer;">
                             <td><strong>{{ u.nickname }}</strong></td>
                             <td>{{ u.email }}</td>
+                            <td><span class="badge {{ u.activity_cls }}">{{ u.activity_label }}</span></td>
+                            <td class="meta">
+                                {{ u.relative_time }}{% if u.last_endpoint %} · {{ u.activity_kr }}{% endif %}
+                            </td>
                             <td class="hide-mobile meta">{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                             <td class="text-center"><span class="count-pill {% if u.sessions == 0 %}zero{% endif %}">{{ u.sessions }}</span></td>
                             <td class="text-center hide-mobile"><span class="count-pill {% if u.favorites == 0 %}zero{% endif %}">{{ u.favorites }}</span></td>
                             <td class="text-center hide-mobile"><span class="count-pill {% if u.attempts == 0 %}zero{% endif %}">{{ u.attempts }}</span></td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="6" class="text-center meta py-4">사용자 없음</td></tr>
+                        <tr><td colspan="8" class="text-center meta py-4">사용자 없음</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

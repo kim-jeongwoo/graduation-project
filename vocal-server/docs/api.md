@@ -1116,6 +1116,13 @@ result_json = results["result_json"]
 
 **테스트 계정 필터** (`/admin/users` Query `show_test`): 기본 false → 운영 계정만 표시. 테스트 계정은 이메일 prefix 패턴(`test_a_`, `test_b_`, `hdrtest_`, `tmtest_`, `trtest`, `raw_`, `p7a_`/`p7b_`, `sigtest_`, `toggle_test_`, `signup_check`)으로 자동 식별. `show_test=true` 시 전체 표시 + 운영/테스트 분리 카운트.
 
+**활동 추적** (Phase A-5-d): `ActivityTrackerMiddleware`가 인증된 일반 사용자 요청을 추적하여 `users.last_seen_at`, `users.last_endpoint`에 기록.
+- **추적 제외**: `/admin/*`, `/health`, `/docs`, `/openapi.json`, `/redoc`, `/static`
+- **Throttle**: 같은 user + 같은 endpoint 5분 이내면 DB UPDATE 스킵 (메모리 캐시, 단일 인스턴스 한정)
+- **경로 정규화**: UUID·hex(12+자리)·3자리 song_id → `{id}` (예: `/sessions/abc-...-def/analyze` → `POST /sessions/{id}/analyze`)
+- **Best-effort**: 추적 실패는 로그만 남기고 응답에 영향 없음
+- **상태 라벨**: admin 화면에서만 `success`/`completed` → `완료`, `no_voice` → `무음` 한글 통일 (DB 값은 그대로 — vocal-app 호환성)
+
 **인증**: `SessionMiddleware` 기반 `admin_session` 쿠키 (24시간, https_only, lax). 미인증 시 401.
 
 **Rate limit**: 5분 윈도우 내 실패 5회 → 5분 차단 (IP 기준, X-Forwarded-For 사용). `?error=rate_limited&retry={seconds}` redirect로 안내. 메모리 기반이라 서버 재시작 시 초기화.
