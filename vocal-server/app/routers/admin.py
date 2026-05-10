@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as DBSession
 from starlette.responses import StreamingResponse
 
-from sqlalchemy import func
+from sqlalchemy import func, not_, or_
 
 from app.database import get_db
 from app.event_store import get_events, subscribe, unsubscribe
@@ -34,6 +34,19 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # Phase A-3, A-4에서 사용 예정
 templates = Jinja2Templates(directory="app/templates")
+
+# Phase A-5-b: 테스트 계정 식별 패턴 (이메일 prefix). 운영 계정 추가 시 영향 없음.
+# 새 테스트 패턴 생기면 여기에 추가. SQL LIKE 패턴 (% suffix).
+_TEST_EMAIL_LIKE_PATTERNS: list[str] = [
+    "test_a_%", "test_b_%",          # test_integration.py 사용자A/B
+    "hdrtest_%", "tmtest_%",          # test_headers.py, test_timeline.py
+    "trtest_%", "trtest2_%",          # test_training.py
+    "raw_%",                          # test_training_raw.py
+    "p7a_%", "p7b_%",                 # test_phase7.py
+    "sigtest_%", "sigtest_back_%",    # signup 토글 단위
+    "toggle_test_%", "toggle_status_check%",  # admin 토글 검증
+    "signup_check%",                  # signup_toggle.sh 검증
+]
 
 
 # ─────────────────────────────────────────────
@@ -158,9 +171,13 @@ def list_all_users_json(db: DBSession = Depends(get_db)):
 
 
 @router.get("/users", response_class=HTMLResponse, dependencies=[Depends(require_admin_auth)], include_in_schema=False)
-def list_all_users_page(request: Request, db: DBSession = Depends(get_db)):
-    """사용자 리스트 HTML 페이지 + 토글 카드."""
-    # User + 카운트 (N+1 방지: subquery)
+def list_all_users_page(
+    request: Request,
+    show_test: bool = False,
+    db: DBSession = Depends(get_db),
+):
+    """사용자 리스트 HTML 페이지 + 토글 카드. show_test=true로 테스트 계정 표시."""
+    # 카운트 (N+1 방지: subquery)
     session_count = (
         db.query(Session.user_id, func.count(Session.session_id).label("c"))
         .group_by(Session.user_id).subquery()
@@ -173,7 +190,15 @@ def list_all_users_page(request: Request, db: DBSession = Depends(get_db)):
         db.query(TrainingAttempt.user_id, func.count(TrainingAttempt.attempt_id).label("c"))
         .group_by(TrainingAttempt.user_id).subquery()
     )
-    rows = (
+
+    test_email_filter = or_(*[User.email.like(p) for p in _TEST_EMAIL_LIKE_PATTERNS])
+
+    # 운영/테스트 분리 카운트
+    total_all = db.query(func.count(User.user_id)).scalar() or 0
+    test_count = db.query(func.count(User.user_id)).filter(test_email_filter).scalar() or 0
+    op_count = total_all - test_count
+
+    q = (
         db.query(
             User,
             func.coalesce(session_count.c.c, 0).label("sessions"),
@@ -183,9 +208,11 @@ def list_all_users_page(request: Request, db: DBSession = Depends(get_db)):
         .outerjoin(session_count, session_count.c.user_id == User.user_id)
         .outerjoin(fav_count, fav_count.c.user_id == User.user_id)
         .outerjoin(att_count, att_count.c.user_id == User.user_id)
-        .order_by(User.created_at.desc())
-        .all()
     )
+    if not show_test:
+        q = q.filter(not_(test_email_filter))
+
+    rows = q.order_by(User.created_at.desc()).all()
     users = [
         {
             "user_id": u.user_id,
@@ -203,7 +230,11 @@ def list_all_users_page(request: Request, db: DBSession = Depends(get_db)):
         {
             "request": request,
             "users": users,
-            "total_users": len(users),
+            "shown_users": len(users),
+            "total_all": total_all,
+            "op_count": op_count,
+            "test_count": test_count,
+            "show_test": show_test,
             "signup_enabled": app_state.signup_enabled,
         },
     )
