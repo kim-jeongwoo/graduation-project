@@ -180,9 +180,13 @@ TrainingScreen 관련 작업이 5/9 데드라인 이후 vocal-server에도 영�
 - vocal-server 코드 수정 0줄 — `result_json = data` 통째 통과 패턴으로 자동 호환
 - v2 신규 필드 통과 검증: `score_mapper_version`, `scores_v2`, `scores_meta`, `academic_analysis_scores`, `reliability.{shown_v2, shown_v2_tiers, academic_only_v2, deferred_v2}` 모두 DB 저장 + 응답 정상
 - `_ANALYZE_TIMEOUT` 120s → **180s** (cold start + 긴 wav 여유)
-- ⚠️ **백로그 — Cloudflare 100s origin timeout 한계**: 무료/Pro 플랜 고정. 100s 초과 응답은 524 발생.
-  - 단기 회피: 앱에서 90초 이내 wav만 사용
-  - 장기 검토: 청크 분할 또는 비동기 처리 (시연 후)
+
+### dml-server StreamingResponse 자동 통과 (2026-05-12, P1-2)
+- dml-server `/_test_stream?duration=130` (chunked + leading whitespace keepalive) 실측 검증
+- 결과: HTTP 200 / 130.7s (Cloudflare 524 발생 안 함) / `Transfer-Encoding: chunked` / 첫 30 bytes `'                           {"t'` (leading whitespace ping) / `response.json()` 정상 파싱
+- httpx 동기 `httpx.post(...).json()` 패턴이 leading whitespace를 RFC 7159 따라 자동 허용 → vocal-server 코드 수정 0
+- **Cloudflare timeout 수치 확정**: 130s 응답 통과 → Cloudflare edge timeout은 **TTFB 기준** (first byte 보내면 그 뒤로 무관). 이전 5/11 측정 127s 524는 dml-server가 첫 byte를 끝까지 안 보내서 발생한 것.
+- 백로그 (Cloudflare 100s 한계)는 StreamingResponse 도입으로 해결됨 — vocal-server 측 추가 작업 없음
 
 ---
 
