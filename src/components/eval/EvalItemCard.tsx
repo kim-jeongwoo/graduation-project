@@ -23,6 +23,7 @@ interface EvalItemCardProps {
   tier?:    ScoreTier;
   tooltip?: string | null;
   isHighlighted?: boolean;  // 호흡 카드 정적 글로우 (v2)
+  isDimmed?: boolean;        // 비활성 항목 카드 전체 어둡게
 }
 
 export default function EvalItemCard({
@@ -38,6 +39,7 @@ export default function EvalItemCard({
   tier,
   tooltip,
   isHighlighted = false,
+  isDimmed = false,
 }: EvalItemCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -47,6 +49,7 @@ export default function EvalItemCard({
       styles.card,
       isFocus && styles.focusCard,
       isHighlighted && styles.highlightCard,
+      isDimmed && styles.dimmedCard,
     ]}>
       {/* 상단: 항목명 + 뱃지 + (옵션) 훈련 버튼 */}
       <View style={styles.header}>
@@ -110,6 +113,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.6,
     shadowRadius:  8,
     elevation:     8,
+  },
+  // 비활성 항목 (academic_only_v2 + deferred_v2) 카드 전체 어둡게
+  dimmedCard: {
+    opacity: 0.55,
   },
   header: {
     flexDirection: 'row',

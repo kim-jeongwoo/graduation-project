@@ -346,15 +346,23 @@ export default function EvalResultScreen({ route, navigation }: Props) {
     );
   }
 
-  const basicItems: EvaluationItemKey[] = [
-    ...BASE_ITEMS,
-    ...FOCUS_ITEMS_FROM_USER.filter(k => !BASE_ITEMS.includes(k)),
-  ];
-  const advancedItems: EvaluationItemKey[] = [
-    ...result.reliability.high_reliability,
-    ...result.reliability.medium_reliability,
-    ...result.reliability.unavailable,
-  ];
+  // v2 카드 순서 (정우 신규 spec):
+  //   기본 탭 (4 active):  breathiness / vocal_fold_contact / soft_palate / tongue_tension
+  //   고급 탭 (5 inactive): nasal_oral_ratio / chest_head_voice / forward_resonance / pressure_balance / larynx_tongue_root
+  const BASIC_V2:    EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact', 'soft_palate', 'tongue_tension'];
+  const ADVANCED_V2: EvaluationItemKey[] = ['nasal_oral_ratio', 'chest_head_voice', 'forward_resonance', 'pressure_balance', 'larynx_tongue_root'];
+
+  const isV2 = result.scoreMapperVersion === 'v2';
+  const basicItems: EvaluationItemKey[] = isV2
+    ? BASIC_V2
+    : [...BASE_ITEMS, ...FOCUS_ITEMS_FROM_USER.filter(k => !BASE_ITEMS.includes(k))];
+  const advancedItems: EvaluationItemKey[] = isV2
+    ? ADVANCED_V2
+    : [
+        ...result.reliability.high_reliability,
+        ...result.reliability.medium_reliability,
+        ...result.reliability.unavailable,
+      ];
 
   const renderCard = (key: EvaluationItemKey) => {
     const meta       = EVALUATION_ITEMS.find(m => m.key === key)!;
@@ -421,6 +429,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         tier={result.scoresMeta?.[key]?.tier}
         tooltip={result.scoresMeta?.[key]?.tooltip}
         isHighlighted={key === 'breathiness' && result.scoreMapperVersion === 'v2'}
+        isDimmed={result.scoreMapperVersion === 'v2' && trainDisabled}
       />
     );
   };
