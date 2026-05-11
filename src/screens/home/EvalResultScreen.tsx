@@ -360,12 +360,13 @@ export default function EvalResultScreen({ route, navigation }: Props) {
     const confidence = scoreEntry?.confidence ?? meta.defaultConfidence;
     const nameKo     = fb?.name_ko ?? meta.nameKo;
 
-    // 9항목 모두 동적 분기 (timeline_metadata.shown_indicators 기반 활성화)
-    // 5월 중순 데이터 학습 후 server가 shown_indicators에 항목 추가하면 자동 활성화
-    // 단 SectionList/Training 코어 확장 전까지는 호흡/접촉 외 7항목은 "준비 중" Alert
+    // 9항목 모두 동적 분기 — v2 분기: reliability.shownV2 우선, fallback: timelineMetadata.shownIndicators
+    // SectionList/Training 코어는 호흡/접촉만 지원 (나머지는 "준비 중" Alert)
     const SUPPORTED: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact'];
-    const shownStripped = (result.timelineMetadata?.shownIndicators ?? [])
-      .map(s => s.replace(/^\d+_/, '') as EvaluationItemKey);
+    const shownStripped: EvaluationItemKey[] = result.scoreMapperVersion === 'v2' && result.reliability.shownV2
+      ? result.reliability.shownV2
+      : (result.timelineMetadata?.shownIndicators ?? [])
+          .map(s => s.replace(/^\d+_/, '') as EvaluationItemKey);
     const isShown       = shownStripped.includes(key);
     const trainDisabled = !isShown;
     const onTrainPress = () => {
