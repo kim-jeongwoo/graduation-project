@@ -157,3 +157,9 @@ vocal-server/          ← 이 폴더 (모노레포 내 서브프로젝트)
   해결: plist 수동 작성으로 ProgramArguments에 `--config /etc/cloudflared/config.yml tunnel run` 명시.
   또는 config.yml을 `/etc/cloudflared/` 시스템 위치에 복사 후 root 권한 접근 가능하게.
   현재 설정: `~/.cloudflared/config.yml`, 터널 ID `b929f13d-0429-4fe6-aaa2-c4056b38b16f`.
+
+- [2026-05-11] [Cloudflare 100s 한계] Cloudflare Tunnel 무료/Pro 플랜은 origin timeout 100s 고정.
+  vocal-server `_ANALYZE_TIMEOUT`을 늘려도 Cloudflare가 먼저 끊음 (HTTP 524).
+  긴 응답 (>100s)은 청크 분할 또는 비동기 처리 필요.
+  이전 작업에서 `_ANALYZE_TIMEOUT` 120s → 180s 늘렸지만 Cloudflare 한계는 별도.
+  v2 score_mapper로 모델 cold start 시 127s 이상 가능 — 짧은 wav (90s 이내) 권장.

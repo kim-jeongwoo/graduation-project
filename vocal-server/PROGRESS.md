@@ -176,6 +176,14 @@ TrainingScreen 관련 작업이 5/9 데드라인 이후 vocal-server에도 영�
 - Cloudflare Tunnel: `https://api.vocal-fit.com` (launchd 자동 실행)
 - JWT 만료: `JWT_EXPIRE_DAYS=7` 환경변수화
 
+### dml-server score_mapper v2 자동 통과 (2026-05-11)
+- vocal-server 코드 수정 0줄 — `result_json = data` 통째 통과 패턴으로 자동 호환
+- v2 신규 필드 통과 검증: `score_mapper_version`, `scores_v2`, `scores_meta`, `academic_analysis_scores`, `reliability.{shown_v2, shown_v2_tiers, academic_only_v2, deferred_v2}` 모두 DB 저장 + 응답 정상
+- `_ANALYZE_TIMEOUT` 120s → **180s** (cold start + 긴 wav 여유)
+- ⚠️ **백로그 — Cloudflare 100s origin timeout 한계**: 무료/Pro 플랜 고정. 100s 초과 응답은 524 발생.
+  - 단기 회피: 앱에서 90초 이내 wav만 사용
+  - 장기 검토: 청크 분할 또는 비동기 처리 (시연 후)
+
 ---
 
 ## 9. 운영 명령어

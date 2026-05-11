@@ -14,7 +14,7 @@ from app.models.models import AnalysisResult, AnalysisRun, Session, SessionFile
 
 logger = logging.getLogger("uvicorn.error")
 
-_ANALYZE_TIMEOUT = 120.0
+_ANALYZE_TIMEOUT = 180.0  # dml-server v2 cold start + 긴 wav 여유 (단, Cloudflare 100s가 먼저 끊을 수 있음)
 
 
 def run_analysis(run: AnalysisRun, session: Session, db: DBSession) -> AnalysisRun:

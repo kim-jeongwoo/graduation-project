@@ -439,8 +439,11 @@ curl -X POST http://host:8000/sessions/{session_id}/training-analyze \
 
 ### POST /sessions/{session_id}/analyze
 
-AI 분석 요청. **동기 처리** — 응답까지 10~30초 소요 (타임아웃 최소 60초 권장).  
+AI 분석 요청. **동기 처리** — 응답까지 10~90초 소요 (v2 model_mapper, wav 길이에 따라).  
 세션 `status`가 `uploaded` 상태여야 합니다.
+
+> ⚠️ **Cloudflare Tunnel 100s origin timeout 한계**: 외부 노출 환경(`https://api.vocal-fit.com`)은 Cloudflare 무료/Pro 플랜의 origin timeout 100s 고정. dml-server 응답이 100s를 초과하면 **HTTP 524**로 끊김 (vocal-server `_ANALYZE_TIMEOUT=180s`로 늘려도 Cloudflare가 먼저 끊음).  
+> **권장**: 분석 wav는 **90초 이내** (짧은 청크). 긴 곡은 앱에서 청크 분할 후 여러 번 호출. 향후 백로그: 청크 분할 또는 비동기(폴링) 처리 검토.
 
 ```http
 POST /sessions/{session_id}/analyze
