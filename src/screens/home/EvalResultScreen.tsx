@@ -50,20 +50,20 @@ function scoreColor(pct: number | null): string {
   return '#ffb4ab';
 }
 
-type VisualizationMode = 'pitch' | 'breathiness' | 'vocalFoldContact';
+type VisualizationMode = 'pitch' | 'breathiness' | 'vocalFoldContact' | 'softPalate' | 'tongueTension';
 type RawSeg = { start: number; end: number; midi: number };
 type UserF0 = { frameHz: number; values: (number | null)[] };
 
-const MODE_BUTTONS: { id: string; label: string; active: boolean }[] = [
+const MODE_BUTTONS: { id: string; label: string; active: boolean; v2Only?: boolean }[] = [
   { id: 'pitch',            label: '음정',          active: true  },
   { id: 'breathiness',      label: '호흡소리식별',   active: true  },
   { id: 'vocalFoldContact', label: '성대접촉강도',   active: true  },
+  { id: 'softPalate',       label: '연구개위치',     active: true, v2Only: true },
+  { id: 'tongueTension',    label: '혀경직도',       active: true, v2Only: true },
   { id: 'nasal',            label: '비강구강공명비율', active: false },
   { id: 'register',         label: '흉성두성경향',   active: false },
   { id: 'resonance',        label: '전방공명정도',   active: false },
-  { id: 'velum',            label: '연구개위치',     active: false },
   { id: 'larynx',           label: '후두혀뿌리위치', active: false },
-  { id: 'tongue',           label: '혀구강공간경직도', active: false },
   { id: 'pressure',         label: '상압하압비율',   active: false },
 ];
 
@@ -113,11 +113,13 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
         const diff = Math.abs(midi - nearest.midi);
         return diff < 0.5 ? '#59dda5' : diff < 1.0 ? '#ffb780' : '#ffb4ab';
       }
-      // breathiness / vocalFoldContact — chunk zone 기준
+      // breathiness / vocalFoldContact / softPalate / tongueTension — chunk zone 기준 (v2)
       const chunk = timelineScores.find(c => tMaster >= c.startSec && tMaster <= c.endSec);
-      const zone  = activeMode === 'breathiness'
-        ? chunk?.scores.breathiness?.zone
-        : chunk?.scores.vocalFoldContact?.zone;
+      const zone  = activeMode === 'breathiness'      ? chunk?.scores.breathiness?.zone
+                  : activeMode === 'vocalFoldContact' ? chunk?.scores.vocalFoldContact?.zone
+                  : activeMode === 'softPalate'       ? chunk?.scores.softPalate?.zone
+                  : activeMode === 'tongueTension'    ? chunk?.scores.tongueTension?.zone
+                  : undefined;
       if (!zone) return '#7ecfff';
       return zone === 'appropriate' ? '#59dda5' : '#ffb4ab';
     };
@@ -209,6 +211,11 @@ const tlStyles = StyleSheet.create({
 });
 
 // ─── Color legend ───
+const ZONE_LEGEND = [
+  { color: '#59dda5', label: '적절' },
+  { color: '#ffb4ab', label: '과함/미달' },
+  { color: '#7ecfff', label: '데이터 없음' },
+];
 const LEGEND_ITEMS: Record<VisualizationMode, Array<{ color: string; label: string }>> = {
   pitch: [
     { color: '#59dda5', label: '정확 (≤0.5반음)' },
@@ -216,14 +223,10 @@ const LEGEND_ITEMS: Record<VisualizationMode, Array<{ color: string; label: stri
     { color: '#ffb4ab', label: '틀림 (>1.0반음)' },
     { color: '#7ecfff', label: '가이드 없음' },
   ],
-  breathiness: [
-    { color: '#59dda5', label: '적절' },
-    { color: '#ffb4ab', label: '과함/미달' },
-    { color: '#7ecfff', label: '데이터 없음' },
-  ],
-  vocalFoldContact: [
-    { color: '#7ecfff', label: 'chunk 분석 비활성 (추가 데이터 수집 후 활성화 예정)' },
-  ],
+  breathiness:      ZONE_LEGEND,
+  vocalFoldContact: ZONE_LEGEND,
+  softPalate:       ZONE_LEGEND,
+  tongueTension:    ZONE_LEGEND,
 };
 
 function LegendRow({ activeMode }: { activeMode: VisualizationMode }) {
@@ -453,26 +456,30 @@ export default function EvalResultScreen({ route, navigation }: Props) {
           style={[styles.modeBtnRow, { maxHeight: 36 }]}
           contentContainerStyle={{ paddingHorizontal: SPACING.base, alignItems: 'center', paddingVertical: 4 }}
         >
-          {MODE_BUTTONS.map(btn => (
-            <TouchableOpacity
-              key={btn.id}
-              activeOpacity={btn.active ? 0.7 : 1}
-              style={[
-                styles.modeBtn,
-                btn.active && (btn.id as VisualizationMode) === activeMode && styles.modeBtnActive,
-                !btn.active && styles.modeBtnDisabled,
-              ]}
-              onPress={() => { if (btn.active) setActiveMode(btn.id as VisualizationMode); }}
-            >
-              <Text style={[
-                styles.modeBtnLabel,
-                btn.active && (btn.id as VisualizationMode) === activeMode && styles.modeBtnLabelActive,
-                !btn.active && styles.modeBtnLabelDisabled,
-              ]}>
-                {btn.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {MODE_BUTTONS.map(btn => {
+            // v2Only 버튼은 score_mapper_version === 'v2'일 때만 활성
+            const effectiveActive = btn.active && (!btn.v2Only || result.scoreMapperVersion === 'v2');
+            return (
+              <TouchableOpacity
+                key={btn.id}
+                activeOpacity={effectiveActive ? 0.7 : 1}
+                style={[
+                  styles.modeBtn,
+                  effectiveActive && (btn.id as VisualizationMode) === activeMode && styles.modeBtnActive,
+                  !effectiveActive && styles.modeBtnDisabled,
+                ]}
+                onPress={() => { if (effectiveActive) setActiveMode(btn.id as VisualizationMode); }}
+              >
+                <Text style={[
+                  styles.modeBtnLabel,
+                  effectiveActive && (btn.id as VisualizationMode) === activeMode && styles.modeBtnLabelActive,
+                  !effectiveActive && styles.modeBtnLabelDisabled,
+                ]}>
+                  {btn.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       )}
 
@@ -498,10 +505,12 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         </View>
       )}
 
-      {/* 안내 문구 */}
+      {/* 안내 문구 (v2 분기로 4항목 안내) */}
       {showTimeline && (
         <Text style={styles.timelineInfo}>
-          이 시각화는 호흡 소리 + 성대 접촉 강도 2가지 기준입니다.{'\n'}
+          {result.scoreMapperVersion === 'v2'
+            ? '이 시각화는 호흡 소리 + 성대 접촉 강도 + 연구개 위치 + 혀 경직도 4가지 기준입니다.'
+            : '이 시각화는 호흡 소리 + 성대 접촉 강도 2가지 기준입니다.'}{'\n'}
           (다른 항목은 신뢰도가 충분히 높지 않아 시간 구간 표시 X)
         </Text>
       )}
