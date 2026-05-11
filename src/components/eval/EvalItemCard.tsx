@@ -4,8 +4,9 @@ import { COLORS, CARD_STYLE } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY, FOCUS_BORDER_COLOR, FOCUS_BORDER_WIDTH } from '../../theme/tokens';
 import ScoreGauge from './ScoreGauge';
 import ConfidenceBadge from './ConfidenceBadge';
+import TierBadge from './TierBadge';
 import type { EvaluationItemKey, ConfidenceLevel } from '../../domain/evaluationItems';
-import type { Zone } from '../../types/analyze';
+import type { Zone, ScoreTier } from '../../types/analyze';
 
 interface EvalItemCardProps {
   itemKey: EvaluationItemKey;
@@ -18,6 +19,9 @@ interface EvalItemCardProps {
   isFocus?: boolean;
   onTrainPress?: () => void;
   trainDisabled?: boolean;
+  // v2 신규
+  tier?:    ScoreTier;
+  tooltip?: string | null;
 }
 
 export default function EvalItemCard({
@@ -30,6 +34,8 @@ export default function EvalItemCard({
   isFocus = false,
   onTrainPress,
   trainDisabled = false,
+  tier,
+  tooltip,
 }: EvalItemCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -43,6 +49,7 @@ export default function EvalItemCard({
       <View style={styles.header}>
         <Text style={styles.name}>{nameKo}</Text>
         <View style={styles.headerRight}>
+          <TierBadge tier={tier} tooltip={tooltip} nameKo={nameKo} />
           <ConfidenceBadge confidence={confidence} />
           {onTrainPress && (
             <TouchableOpacity

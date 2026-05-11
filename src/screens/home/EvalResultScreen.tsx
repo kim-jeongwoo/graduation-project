@@ -407,6 +407,8 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         isFocus={FOCUS_ITEMS_FROM_USER.includes(key)}
         onTrainPress={onTrainPress}
         trainDisabled={trainDisabled}
+        tier={result.scoresMeta?.[key]?.tier}
+        tooltip={result.scoresMeta?.[key]?.tooltip}
       />
     );
   };
