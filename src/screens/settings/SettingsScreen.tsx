@@ -116,7 +116,13 @@ export default function SettingsScreen() {
           '연습 리마인더',
           '',
           undefined,
-          <Switch value={notificationsOn} onValueChange={setNotificationsOn} />,
+          <Switch
+            value={notificationsOn}
+            onValueChange={(v) => {
+              setNotificationsOn(v);
+              if (v) Alert.alert('알림', '연습 리마인더 기능은 추후 업데이트 예정입니다.');
+            }}
+          />,
         ),
       )}
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../../utils/colors';
 import { useAuth } from '../../context/AuthContext';
 import { getSongs } from '../../api/songs';
@@ -37,7 +36,8 @@ export default function HomeScreen({ navigation }: Props) {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { loadSongs(); }, [loadSongs]));
+  // GET /songs는 14곡 정적 데이터 — 마운트 시 1회만 fetch (focus마다 재호출 X, 학원 학생 부하 회피)
+  useEffect(() => { loadSongs(); }, [loadSongs]);
 
   const renderSong = ({ item, index }: { item: Song; index: number }) => {
     const ready = item.hasLrc && item.hasPitchGuide;

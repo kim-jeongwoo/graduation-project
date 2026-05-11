@@ -19,6 +19,7 @@ function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResul
   const inner: ServerAnalyzeResult = response.result_json;
   return {
     run_id:              inner.run_id,
+    session_id:          response.session_id,
     status:              inner.status,
     processing_time_ms:  inner.processing_time_ms,
     audio_info:          inner.audio_info,
@@ -36,6 +37,29 @@ function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResul
       medium_reliability: inner.reliability.medium_reliability.map(stripPrefix),
       unavailable:        inner.reliability.unavailable.map(stripPrefix),
     },
+    timelineScores: (inner.timeline_scores ?? []).map((chunk) => ({
+      startSec: chunk.start_sec,
+      endSec:   chunk.end_sec,
+      lrcText:  chunk.lrc_text,
+      scores: {
+        breathiness: chunk.scores['4_breathiness'] ? {
+          aiScore:      chunk.scores['4_breathiness'].ai_score,
+          zone:         chunk.scores['4_breathiness'].zone,
+          roundedScore: chunk.scores['4_breathiness'].rounded_score,
+        } : undefined,
+        vocalFoldContact: chunk.scores['3_vocal_fold_contact'] ? {
+          aiScore:      chunk.scores['3_vocal_fold_contact'].ai_score,
+          zone:         chunk.scores['3_vocal_fold_contact'].zone,
+          roundedScore: chunk.scores['3_vocal_fold_contact'].rounded_score,
+        } : undefined,
+      },
+    })),
+    timelineMetadata: inner.timeline_metadata ? {
+      chunkMethod:           inner.timeline_metadata.chunk_method,
+      shownIndicators:       inner.timeline_metadata.shown_indicators,
+      shownIndicatorsReason: inner.timeline_metadata.shown_indicators_reason,
+    } : undefined,
+    userF0: inner.user_f0 ? { frameHz: inner.user_f0.frame_hz, values: inner.user_f0.values } : null,
   };
 }
 

@@ -29,8 +29,13 @@ export default function SignupScreen({ navigation }: Props) {
     try {
       await signup(email, password, nickname);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '알 수 없는 오류';
-      Alert.alert('회원가입 실패', msg);
+      const msg    = e instanceof Error ? e.message : '알 수 없는 오류';
+      const status = (e as Error & { status?: number })?.status;
+      if (status === 403) {
+        Alert.alert('회원가입 비활성화', msg);
+      } else {
+        Alert.alert('회원가입 실패', msg);
+      }
     } finally {
       setLoading(false);
     }

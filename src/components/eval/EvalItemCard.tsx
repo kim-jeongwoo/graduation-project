@@ -16,6 +16,8 @@ interface EvalItemCardProps {
   feedbackText: string;
   scoreDescription?: string;
   isFocus?: boolean;
+  onTrainPress?: () => void;
+  trainDisabled?: boolean;
 }
 
 export default function EvalItemCard({
@@ -26,6 +28,8 @@ export default function EvalItemCard({
   feedbackText,
   scoreDescription,
   isFocus = false,
+  onTrainPress,
+  trainDisabled = false,
 }: EvalItemCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -35,10 +39,23 @@ export default function EvalItemCard({
       styles.card,
       isFocus && styles.focusCard,
     ]}>
-      {/* 상단: 항목명 + 뱃지 */}
+      {/* 상단: 항목명 + 뱃지 + (옵션) 훈련 버튼 */}
       <View style={styles.header}>
         <Text style={styles.name}>{nameKo}</Text>
-        <ConfidenceBadge confidence={confidence} />
+        <View style={styles.headerRight}>
+          <ConfidenceBadge confidence={confidence} />
+          {onTrainPress && (
+            <TouchableOpacity
+              onPress={onTrainPress}
+              activeOpacity={trainDisabled ? 1 : 0.7}
+              style={[styles.trainBtn, trainDisabled && styles.trainBtnDisabled]}
+            >
+              <Text style={[styles.trainBtnText, trainDisabled && styles.trainBtnTextDisabled]}>
+                이 부분 연습하기
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* 중단: 게이지 */}
@@ -79,6 +96,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: SPACING.sm,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  trainBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  trainBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  trainBtnDisabled: {
+    backgroundColor: COLORS.cardBorder,
+    opacity: 0.5,
+  },
+  trainBtnTextDisabled: {
+    color: COLORS.textMuted,
   },
   name: {
     ...TYPOGRAPHY.subheading,

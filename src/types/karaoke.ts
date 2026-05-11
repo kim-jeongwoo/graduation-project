@@ -14,14 +14,23 @@ export interface ServerPitchPoint {
   confidence: number;    // CREPE confidence 0~1 (was mistakenly assumed 'conf')
 }
 
+export interface ServerMidiSegment {
+  start: number;      // seconds, master timeline
+  end: number;        // seconds, master timeline
+  midi: number;
+  note_name: string;
+}
+
 export interface ServerPitchGuide {
   song_id: string;
   duration_sec: number;
   frame_hz: number;
   alignment_status: string;
-  lrc_offset_sec: number;  // t_mr = t_master - lrc_offset_sec
+  guide_source?: string;               // 'midi' | 'crepe' | missing
+  lrc_offset_sec: number;              // t_mr = t_master - lrc_offset_sec
   review_segments: unknown[];
   points: ServerPitchPoint[];
+  midi_segments?: ServerMidiSegment[]; // missing/null → []
 }
 
 // ─── Domain types (all timestamps in MR playback time) ───
@@ -40,14 +49,25 @@ export interface PitchPoint {
   confidence: number;     // camelCase matches server 'confidence'
 }
 
+export type GuideSource = 'midi' | 'crepe';
+
+export interface MidiSegment {
+  start: number;     // seconds, MR-relative
+  end: number;       // seconds, MR-relative
+  midi: number;
+  noteName: string;
+}
+
 export interface PitchGuide {
   songId: string;
   durationSec: number;
   frameHz: number;
   alignmentStatus: string;
+  guideSource: GuideSource;    // 'crepe' if missing from server
   lrcOffsetSec: number;
   reviewSegments: unknown[];
-  points: PitchPoint[];  // all timestamps already converted to MR time
+  points: PitchPoint[];        // all timestamps already converted to MR time
+  midiSegments: MidiSegment[]; // empty array if missing from server
 }
 
 // ─── Adapters: master-time → MR-time ───
@@ -67,14 +87,21 @@ export function adaptPitchGuide(raw: ServerPitchGuide): PitchGuide {
     durationSec:     raw.duration_sec,
     frameHz:         raw.frame_hz,
     alignmentStatus: raw.alignment_status,
+    guideSource:     raw.guide_source === 'midi' ? 'midi' : 'crepe',
     lrcOffsetSec:    offset,
     reviewSegments:  raw.review_segments,
     points: raw.points.map((p) => ({
-      time:       p.time - offset,   // convert master-time → MR-time
+      time:       p.time - offset,   // master-time → MR-time
       midi:       p.midi,
       freqHz:     p.freq_hz,
       voiced:     p.voiced,
       confidence: p.confidence,
+    })),
+    midiSegments: (raw.midi_segments ?? []).map((s) => ({
+      start:    s.start    - offset, // master-time → MR-time (same pattern as points[])
+      end:      s.end      - offset,
+      midi:     s.midi,
+      noteName: s.note_name,
     })),
   };
 }

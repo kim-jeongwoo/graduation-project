@@ -66,9 +66,13 @@ export default function LoginScreen({ navigation }: Props) {
         <Text style={styles.buttonText}>{loading ? '로그인 중...' : '로그인'}</Text>
       </TouchableOpacity>
 
+      {/* 회원가입 링크 숨김 — 학원 학생만 사용 + 외부 침입 차단 (vocal-server SIGNUP_ENABLED=false 보안 백업).
+          학원 가입 시 일시 활성화 필요 시 아래 주석 해제. */}
+      {/*
       <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
         <Text style={styles.link}>회원가입</Text>
       </TouchableOpacity>
+      */}
 
       <View style={styles.divider} />
       <Text style={styles.guestHint}>서버 미연결 시 게스트로 진행 가능</Text>

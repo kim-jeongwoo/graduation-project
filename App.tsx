@@ -1,6 +1,7 @@
 import { AuthProvider } from './src/context/AuthContext';
 import { VocalProfileProvider } from './src/context/VocalProfileContext';
 import { GoalsProvider } from './src/context/GoalsContext';
+import { FavoritesProvider } from './src/context/FavoritesContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
 export default function App() {
@@ -8,7 +9,9 @@ export default function App() {
     <AuthProvider>
       <VocalProfileProvider>
         <GoalsProvider>
-          <AppNavigator />
+          <FavoritesProvider>
+            <AppNavigator />
+          </FavoritesProvider>
         </GoalsProvider>
       </VocalProfileProvider>
     </AuthProvider>

@@ -12,9 +12,10 @@ import * as SecureStore from 'expo-secure-store';
 const SERVER_URLS = {
   local: 'http://192.168.0.16:8000',
   tunnel: 'https://0a10-114-71-220-101.ngrok-free.app',
+  production: 'https://api.vocal-fit.com',  // 5/10 학원 실험 + 6/15 발표
 };
 
-const CURRENT_SERVER: keyof typeof SERVER_URLS = 'local';
+const CURRENT_SERVER: keyof typeof SERVER_URLS = 'production';
 
 // EXPO_PUBLIC_API_URL 환경변수 우선, 없으면 SERVER_URLS 폴백
 export const BASE_URL: string =
@@ -54,23 +55,33 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
+    if (__DEV__ && axios.isAxiosError(error)) {
+      console.error('[API] error', {
+        req: `${error.config?.method?.toUpperCase()} ${error.config?.url}`,
+        status: error.response?.status,
+        data: JSON.stringify(error.response?.data ?? null).slice(0, 400),
+        code: error.code, // ECONNABORTED = timeout
+      });
+    }
     if (error.response?.status === 401) {
       await SecureStore.deleteItemAsync(TOKEN_KEY);
     }
 
     if (axios.isAxiosError(error)) {
       if (error.response?.data?.detail) {
-        // FastAPI의 {"detail": "메시지"} 형태 에러
-        return Promise.reject(new Error(error.response.data.detail));
+        // FastAPI의 {"detail": "메시지"} 형태 에러 — status 보존하여 재발사
+        const err = new Error(typeof error.response.data.detail === 'string'
+          ? error.response.data.detail
+          : JSON.stringify(error.response.data.detail));
+        (err as Error & { status?: number }).status = error.response.status;
+        return Promise.reject(err);
       }
       if (error.response?.data) {
-        // response는 있지만 detail이 없는 경우
-        return Promise.reject(
-          new Error(JSON.stringify(error.response.data)),
-        );
+        const err = new Error(JSON.stringify(error.response.data));
+        (err as Error & { status?: number }).status = error.response.status;
+        return Promise.reject(err);
       }
       if (error.request && !error.response) {
-        // 요청은 보냈지만 응답을 받지 못한 경우 (네트워크 문제)
         return Promise.reject(
           new Error('서버에 연결할 수 없습니다. 네트워크를 확인하세요.'),
         );

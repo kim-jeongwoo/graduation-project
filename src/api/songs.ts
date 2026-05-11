@@ -2,6 +2,7 @@ import apiClient, { BASE_URL } from './client';
 import type { Song, LyricsData, PitchData } from '../types/api';
 import type { LyricLine, PitchGuide, ServerLrcLine, ServerPitchGuide } from '../types/karaoke';
 import { adaptLrc, adaptPitchGuide } from '../types/karaoke';
+import { SONG_LRC_OFFSETS } from '../constants/songLrcOffsets';
 
 interface ServerSong {
   id: string;
@@ -40,7 +41,9 @@ export async function getSongPitchGuide(songId: string): Promise<PitchGuide> {
   return adaptPitchGuide(res.data);
 }
 
-// Fetch both LRC and pitch-guide together so offset is applied consistently
+// Fetch both LRC and pitch-guide together so offset is applied consistently.
+// SONG_LRC_OFFSETS applies an additional per-song client correction to align LRC
+// timestamps with the actual vocal onset (midi_segments[0].start).
 export async function getSongKaraokeData(
   songId: string,
 ): Promise<{ lyrics: LyricLine[]; pitchGuide: PitchGuide }> {
@@ -48,13 +51,31 @@ export async function getSongKaraokeData(
     getSongLrcRaw(songId),
     getSongPitchGuide(songId),
   ]);
-  const lyrics = adaptLrc(rawLrc, pitchGuide.lrcOffsetSec);
+  const clientOffset = SONG_LRC_OFFSETS[songId] ?? 0;
+  const baseLyrics = adaptLrc(rawLrc, pitchGuide.lrcOffsetSec);
+  const lyrics = clientOffset === 0 ? baseLyrics : baseLyrics.map((l) => ({
+    ...l,
+    timeStart: l.timeStart + clientOffset,
+    timeEnd:   l.timeEnd   + clientOffset,
+  }));
   return { lyrics, pitchGuide };
 }
 
 // MR streaming URL — Authorization header must be added by caller (expo-av supports headers in loadAsync)
 export function getSongMrUrl(songId: string): string {
   return `${BASE_URL}/songs/${songId}/mr`;
+}
+
+// EvalResultScreen용: 마스터 기준 raw midi_segments + lrc_offset_sec
+// user_f0 시간(MR 기준) → 마스터 시간 변환 시 lrcOffsetSec 사용
+export async function getSongMidiSegmentsRaw(
+  songId: string,
+): Promise<{ segments: Array<{ start: number; end: number; midi: number }>; lrcOffsetSec: number }> {
+  const res = await apiClient.get<ServerPitchGuide>(`/songs/${songId}/pitch-guide`);
+  return {
+    segments: (res.data.midi_segments ?? []).map((s) => ({ start: s.start, end: s.end, midi: s.midi })),
+    lrcOffsetSec: res.data.lrc_offset_sec,
+  };
 }
 
 // ─── Legacy shims for SessionDetailScreen (deprecated) ───

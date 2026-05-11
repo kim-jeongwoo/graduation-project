@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, View, Text } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, CommonActions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +16,8 @@ import SessionDetailScreen from '../screens/home/SessionDetailScreen';
 import AnalysisResultScreen from '../screens/home/AnalysisResultScreen';
 import HistoryScreen from '../screens/history/HistoryScreen';
 import HistoryDetailScreen from '../screens/history/HistoryDetailScreen';
+import FavoritesScreen from '../screens/history/FavoritesScreen';
+import SongHistoryScreen from '../screens/history/SongHistoryScreen';
 import GoalsScreen from '../screens/goals/GoalsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ProfileScreen from '../screens/settings/ProfileScreen';
@@ -23,6 +25,8 @@ import VocalRangeTestScreen from '../screens/onboarding/VocalRangeTestScreen';
 import SongComparisonScreen from '../screens/home/SongComparisonScreen';
 import RecordScreen from '../screens/record/RecordScreen';
 import EvalResultScreen from '../screens/home/EvalResultScreen';
+import SectionListScreen from '../screens/home/SectionListScreen';
+import TrainingScreen from '../screens/home/TrainingScreen';
 
 // ─── Auth Stack ───
 const AuthStack = createNativeStackNavigator();
@@ -93,6 +97,16 @@ function HomeStackNavigator() {
         component={EvalResultScreen as React.ComponentType<object>}
         options={{ title: '발성 분석 결과' }}
       />
+      <HomeStack.Screen
+        name="SectionList"
+        component={SectionListScreen as React.ComponentType<object>}
+        options={{ title: '약점 구간' }}
+      />
+      <HomeStack.Screen
+        name="Training"
+        component={TrainingScreen as React.ComponentType<object>}
+        options={{ title: '구간 훈련' }}
+      />
     </HomeStack.Navigator>
   );
 }
@@ -120,11 +134,73 @@ function HistoryStackNavigator() {
         options={{ title: '상세 기록' }}
       />
       <HistoryStack.Screen
+        name="SongHistory"
+        component={SongHistoryScreen as React.ComponentType<object>}
+        options={{ title: '회차 기록' }}
+      />
+      <HistoryStack.Screen
+        name="Favorites"
+        component={FavoritesScreen as React.ComponentType<object>}
+        options={{ title: '즐겨찾기' }}
+      />
+      <HistoryStack.Screen
+        name="Training"
+        component={TrainingScreen as React.ComponentType<object>}
+        options={{ title: '구간 훈련' }}
+      />
+      <HistoryStack.Screen
+        name="EvalResult"
+        component={EvalResultScreen as React.ComponentType<object>}
+        options={{ title: '발성 분석 결과' }}
+      />
+      <HistoryStack.Screen
+        name="SectionList"
+        component={SectionListScreen as React.ComponentType<object>}
+        options={{ title: '약점 구간' }}
+      />
+      <HistoryStack.Screen
         name="SongComparison"
         component={SongComparisonScreen}
         options={{ title: '곡 비교' }}
       />
     </HistoryStack.Navigator>
+  );
+}
+
+// ─── Result Stack (분석 결과 탭 내부) ───
+// LatestAnalysisScreen이 마운트 시 GET /sessions → 최신 completed run_id 추출 → reset to EvalResult
+const ResultStack = createNativeStackNavigator();
+
+function ResultStackNavigator() {
+  return (
+    <ResultStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: COLORS.card },
+        headerTintColor: COLORS.textPrimary,
+        headerTitleStyle: { color: COLORS.textPrimary },
+      }}
+    >
+      <ResultStack.Screen
+        name="LatestAnalysis"
+        component={RecordScreen as React.ComponentType<object>}
+        options={{ headerShown: false }}
+      />
+      <ResultStack.Screen
+        name="EvalResult"
+        component={EvalResultScreen as React.ComponentType<object>}
+        options={{ title: '발성 분석 결과' }}
+      />
+      <ResultStack.Screen
+        name="SectionList"
+        component={SectionListScreen as React.ComponentType<object>}
+        options={{ title: '약점 구간' }}
+      />
+      <ResultStack.Screen
+        name="Training"
+        component={TrainingScreen as React.ComponentType<object>}
+        options={{ title: '구간 훈련' }}
+      />
+    </ResultStack.Navigator>
   );
 }
 
@@ -158,14 +234,38 @@ function MainTabNavigator() {
           tabBarLabel: '홈',
           tabBarIcon: () => <TabIcon label="🏠" />,
         }}
+        listeners={({ navigation }) => ({
+          // 항상 홈 탭 첫 화면(Home)으로 reset — KaraokeStack(modal)은 영향 X
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.dispatch(
+              CommonActions.navigate({
+                name: 'HomeTab',
+                params: { screen: 'Home' },
+              }),
+            );
+          },
+        })}
       />
       <Tab.Screen
         name="RecordTab"
-        component={RecordScreen}
+        component={ResultStackNavigator}
         options={{
-          tabBarLabel: '녹음',
-          tabBarIcon: () => <TabIcon label="🎙️" />,
+          tabBarLabel: '분석 결과',
+          tabBarIcon: () => <TabIcon label="📈" />,
         }}
+        listeners={({ navigation }) => ({
+          // 매 탭 클릭마다 LatestAnalysis로 진입 → useFocusEffect re-fetch + reset to EvalResult
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.dispatch(
+              CommonActions.navigate({
+                name: 'RecordTab',
+                params: { screen: 'LatestAnalysis' },
+              }),
+            );
+          },
+        })}
       />
       <Tab.Screen
         name="HistoryTab"
@@ -208,7 +308,9 @@ const RootStack = createNativeStackNavigator();
 
 export default function AppNavigator() {
   const { token, isLoading } = useAuth();
-  const { isTestCompleted } = useVocalProfile();
+  // NOTE: isTestCompleted 온보딩 분기는 졸업작품 단계에서 스킵.
+  // 상용화 단계 복원 시 아래 주석 해제 후 분기 로직 되살릴 것.
+  // const { isTestCompleted } = useVocalProfile();
 
   if (isLoading) {
     return (
@@ -222,11 +324,6 @@ export default function AppNavigator() {
     <NavigationContainer>
       {!token ? (
         <AuthNavigator />
-      ) : !isTestCompleted ? (
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          <RootStack.Screen name="VocalRangeTest" component={VocalRangeTestScreen} />
-          <RootStack.Screen name="MainTabs" component={MainTabNavigator} />
-        </RootStack.Navigator>
       ) : (
         <AppRootNavigator />
       )}

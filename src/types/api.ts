@@ -27,7 +27,13 @@ export interface Session {
   session_id: string;
   song_title?: string;
   song_id?: string;
+  song?: {
+    id?:     string;
+    title?:  string;
+    artist?: string;
+  };
   status: string;
+  analysis_status?: string;
   started_at?: string;
   created_at: string;
 }

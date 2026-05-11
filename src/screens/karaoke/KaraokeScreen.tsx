@@ -14,14 +14,20 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
 import { useAuth } from '../../context/AuthContext';
 import { getSongKaraokeData, getSongMrUrl } from '../../api/songs';
-import type { LyricLine, PitchPoint, PitchGuide } from '../../types/karaoke';
+import { createSession, uploadSessionFile, startAnalysis } from '../../api/sessions';
+import { requestMicrophonePermission } from '../../services/audio/microphone';
+import { VocalRecorder } from '../../services/audio/recorder';
+import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
+import { detectPitch } from '../../services/audio/pitchDetector';
+import type { LyricLine, PitchPoint, PitchGuide, MidiSegment, GuideSource } from '../../types/karaoke';
 import {
   generateFakeUserPitch,
   getPitchAccuracy,
   midiToNoteName,
 } from '../../types/karaoke';
 
-// ─── Mock run_id for P1-A STOP → EvalResult ───
+const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
+const USE_REALTIME_PITCH = true; // false = 가짜 피치 시뮬레이션
 const MOCK_RUN_ID = 'c65d43fa-ef3f-4a46-a70e-c102c61eee6c';
 
 // ─── Pitch graph constants ───
@@ -31,34 +37,43 @@ const GRAPH_H  = 200;
 const WINDOW_BEFORE_SEC = 3;
 const WINDOW_AFTER_SEC  = 5;
 const CURSOR_X = GRAPH_W * (WINDOW_BEFORE_SEC / (WINDOW_BEFORE_SEC + WINDOW_AFTER_SEC));
-const MIDI_MIN = 48;  // C3
-const MIDI_MAX = 84;  // C6
+const MIDI_MIN = 40;
+const MIDI_MAX = 88;
 
 function midiToY(midi: number): number {
   return GRAPH_H - ((midi - MIDI_MIN) / (MIDI_MAX - MIDI_MIN)) * GRAPH_H;
 }
-
 function timeToX(t: number, currentTime: number): number {
-  const relSec = t - currentTime;
-  return CURSOR_X + (relSec / (WINDOW_BEFORE_SEC + WINDOW_AFTER_SEC)) * GRAPH_W;
+  return CURSOR_X + ((t - currentTime) / (WINDOW_BEFORE_SEC + WINDOW_AFTER_SEC)) * GRAPH_W;
 }
 
-// ─── Nav params ───
-// KaraokeScreen lives in AppRootStack (above MainTabNavigator) so bottom tabs are hidden.
+// ─── Nav types ───
 type AppRootParams = {
   MainTabs: undefined;
   Karaoke: { songId: string; title: string; artist: string; mrDurationSec: number };
 };
 type Props = NativeStackScreenProps<AppRootParams, 'Karaoke'>;
 
+// ─── Analyze step labels ───
+const ANALYZE_STEPS = ['녹음 업로드 중...', 'AI 분석 중...', '결과 정리 중...'];
+
 // ─── Pitch graph component ───
 interface PitchGraphProps {
   currentTime: number;
+  guideSource: GuideSource;
+  midiSegments: MidiSegment[];
   guidePoints: PitchPoint[];
   userPoints: PitchPoint[];
 }
 
-function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
+function PitchGraph({ currentTime, guideSource, midiSegments, guidePoints, userPoints }: PitchGraphProps) {
+  // MIDI 직선 모드: window 내 segments 필터
+  const visibleMidi = useMemo(() => {
+    const lo = currentTime - WINDOW_BEFORE_SEC - 0.5;
+    const hi = currentTime + WINDOW_AFTER_SEC  + 0.5;
+    return midiSegments.filter((s) => s.end >= lo && s.start <= hi);
+  }, [midiSegments, currentTime]);
+
   const visibleGuide = useMemo(() => {
     const lo = currentTime - WINDOW_BEFORE_SEC - 0.5;
     const hi = currentTime + WINDOW_AFTER_SEC  + 0.5;
@@ -72,7 +87,6 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
     );
   }, [userPoints, currentTime]);
 
-  // Build SVG <Path> elements, breaking the line at unvoiced gaps.
   function buildPaths(
     points: PitchPoint[],
     colorFn: (p: PitchPoint) => string,
@@ -81,18 +95,14 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
     let seg: { x: number; y: number }[] = [];
     let segColor = '';
     let segKey = 0;
-
     const flush = () => {
       if (seg.length >= 2) {
         const d = seg.map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
-        result.push(
-          <Path key={segKey++} d={d} stroke={segColor} strokeWidth={3}
-                fill="none" strokeLinecap="round" strokeLinejoin="round" />,
-        );
+        result.push(<Path key={segKey++} d={d} stroke={segColor} strokeWidth={3}
+          fill="none" strokeLinecap="round" strokeLinejoin="round" />);
       }
       seg = [];
     };
-
     for (const p of points) {
       if (!p.voiced || p.midi === null) { flush(); continue; }
       const c = colorFn(p);
@@ -104,6 +114,26 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
     return result;
   }
 
+  // MIDI 직선 세그먼트 (guide_source === 'midi' 전용)
+  const midiLines = useMemo(() => {
+    if (guideSource !== 'midi') return null;
+    return visibleMidi.map((s, i) => {
+      const x1 = timeToX(s.start, currentTime);
+      const x2 = timeToX(s.end,   currentTime);
+      const y  = midiToY(s.midi);
+      return (
+        <Line
+          key={i}
+          x1={x1} y1={y} x2={x2} y2={y}
+          stroke="#938ea1"
+          strokeWidth={6}
+          strokeLinecap="round"
+        />
+      );
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleMidi, currentTime, guideSource]);
+
   const guidePaths = useMemo(
     () => buildPaths(visibleGuide, () => '#938ea1aa'),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,7 +141,7 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
   );
 
   const userPaths = useMemo(() => {
-    if (visibleGuide.length === 0) return [];
+    if (!visibleGuide.length) return [];
     return buildPaths(visibleUser, (p) => {
       const nearby = visibleGuide.reduce<PitchPoint | null>((best, g) => {
         if (!g.voiced || g.midi === null) return best;
@@ -125,7 +155,7 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleUser, visibleGuide, currentTime]);
 
-  const latestUserMidi = useMemo(
+  const latestMidi = useMemo(
     () => [...visibleUser].reverse().find((p) => p.midi !== null && p.voiced)?.midi ?? null,
     [visibleUser],
   );
@@ -133,36 +163,33 @@ function PitchGraph({ currentTime, guidePoints, userPoints }: PitchGraphProps) {
     () => visibleGuide.find((p) => p.voiced && p.midi !== null && p.time >= currentTime)?.midi ?? null,
     [visibleGuide, currentTime],
   );
-
-  const accuracy = latestUserMidi !== null && nearestGuideMidi !== null
-    ? getPitchAccuracy(latestUserMidi, nearestGuideMidi)
+  const accuracy = latestMidi !== null && nearestGuideMidi !== null
+    ? getPitchAccuracy(latestMidi, nearestGuideMidi)
     : null;
   const noteColor = accuracy === 'accurate' ? '#59dda5'
     : accuracy === 'slight_off' ? '#ffb780'
-    : accuracy === 'wrong'      ? '#ffb4ab'
+    : accuracy === 'wrong' ? '#ffb4ab'
     : COLORS.textMuted;
 
   return (
     <View style={graphStyles.container}>
       <Svg width={GRAPH_W} height={GRAPH_H}>
-        {guidePaths}
+        {/* 가이드라인: MIDI 직선 or CREPE 곡선 */}
+        {guideSource === 'midi' ? midiLines : guidePaths}
         {userPaths}
-        <Line
-          x1={CURSOR_X} y1={0} x2={CURSOR_X} y2={GRAPH_H}
-          stroke={COLORS.primary} strokeWidth={1.5} strokeDasharray="4,3"
-        />
+        <Line x1={CURSOR_X} y1={0} x2={CURSOR_X} y2={GRAPH_H}
+          stroke={COLORS.primary} strokeWidth={1.5} strokeDasharray="4,3" />
       </Svg>
-      {latestUserMidi !== null && (
+      {latestMidi !== null && (
         <View style={[graphStyles.noteBox, { borderColor: noteColor }]}>
           <Text style={[graphStyles.noteText, { color: noteColor }]}>
-            {midiToNoteName(latestUserMidi)}
+            {midiToNoteName(latestMidi)}
           </Text>
         </View>
       )}
     </View>
   );
 }
-
 const graphStyles = StyleSheet.create({
   container: { width: GRAPH_W, height: GRAPH_H, backgroundColor: COLORS.surface },
   noteBox: {
@@ -178,36 +205,43 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   const { songId, title, artist, mrDurationSec } = route.params;
   const { token } = useAuth();
 
-  const [loading, setLoading]         = useState(true);
-  const [countdown, setCountdown]     = useState<number | null>(null);
-  const [lyrics, setLyrics]           = useState<LyricLine[]>([]);
-  const [pitchGuide, setPitchGuide]   = useState<PitchGuide | null>(null);
-  const [userPitch, setUserPitch]     = useState<PitchPoint[]>([]);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [playing, setPlaying]         = useState(false);
+  const [loading, setLoading]             = useState(true);
+  const [countdown, setCountdown]         = useState<number | null>(null);
+  const [lyrics, setLyrics]               = useState<LyricLine[]>([]);
+  const [pitchGuide, setPitchGuide]       = useState<PitchGuide | null>(null);
+  const [userPitch, setUserPitch]         = useState<PitchPoint[]>([]);
+  const [currentTime, setCurrentTime]     = useState(0);
+  const [playing, setPlaying]             = useState(false);
+  const [isAnalyzing, setIsAnalyzing]     = useState(false);
+  const [analyzeStep, setAnalyzeStep]     = useState(0);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef       = useRef<Audio.Sound | null>(null);
+  const recorderRef    = useRef(new VocalRecorder());
+  const currentTimeRef = useRef(0);
 
-  // ─── Load data ───
+  // ─── Permission check + data load ───
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // 1. Microphone permission
+      const granted = await requestMicrophonePermission();
+      if (!granted) {
+        Alert.alert(
+          '마이크 권한 필요',
+          '녹음하려면 마이크 권한이 필요합니다.\n설정 > 앱 > 마이크 권한을 허용해주세요.',
+          [{ text: '확인', onPress: () => navigation.goBack() }],
+        );
+        return;
+      }
+
+      // 2. Karaoke data
       try {
         const { lyrics: lrc, pitchGuide: guide } = await getSongKaraokeData(songId);
         if (cancelled) return;
-        // ─── [진단] pitch_guide 로드 확인 ───
-        console.log('[KaraokeScreen] pitchGuide.points.length:', guide.points.length);
-        console.log('[KaraokeScreen] durationSec:', guide.durationSec, 'frameHz:', guide.frameHz);
-        console.log('[KaraokeScreen] first 3 points:', JSON.stringify(guide.points.slice(0, 3)));
-        console.log('[KaraokeScreen] last  3 points:', JSON.stringify(guide.points.slice(-3)));
-        const voicedCount = guide.points.filter((p) => p.voiced).length;
-        const validTimeCount = guide.points.filter((p) => p.time !== null && p.time !== undefined).length;
-        console.log('[KaraokeScreen] voiced:', voicedCount, '/ valid_time:', validTimeCount, '/ total:', guide.points.length);
-        console.log('[KaraokeScreen] lrcOffsetSec:', guide.lrcOffsetSec);
-        const fake = generateFakeUserPitch(guide.points);
+        console.log('[KaraokeScreen] pitchGuide.points:', guide.points.length, 'voiced:', guide.points.filter(p => p.voiced).length);
         setLyrics(lrc);
         setPitchGuide(guide);
-        setUserPitch(fake);
+        if (!USE_REALTIME_PITCH) setUserPitch(generateFakeUserPitch(guide.points));
         setLoading(false);
         startCountdown();
       } catch (e) {
@@ -220,67 +254,62 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     return () => {
       cancelled = true;
       soundRef.current?.unloadAsync();
+      recorderRef.current.cancel();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [songId]);
 
-  // ─── 진단: 현재 시간 및 윈도우 내 포인트 수 1초마다 로그 ───
-  useEffect(() => {
-    if (!pitchGuide) return;
-    const iv = setInterval(() => {
-      const lo = currentTime - WINDOW_BEFORE_SEC - 0.5;
-      const hi = currentTime + WINDOW_AFTER_SEC  + 0.5;
-      const visible = pitchGuide.points.filter((p) => p.time >= lo && p.time <= hi && p.voiced);
-      console.log(`[KaraokeScreen] t=${currentTime.toFixed(2)}s  window=[${lo.toFixed(1)},${hi.toFixed(1)}]  voiced_visible=${visible.length}`);
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [pitchGuide, currentTime]);
-
-  // ─── Countdown + auto-play ───
+  // ─── Countdown → MR + recording start ───
   const startCountdown = useCallback(() => {
     let n = 3;
     setCountdown(n);
     const iv = setInterval(() => {
       n -= 1;
-      if (n <= 0) { clearInterval(iv); setCountdown(null); startMr(); }
+      if (n <= 0) { clearInterval(iv); setCountdown(null); startMrAndRecord(); }
       else setCountdown(n);
     }, 1000);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startMr = useCallback(async () => {
+  const startMrAndRecord = useCallback(async () => {
     try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      if (!USE_MOCK) {
+        await recorderRef.current.start(USE_REALTIME_PITCH ? (samples) => {
+          const result = detectPitch(samples);
+          const t = currentTimeRef.current;
+          if (t < 0.1) return;
+          setUserPitch((prev) => {
+            const cutoff = t - 10;
+            const trimmed = cutoff > 0 ? prev.filter((p) => p.time >= cutoff) : prev;
+            if (!result.voiced || result.midi === null) return trimmed;
+            return [...trimmed, { time: t, midi: result.midi, voiced: true, freqHz: result.freq, confidence: 1 }];
+          });
+        } : undefined);
+      }
       const sound = new Audio.Sound();
-      await sound.loadAsync(
-        {
-          uri: getSongMrUrl(songId),
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        },
-        { shouldPlay: true, progressUpdateIntervalMillis: 80 },
-      );
+      // ① 콜백 먼저 등록 (shouldPlay:true + loadAsync 완료 후 등록 시 초기 update 누락 방지)
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded) {
+          currentTimeRef.current = status.positionMillis / 1000;
           setCurrentTime(status.positionMillis / 1000);
           setPlaying(status.isPlaying);
         }
       });
+      // ② shouldPlay:false 로딩만
+      await sound.loadAsync(
+        { uri: getSongMrUrl(songId), headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        { shouldPlay: false, progressUpdateIntervalMillis: 16 },
+      );
+      // ③ position 0에서 명시적 재생 시작
+      await sound.playFromPositionAsync(0);
       soundRef.current = sound;
-      setPlaying(true);
     } catch (e) {
-      console.error('[KaraokeScreen] MR load error:', e);
-      Alert.alert('오류', 'MR 음원을 재생할 수 없습니다.');
+      console.error('[KaraokeScreen] startMrAndRecord error:', e);
+      Alert.alert('오류', 'MR 또는 녹음을 시작할 수 없습니다.');
     }
   }, [songId, token]);
 
-  // ─── Controls ───
-  const handlePause = useCallback(async () => {
-    const s = soundRef.current;
-    if (!s) return;
-    const st = await s.getStatusAsync();
-    if (st.isLoaded) { st.isPlaying ? await s.pauseAsync() : await s.playAsync(); }
-  }, []);
-
+  // ─── Restart ───
   const handleRestart = useCallback(() => {
     Alert.alert('처음부터 다시 시작', '녹음이 초기화됩니다.', [
       { text: '취소', style: 'cancel' },
@@ -289,13 +318,113 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         onPress: async () => {
           const s = soundRef.current;
           if (s) { await s.stopAsync(); await s.setPositionAsync(0); }
+          await recorderRef.current.cancel();
           setCurrentTime(0);
-          if (pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
+          currentTimeRef.current = 0;
+          if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
+          else setUserPitch([]);
           startCountdown();
         },
       },
     ]);
   }, [pitchGuide, startCountdown]);
+
+  // ─── Close (X) — cancel without analysis ───
+  const handleClose = useCallback(async () => {
+    const s = soundRef.current;
+    if (s) await s.stopAsync();
+    await recorderRef.current.cancel();
+    navigation.goBack();
+  }, [navigation]);
+
+  // ─── STOP → analyze → EvalResult ───
+  const handleStop = useCallback(async () => {
+    if (USE_MOCK) {
+      const s = soundRef.current;
+      if (s) await s.stopAsync();
+      goToEvalResult(MOCK_RUN_ID);
+      return;
+    }
+
+    const s = soundRef.current;
+    if (s) await s.stopAsync();
+
+    setIsAnalyzing(true);
+    setAnalyzeStep(0);
+
+    try {
+      // Stop recording
+      const { uri, fileName, mimeType } = await recorderRef.current.stop();
+      console.log('[KaraokeScreen] recording uri:', uri, 'type:', mimeType);
+
+      // Step 0: upload
+      setAnalyzeStep(0);
+      if (__DEV__) console.log('[handleStop] createSession...');
+      const session = await createSession({ song_id: songId });
+      if (__DEV__) console.log('[handleStop] session:', session.session_id);
+
+      if (__DEV__) console.log('[handleStop] uploading:', fileName, mimeType, uri.slice(0, 60));
+      await uploadSessionFile(session.session_id, uri, fileName, mimeType);
+      if (__DEV__) console.log('[handleStop] upload done');
+
+      // Step 1: analyze (synchronous, up to 90s)
+      setAnalyzeStep(1);
+      if (__DEV__) console.log('[handleStop] startAnalysis...');
+      const { run_id, status, reason } = await startAnalysis(session.session_id);
+      if (__DEV__) console.log('[handleStop] analyze result:', { run_id, status, reason });
+
+      if (status === 'no_voice') {
+        Alert.alert(
+          '음성이 감지되지 않았어요',
+          '마이크가 정상 동작하는지, 노래를 부르셨는지 확인해주세요.',
+          [
+            {
+              text: '다시 녹음',
+              onPress: async () => {
+                const snd = soundRef.current;
+                if (snd) { try { await snd.unloadAsync(); } catch {} soundRef.current = null; }
+                await recorderRef.current.cancel();
+                setCurrentTime(0);
+                currentTimeRef.current = 0;
+                if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
+                else setUserPitch([]);
+                startCountdown();
+              },
+            },
+            { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
+          ],
+        );
+        return;
+      }
+
+      if (status === 'failed') {
+        throw new Error(`AI 분석에 실패했습니다. ${reason ?? '다시 시도해주세요.'}`);
+      }
+
+      // Step 2: brief done state
+      setAnalyzeStep(2);
+      await new Promise<void>((r) => setTimeout(r, 600));
+
+      goToEvalResult(run_id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '다시 시도해주세요.';
+      Alert.alert('분석 실패', msg, [
+        { text: '다시 시도', onPress: handleStop },
+        { text: '닫기', onPress: () => navigation.goBack() },
+      ]);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [songId, navigation]);
+
+  // Navigate to EvalResult (KaraokeScreen is in AppRootStack, EvalResult is in HomeStack)
+  const goToEvalResult = useCallback((runId: string) => {
+    (navigation as any).navigate('MainTabs', {
+      screen: 'HomeTab',
+      params: { screen: 'EvalResult', params: { runId, songId } },
+    });
+  }, [navigation, songId]);
 
   // ─── Lyrics sync ───
   const currentLine = useMemo(
@@ -307,8 +436,20 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     [lyrics, currentTime],
   );
 
+  // ─── Guide offset ───
+  const guideOffset = SONG_GUIDE_OFFSETS[songId] ?? 0;
+  const adjustedMidiSegments = useMemo(
+    () => guideOffset === 0
+      ? pitchGuide?.midiSegments ?? []
+      : (pitchGuide?.midiSegments ?? []).map((s) => ({
+          ...s,
+          start: s.start + guideOffset,
+          end:   s.end   + guideOffset,
+        })),
+    [pitchGuide, guideOffset],
+  );
+
   // ─── Progress ───
-  // mrDurationSec from params is authoritative; fall back to last pitch point
   const totalSec = mrDurationSec > 0
     ? mrDurationSec
     : (pitchGuide?.points[pitchGuide.points.length - 1]?.time ?? 0);
@@ -316,21 +457,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   const fmt = (s: number) =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
-  // ─── EvalResult navigation helper (bubbles up through HomeStack) ───
-  const goToEvalResult = useCallback((runId: string) => {
-    // KaraokeScreen is in AppRootStack; navigate to HomeStack's EvalResult via nested params
-    (navigation as any).navigate('MainTabs', {
-      screen: 'HomeTab',
-      params: { screen: 'EvalResult', params: { runId } },
-    });
-  }, [navigation]);
-
-  const handleStopWithEval = useCallback(async () => {
-    const s = soundRef.current;
-    if (s) await s.stopAsync();
-    goToEvalResult(MOCK_RUN_ID);
-  }, [goToEvalResult]);
-
+  // ─── Loading ───
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -344,7 +471,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       {/* 헤더 */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { soundRef.current?.stopAsync(); navigation.goBack(); }}>
+        <TouchableOpacity onPress={handleClose}>
           <Text style={styles.closeBtn}>✕</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{artist} - {title}</Text>
@@ -355,6 +482,8 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       {pitchGuide ? (
         <PitchGraph
           currentTime={currentTime}
+          guideSource={pitchGuide.guideSource}
+          midiSegments={adjustedMidiSegments}
           guidePoints={pitchGuide.points}
           userPoints={userPitch}
         />
@@ -362,7 +491,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         <View style={graphStyles.container} />
       )}
 
-      {/* 가사 영역 — 고정 높이 */}
+      {/* 가사 영역 */}
       <View style={styles.lyricsArea}>
         <Text style={styles.currentLyric} numberOfLines={2}>
           {currentLine?.text ?? ''}
@@ -381,23 +510,40 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         <Text style={styles.timeText}>{fmt(totalSec)}</Text>
       </View>
 
-      {/* 컨트롤 */}
+      {/* 컨트롤: ↻ 다시시작 | ■ STOP (일시정지는 P1-C에서 추가) */}
       <View style={styles.controls}>
         <TouchableOpacity style={styles.ctrlBtn} onPress={handleRestart}>
           <Text style={styles.ctrlIcon}>↻</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.stopBtn} onPress={handleStopWithEval}>
+        <TouchableOpacity style={styles.stopBtn} onPress={handleStop}>
           <Text style={styles.stopIcon}>■</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.ctrlBtn} onPress={handlePause}>
-          <Text style={styles.ctrlIcon}>{playing ? '⏸' : '▶'}</Text>
         </TouchableOpacity>
       </View>
 
       {/* 카운트다운 오버레이 */}
       {countdown !== null && (
-        <View style={styles.countdownOverlay}>
+        <View style={styles.overlay}>
           <Text style={styles.countdownNum}>{countdown}</Text>
+        </View>
+      )}
+
+      {/* 분석 중 오버레이 */}
+      {isAnalyzing && (
+        <View style={styles.overlay}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.analyzeStepText}>{ANALYZE_STEPS[analyzeStep]}</Text>
+          <View style={styles.stepIndicators}>
+            {ANALYZE_STEPS.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.stepDot,
+                  i <= analyzeStep ? styles.stepDotActive : styles.stepDotInactive,
+                ]}
+              />
+            ))}
+          </View>
+          <Text style={styles.analyzeHint}>잠시만 기다려주세요 (10~30초)</Text>
         </View>
       )}
     </View>
@@ -413,12 +559,8 @@ const styles = StyleSheet.create({
   loadingText: { color: COLORS.textSecondary, fontSize: 14 },
 
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 52,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 52, paddingHorizontal: 16, paddingBottom: 10,
   },
   closeBtn: { fontSize: 20, color: COLORS.textSecondary, padding: 4 },
   headerTitle: {
@@ -426,52 +568,29 @@ const styles = StyleSheet.create({
     fontSize: 15, fontWeight: '600', color: COLORS.textPrimary,
   },
 
-  // Fixed-height lyrics block so it doesn't take up all remaining space
   lyricsArea: {
-    height: 96,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    gap: 8,
-    backgroundColor: COLORS.background,
+    height: 96, justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: 24, gap: 8, backgroundColor: COLORS.background,
   },
   currentLyric: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    textAlign: 'center',
-    lineHeight: 30,
+    fontSize: 22, fontWeight: '700', color: COLORS.textPrimary,
+    textAlign: 'center', lineHeight: 30,
   },
-  nextLyric: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-  },
+  nextLyric: { fontSize: 14, color: COLORS.textMuted, textAlign: 'center' },
 
   progressArea: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    gap: 10,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 10, gap: 10,
   },
   timeText: { fontSize: 12, color: COLORS.textMuted, width: 36, textAlign: 'center' },
   progressTrack: {
-    flex: 1, height: 4,
-    backgroundColor: COLORS.cardBorder,
-    borderRadius: 2, overflow: 'hidden',
+    flex: 1, height: 4, backgroundColor: COLORS.cardBorder, borderRadius: 2, overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%', backgroundColor: COLORS.primary, borderRadius: 2,
-  },
+  progressFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: 2 },
 
   controls: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 48,
-    paddingTop: 8,
-    gap: 32,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    paddingBottom: 48, paddingTop: 8, gap: 32,
   },
   ctrlBtn: {
     width: 56, height: 56, borderRadius: 28,
@@ -487,10 +606,19 @@ const styles = StyleSheet.create({
   },
   stopIcon: { fontSize: 26, color: '#fff' },
 
-  countdownOverlay: {
+  overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.78)',
-    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    justifyContent: 'center', alignItems: 'center', gap: 20,
   },
   countdownNum: { fontSize: 96, fontWeight: '800', color: '#fff' },
+
+  analyzeStepText: {
+    fontSize: 20, fontWeight: '700', color: '#fff', marginTop: 8,
+  },
+  stepIndicators: { flexDirection: 'row', gap: 10 },
+  stepDot: { width: 10, height: 10, borderRadius: 5 },
+  stepDotActive:   { backgroundColor: COLORS.primary },
+  stepDotInactive: { backgroundColor: COLORS.textMuted },
+  analyzeHint: { fontSize: 13, color: COLORS.textSecondary },
 });

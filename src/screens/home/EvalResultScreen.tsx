@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,41 +6,323 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from 'react-native';
+import Svg, { Line, Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import EvalItemCard from '../../components/eval/EvalItemCard';
 import { getResultsByRunId } from '../../api/analyze';
+import { getSongMidiSegmentsRaw } from '../../api/songs';
+import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
 import { EVALUATION_ITEMS } from '../../domain/evaluationItems';
-import type { AnalyzeResult } from '../../types/analyze';
+import type { AnalyzeResult, TimelineChunkScore } from '../../types/analyze';
 import type { EvaluationItemKey } from '../../domain/evaluationItems';
+import { extractWeakSections, type IndicatorAppKey } from '../../domain/weakSections';
 
 type Tab = 'basic' | 'advanced';
 
 // TODO(Step E): 사용자 목표에서 가져오기
 const FOCUS_ITEMS_FROM_USER: EvaluationItemKey[] = [];
-
 const BASE_ITEMS: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact'];
 
-type Props = NativeStackScreenProps<{ EvalResult: { runId?: string } }, 'EvalResult'>;
+type Props = NativeStackScreenProps<
+  { EvalResult: { runId?: string; songId?: string } },
+  'EvalResult'
+>;
 
-export default function EvalResultScreen({ route }: Props) {
-  const runId = route.params?.runId;
-  const [result, setResult] = useState<AnalyzeResult | null>(null);
-  const [loading, setLoading] = useState(true);
+// ─── Timeline constants ───
+const PX_PER_SEC = 60;
+const GUIDE_H    = 220;
+const LRC_H      = 30;
+const MIDI_MIN   = 40;
+const MIDI_MAX   = 88;
+
+function midiToY(midi: number): number {
+  return GUIDE_H - ((midi - MIDI_MIN) / (MIDI_MAX - MIDI_MIN)) * GUIDE_H;
+}
+
+function scoreColor(pct: number | null): string {
+  if (pct === null) return COLORS.textMuted;
+  if (pct >= 80) return '#59dda5';
+  if (pct >= 50) return '#ffb780';
+  return '#ffb4ab';
+}
+
+type VisualizationMode = 'pitch' | 'breathiness' | 'vocalFoldContact';
+type RawSeg = { start: number; end: number; midi: number };
+type UserF0 = { frameHz: number; values: (number | null)[] };
+
+const MODE_BUTTONS: { id: string; label: string; active: boolean }[] = [
+  { id: 'pitch',            label: '음정',          active: true  },
+  { id: 'breathiness',      label: '호흡소리식별',   active: true  },
+  { id: 'vocalFoldContact', label: '성대접촉강도',   active: true  },
+  { id: 'nasal',            label: '비강구강공명비율', active: false },
+  { id: 'register',         label: '흉성두성경향',   active: false },
+  { id: 'resonance',        label: '전방공명정도',   active: false },
+  { id: 'velum',            label: '연구개위치',     active: false },
+  { id: 'larynx',           label: '후두혀뿌리위치', active: false },
+  { id: 'tongue',           label: '혀구강공간경직도', active: false },
+  { id: 'pressure',         label: '상압하압비율',   active: false },
+];
+
+interface TimelineSectionProps {
+  timelineScores: TimelineChunkScore[];
+  midiSegments:   RawSeg[];
+  userF0:         UserF0 | null;
+  activeMode:     VisualizationMode;
+  lrcOffsetSec:   number;
+  guideOffset:    number;
+}
+
+function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrcOffsetSec, guideOffset }: TimelineSectionProps) {
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (!midiSegments.length) return;
+    const x = Math.max(0, midiSegments[0].start * PX_PER_SEC - 20);
+    scrollRef.current?.scrollTo({ x, animated: false });
+  }, [midiSegments]);
+
+  const midiLastSec   = midiSegments.length ? midiSegments[midiSegments.length - 1].end : 0;
+  const f0DurationSec = userF0 ? (userF0.values.length / userF0.frameHz) + lrcOffsetSec : 0;
+  const totalSec = Math.max(midiLastSec, f0DurationSec, 60);
+  const totalW   = Math.ceil(totalSec * PX_PER_SEC);
+
+
+  // ─── 사용자 F0 경로 (모드별 색상 분기) ───
+  const f0Paths = useMemo(() => {
+    if (!userF0?.values?.length) return [];
+    const { frameHz, values } = userF0;
+    const stride = values.length > 4000 ? 2 : 1;
+
+    const getColor = (i: number, freq: number): string => {
+      const tMaster = i / frameHz + lrcOffsetSec;
+      const midi    = 12 * Math.log2(freq / 440) + 69;
+
+      if (activeMode === 'pitch') {
+        let nearest: RawSeg | null = null, minDist = Infinity;
+        for (const s of midiSegments) {
+          const sA = s.start + guideOffset, eA = s.end + guideOffset;
+          const d  = tMaster >= sA && tMaster <= eA ? 0
+            : Math.min(Math.abs(tMaster - sA), Math.abs(tMaster - eA));
+          if (d < minDist) { minDist = d; nearest = s; }
+        }
+        if (!nearest || minDist > 1.5) return '#7ecfff';
+        const diff = Math.abs(midi - nearest.midi);
+        return diff < 0.5 ? '#59dda5' : diff < 1.0 ? '#ffb780' : '#ffb4ab';
+      }
+      // breathiness / vocalFoldContact — chunk zone 기준
+      const chunk = timelineScores.find(c => tMaster >= c.startSec && tMaster <= c.endSec);
+      const zone  = activeMode === 'breathiness'
+        ? chunk?.scores.breathiness?.zone
+        : chunk?.scores.vocalFoldContact?.zone;
+      if (!zone) return '#7ecfff';
+      return zone === 'appropriate' ? '#59dda5' : '#ffb4ab';
+    };
+
+    const nodes: React.ReactNode[] = [];
+    let d = '', curColor = '', key = 0;
+
+    const flush = () => {
+      if (!d) return;
+      nodes.push(<Path key={key++} d={d} stroke={curColor} strokeWidth={2.5}
+        fill="none" strokeLinecap="round" strokeLinejoin="round" />);
+      d = '';
+    };
+
+    for (let i = 0; i < values.length; i++) {
+      const freq = values[i];
+      if (freq === null || freq <= 60 || freq >= 1500) { flush(); continue; }
+      const midi = 12 * Math.log2(freq / 440) + 69;
+      if (midi < MIDI_MIN || midi > MIDI_MAX) { flush(); continue; }
+
+      const color = getColor(i, freq);
+      if (color !== curColor && d) flush();
+      curColor = color;
+
+      const nextFreq = values[i + 1];
+      const isSegEnd = nextFreq === null || nextFreq <= 60;
+      if (!d || isSegEnd || i % stride === 0) {
+        const x = (i / frameHz + lrcOffsetSec) * PX_PER_SEC;
+        const y = midiToY(midi);
+        d += d ? ` L${x.toFixed(1)} ${y.toFixed(1)}` : `M${x.toFixed(1)} ${y.toFixed(1)}`;
+      }
+    }
+    flush();
+    return nodes;
+  }, [userF0, activeMode, midiSegments, timelineScores, lrcOffsetSec, guideOffset]);
+
+  const nearestSegStart = (tSec: number): number => {
+    if (!midiSegments.length) return tSec;
+    let best = midiSegments[0], bestDist = Math.abs(midiSegments[0].start - tSec);
+    for (const s of midiSegments) {
+      const d = Math.abs(s.start - tSec);
+      if (d < bestDist) { bestDist = d; best = s; }
+    }
+    return best.start;
+  };
+
+  const scrollH = timelineScores.length > 0 ? GUIDE_H + LRC_H : GUIDE_H;
+  return (
+    <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false}
+      style={[tlStyles.scroll, { height: scrollH, maxHeight: scrollH }]}
+    >
+      <View style={{ width: totalW, height: scrollH }}>
+        <Svg width={totalW} height={GUIDE_H} style={{ backgroundColor: COLORS.surface, height: GUIDE_H }}>
+          {midiSegments.map((s, i) => (
+            <Line key={i}
+              x1={s.start * PX_PER_SEC} y1={midiToY(s.midi)}
+              x2={s.end   * PX_PER_SEC} y2={midiToY(s.midi)}
+              stroke="#938ea1" strokeWidth={6} strokeLinecap="round"
+            />
+          ))}
+          {f0Paths}
+        </Svg>
+        {timelineScores.length > 0 && (
+          <View style={{ width: totalW, height: LRC_H, backgroundColor: '#1a1a2e', position: 'relative' }}>
+            {timelineScores.map((chunk, i) => chunk.lrcText.trim() ? (
+              <View key={i} style={{
+                position: 'absolute',
+                left: nearestSegStart(chunk.startSec) * PX_PER_SEC,
+                top: 10,
+                backgroundColor: '#2a2a3e',
+                borderRadius: 8,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+              }}>
+                <Text style={{ fontSize: 11, color: '#ffffff' }}>
+                  {chunk.lrcText.trim()}
+                </Text>
+              </View>
+            ) : null)}
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+const tlStyles = StyleSheet.create({
+  scroll: { borderTopWidth: 1, borderTopColor: COLORS.divider, flexGrow: 0 },
+});
+
+// ─── Color legend ───
+const LEGEND_ITEMS: Record<VisualizationMode, Array<{ color: string; label: string }>> = {
+  pitch: [
+    { color: '#59dda5', label: '정확 (≤0.5반음)' },
+    { color: '#ffb780', label: '살짝 어긋남 (≤1.0)' },
+    { color: '#ffb4ab', label: '틀림 (>1.0반음)' },
+    { color: '#7ecfff', label: '가이드 없음' },
+  ],
+  breathiness: [
+    { color: '#59dda5', label: '적절' },
+    { color: '#ffb4ab', label: '과함/미달' },
+    { color: '#7ecfff', label: '데이터 없음' },
+  ],
+  vocalFoldContact: [
+    { color: '#7ecfff', label: 'chunk 분석 비활성 (추가 데이터 수집 후 활성화 예정)' },
+  ],
+};
+
+function LegendRow({ activeMode }: { activeMode: VisualizationMode }) {
+  const items = LEGEND_ITEMS[activeMode] ?? [];
+  return (
+    <View style={lgStyles.row}>
+      {items.map((item, i) => (
+        <View key={i} style={lgStyles.item}>
+          <View style={[lgStyles.dot, { backgroundColor: item.color }]} />
+          <Text style={lgStyles.label}>{item.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const lgStyles = StyleSheet.create({
+  row:   { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.base, paddingVertical: 6, gap: SPACING.sm, backgroundColor: COLORS.background, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  item:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dot:   { width: 8, height: 8, borderRadius: 4 },
+  label: { fontSize: 10, color: COLORS.textSecondary },
+});
+
+// ─── Main screen ───
+export default function EvalResultScreen({ route, navigation }: Props) {
+  const { runId, songId } = route.params ?? {};
+  const [result, setResult]     = useState<AnalyzeResult | null>(null);
+  const [midiSegs, setMidiSegs] = useState<RawSeg[]>([]);
+  const [loading, setLoading]   = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('basic');
+  const [tab, setTab]               = useState<Tab>('basic');
+  const [activeMode, setActiveMode] = useState<VisualizationMode>('pitch');
+  const [lrcOffsetSec, setLrcOffsetSec] = useState(0);
 
   useEffect(() => {
     getResultsByRunId(runId)
-      .then(data => { setResult(data); setLoading(false); })
+      .then(data => {
+        setResult(data);
+        setLoading(false);
+      })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : '결과를 불러올 수 없습니다.';
         setErrorMsg(msg);
         setLoading(false);
       });
   }, [runId]);
+
+  useEffect(() => {
+    if (!songId || !result) return;
+    getSongMidiSegmentsRaw(songId)
+      .then(({ segments, lrcOffsetSec: offset }) => {
+        setMidiSegs(segments);
+        setLrcOffsetSec(offset);
+      })
+      .catch((e) => { if (__DEV__) console.warn('[EvalResult] midiSegs fetch failed:', e); });
+  }, [songId, result]);
+
+  const guideOffset = SONG_GUIDE_OFFSETS[songId ?? ''] ?? 0;
+
+  const { pitchPct, rhythmPct } = useMemo(() => {
+    const f0 = result?.userF0;
+    if (!f0?.values?.length || !midiSegs.length) return { pitchPct: null, rhythmPct: null };
+    const { frameHz, values } = f0;
+
+    // 음정 정확도: voiced 프레임 중 1.0반음 이내 비율
+    let inPitch = 0, voicedTotal = 0;
+    for (let i = 0; i < values.length; i++) {
+      const freq = values[i];
+      if (freq === null || freq <= 60 || freq >= 1500) continue;
+      voicedTotal++;
+      const tMaster = i / frameHz + lrcOffsetSec;
+      const midi    = 12 * Math.log2(freq / 440) + 69;
+      let minDist = Infinity, nearestMidi = 0;
+      for (const s of midiSegs) {
+        const sA = s.start + guideOffset, eA = s.end + guideOffset;
+        const d  = tMaster >= sA && tMaster <= eA ? 0
+          : Math.min(Math.abs(tMaster - sA), Math.abs(tMaster - eA));
+        if (d < minDist) { minDist = d; nearestMidi = s.midi; }
+      }
+      if (minDist <= 1.5 && Math.abs(midi - nearestMidi) < 1.0) inPitch++;
+    }
+    const pitchPct = voicedTotal > 0 ? Math.round(inPitch / voicedTotal * 100) : null;
+
+    // 박자 정확도 (옵션 B): 각 segment 시작점 ±0.3s 내 voiced 여부
+    const ONSET_WIN = 0.3;
+    let onTime = 0;
+    for (const s of midiSegs) {
+      const tMr    = (s.start + guideOffset) - lrcOffsetSec;
+      const iStart = Math.max(0, Math.floor((tMr - ONSET_WIN) * frameHz));
+      const iEnd   = Math.min(values.length - 1, Math.ceil((tMr + ONSET_WIN) * frameHz));
+      for (let i = iStart; i <= iEnd; i++) {
+        const freq = values[i];
+        if (freq !== null && freq > 60 && freq < 1500) { onTime++; break; }
+      }
+    }
+    const rhythmPct = midiSegs.length > 0 ? Math.round(onTime / midiSegs.length * 100) : null;
+
+    return { pitchPct, rhythmPct };
+  }, [result, midiSegs, lrcOffsetSec, guideOffset]);
 
   if (loading) {
     return (
@@ -65,8 +347,6 @@ export default function EvalResultScreen({ route }: Props) {
     ...BASE_ITEMS,
     ...FOCUS_ITEMS_FROM_USER.filter(k => !BASE_ITEMS.includes(k)),
   ];
-
-  // 고급 탭: high → medium → unavailable 순
   const advancedItems: EvaluationItemKey[] = [
     ...result.reliability.high_reliability,
     ...result.reliability.medium_reliability,
@@ -77,10 +357,41 @@ export default function EvalResultScreen({ route }: Props) {
     const meta       = EVALUATION_ITEMS.find(m => m.key === key)!;
     const scoreEntry = result.scores[key];
     const fb         = result.feedback[key];
-    // 응답 confidence 우선, 없으면 defaultConfidence 폴백
     const confidence = scoreEntry?.confidence ?? meta.defaultConfidence;
-    // server feedback.name_ko 우선, 없으면 도메인 nameKo 폴백
-    const nameKo = fb?.name_ko ?? meta.nameKo;
+    const nameKo     = fb?.name_ko ?? meta.nameKo;
+
+    // 9항목 모두 동적 분기 (timeline_metadata.shown_indicators 기반 활성화)
+    // 5월 중순 데이터 학습 후 server가 shown_indicators에 항목 추가하면 자동 활성화
+    // 단 SectionList/Training 코어 확장 전까지는 호흡/접촉 외 7항목은 "준비 중" Alert
+    const SUPPORTED: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact'];
+    const shownStripped = (result.timelineMetadata?.shownIndicators ?? [])
+      .map(s => s.replace(/^\d+_/, '') as EvaluationItemKey);
+    const isShown       = shownStripped.includes(key);
+    const trainDisabled = !isShown;
+    const onTrainPress = () => {
+      if (trainDisabled) {
+        Alert.alert('곧 출시', '데이터 수집 후 활성화 예정입니다.');
+        return;
+      }
+      if (!SUPPORTED.includes(key)) {
+        Alert.alert('준비 중', '이 항목은 훈련 화면이 아직 준비되지 않았습니다.');
+        return;
+      }
+      const indicatorKey = key as IndicatorAppKey;
+      const weakSections = extractWeakSections(
+        result.timelineScores ?? [],
+        indicatorKey,
+        result.audio_info?.duration_sec,
+      );
+      navigation.navigate('SectionList' as never, {
+        indicatorKey,
+        weakSections,
+        feedbackText: fb?.feedback_text ?? '',
+        runId,
+        songId,
+        sessionId: result.session_id,
+      } as never);
+    };
 
     return (
       <EvalItemCard
@@ -93,9 +404,13 @@ export default function EvalResultScreen({ route }: Props) {
         feedbackText={fb?.feedback_text ?? ''}
         scoreDescription={fb?.score_description}
         isFocus={FOCUS_ITEMS_FROM_USER.includes(key)}
+        onTrainPress={onTrainPress}
+        trainDisabled={trainDisabled}
       />
     );
   };
+
+  const showTimeline = !!songId; // songId 있으면 guide lines 항상 표시 (timeline_scores 길이 무관)
 
   return (
     <View style={styles.container}>
@@ -107,6 +422,77 @@ export default function EvalResultScreen({ route }: Props) {
           {runId ? ` · ${runId.slice(0, 8)}…` : ' · mock'}
         </Text>
       </View>
+
+      {/* 타임라인 시각화 */}
+      {showTimeline && (
+        <TimelineSection
+          timelineScores={result.timelineScores ?? []}
+          midiSegments={midiSegs}
+          userF0={result.userF0 ?? null}
+          activeMode={activeMode}
+          lrcOffsetSec={lrcOffsetSec}
+          guideOffset={guideOffset}
+        />
+      )}
+
+      {/* 모드 버튼 */}
+      {showTimeline && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          style={[styles.modeBtnRow, { maxHeight: 36 }]}
+          contentContainerStyle={{ paddingHorizontal: SPACING.base, alignItems: 'center', paddingVertical: 4 }}
+        >
+          {MODE_BUTTONS.map(btn => (
+            <TouchableOpacity
+              key={btn.id}
+              activeOpacity={btn.active ? 0.7 : 1}
+              style={[
+                styles.modeBtn,
+                btn.active && (btn.id as VisualizationMode) === activeMode && styles.modeBtnActive,
+                !btn.active && styles.modeBtnDisabled,
+              ]}
+              onPress={() => { if (btn.active) setActiveMode(btn.id as VisualizationMode); }}
+            >
+              <Text style={[
+                styles.modeBtnLabel,
+                btn.active && (btn.id as VisualizationMode) === activeMode && styles.modeBtnLabelActive,
+                !btn.active && styles.modeBtnLabelDisabled,
+              ]}>
+                {btn.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* 색상 범례 */}
+      {showTimeline && <LegendRow activeMode={activeMode} />}
+
+      <ScrollView style={{ flex: 1 }}>
+      {/* 음정·박자 점수 */}
+      {showTimeline && (pitchPct !== null || rhythmPct !== null) && (
+        <View style={styles.scoreCardsRow}>
+          {pitchPct !== null && (
+            <View style={styles.scoreCard}>
+              <Text style={[styles.scoreCardPct, { color: scoreColor(pitchPct) }]}>{pitchPct}%</Text>
+              <Text style={styles.scoreCardLabel}>음정 정확도</Text>
+            </View>
+          )}
+          {rhythmPct !== null && (
+            <View style={styles.scoreCard}>
+              <Text style={[styles.scoreCardPct, { color: scoreColor(rhythmPct) }]}>{rhythmPct}%</Text>
+              <Text style={styles.scoreCardLabel}>박자 정확도</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* 안내 문구 */}
+      {showTimeline && (
+        <Text style={styles.timelineInfo}>
+          이 시각화는 호흡 소리 + 성대 접촉 강도 2가지 기준입니다.{'\n'}
+          (다른 항목은 신뢰도가 충분히 높지 않아 시간 구간 표시 X)
+        </Text>
+      )}
 
       {/* 탭 */}
       <View style={styles.tabRow}>
@@ -123,11 +509,12 @@ export default function EvalResultScreen({ route }: Props) {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {tab === 'basic'
-          ? basicItems.map(renderCard)
-          : advancedItems.map(renderCard)
-        }
+        <View style={styles.scroll}>
+          {tab === 'basic'
+            ? basicItems.map(renderCard)
+            : advancedItems.map(renderCard)
+          }
+        </View>
       </ScrollView>
     </View>
   );
@@ -136,26 +523,38 @@ export default function EvalResultScreen({ route }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: SPACING.sm,
+    flex: 1, backgroundColor: COLORS.background,
+    justifyContent: 'center', alignItems: 'center', gap: SPACING.sm,
   },
-  loadingText: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
-  errorText:   { ...TYPOGRAPHY.body, color: COLORS.danger, textAlign: 'center', paddingHorizontal: 24 },
-  headerBar: { paddingHorizontal: SPACING.base, paddingTop: SPACING.base, paddingBottom: SPACING.sm },
-  headerTitle: { ...TYPOGRAPHY.heading, color: COLORS.textPrimary },
-  headerMeta:  { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: 2 },
+  loadingText:  { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
+  errorText:    { ...TYPOGRAPHY.body, color: COLORS.danger, textAlign: 'center', paddingHorizontal: 24 },
+  headerBar:    { paddingHorizontal: SPACING.base, paddingTop: SPACING.base, paddingBottom: SPACING.sm },
+  headerTitle:  { ...TYPOGRAPHY.heading, color: COLORS.textPrimary },
+  headerMeta:   { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: 2 },
+  timelineInfo: {
+    paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm,
+    fontSize: 11, color: COLORS.textMuted, lineHeight: 17,
+    borderBottomWidth: 1, borderBottomColor: COLORS.divider,
+  },
   tabRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.divider,
+    borderBottomWidth: 1, borderBottomColor: COLORS.divider,
     marginHorizontal: SPACING.base,
   },
-  tabBtn: { paddingVertical: SPACING.sm, paddingHorizontal: SPACING.base, marginRight: SPACING.sm },
-  tabBtnActive: { borderBottomWidth: 2, borderBottomColor: COLORS.primary },
-  tabLabel: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  tabBtn:         { paddingVertical: SPACING.sm, paddingHorizontal: SPACING.base, marginRight: SPACING.sm },
+  tabBtnActive:   { borderBottomWidth: 2, borderBottomColor: COLORS.primary },
+  tabLabel:       { ...TYPOGRAPHY.body, color: COLORS.textMuted },
   tabLabelActive: { color: COLORS.primary, fontWeight: '600' },
-  scroll: { padding: SPACING.base, paddingBottom: SPACING.xl },
+  scroll:               { padding: SPACING.base, paddingBottom: SPACING.xl },
+  modeBtnRow:           { height: 36, borderBottomWidth: 1, borderBottomColor: COLORS.divider, flexGrow: 0 },
+  modeBtn:              { flexShrink: 0, height: 28, paddingHorizontal: 9, borderRadius: 14, marginRight: 8, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.divider, justifyContent: 'center', alignItems: 'center' },
+  modeBtnActive:        { backgroundColor: '#6C63FF33', borderColor: '#6C63FF' },
+  modeBtnDisabled:      { opacity: 0.35 },
+  modeBtnLabel:         { fontSize: 12, color: '#D0D0D0' },
+  modeBtnLabelActive:   { color: '#a78bfa', fontWeight: '600' },
+  modeBtnLabelDisabled: { color: '#888888' },
+  scoreCardsRow:        { flexDirection: 'row', paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, gap: SPACING.base },
+  scoreCard:            { flex: 1, alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 10, paddingVertical: SPACING.sm },
+  scoreCardPct:         { fontSize: 22, fontWeight: '700' },
+  scoreCardLabel:       { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
 });

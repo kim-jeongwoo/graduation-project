@@ -2,6 +2,22 @@ import type { EvaluationItemKey, ConfidenceLevel } from '../domain/evaluationIte
 
 export type Zone = 'insufficient' | 'appropriate' | 'excessive';
 
+export interface TimelineChunkScore {
+  startSec: number;
+  endSec:   number;
+  lrcText:  string;
+  scores: {
+    breathiness?:      { aiScore: number; zone: Zone; roundedScore: number };
+    vocalFoldContact?: { aiScore: number; zone: Zone; roundedScore: number };
+  };
+}
+
+export interface TimelineMetadata {
+  chunkMethod:           string;
+  shownIndicators:       string[];
+  shownIndicatorsReason: string;
+}
+
 export interface AudioInfo {
   duration_sec: number;
   sample_rate: number;
@@ -58,16 +74,20 @@ export interface AnalyzeResult {
     unavailable: EvaluationItemKey[];
   };
   run_id: string;
+  session_id?: string;
   status: string;
   processing_time_ms: number;
   register_boundaries?: { low_max: number; mid_max: number };
+  timelineScores?:      TimelineChunkScore[];
+  timelineMetadata?:    TimelineMetadata;
+  userF0?:              { frameHz: number; values: (number | null)[] } | null;
 }
 
 // ─── 서버 raw 응답 타입 ───
 // GET /analysis/{run_id}/results 응답의 result_json 필드 구조
 // 키에 숫자 prefix 포함: "1_nasal_oral_ratio" 등
 export interface ServerAnalyzeResult
-  extends Omit<AnalyzeResult, 'scores' | 'feedback' | 'reliability'> {
+  extends Omit<AnalyzeResult, 'scores' | 'feedback' | 'reliability' | 'timelineScores' | 'timelineMetadata'> {
   scores: Record<string, ScoreEntry>;
   feedback: Record<string, FeedbackEntry>;
   reliability: {
@@ -75,6 +95,18 @@ export interface ServerAnalyzeResult
     medium_reliability: string[];
     unavailable: string[];
   };
+  timeline_scores?: Array<{
+    start_sec: number;
+    end_sec:   number;
+    lrc_text:  string;
+    scores: Record<string, { ai_score: number; zone: Zone; rounded_score: number }>;
+  }>;
+  timeline_metadata?: {
+    chunk_method:            string;
+    shown_indicators:        string[];
+    shown_indicators_reason: string;
+  };
+  user_f0?: { frame_hz: number; values: (number | null)[] } | null;
 }
 
 // GET /analysis/{run_id}/results 응답 최상위 래퍼

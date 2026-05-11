@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../../context/AuthContext';
-import { mockSessions, mockAnalysisResults } from '../../mock/mockData';
+import { getSessions } from '../../api/sessions';
+import type { Session } from '../../types/api';
 import { COLORS } from '../../utils/colors';
 
 const USER_KEY = 'auth_user';
@@ -21,9 +22,14 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const totalSessions = mockSessions.length;
-  const completedSessions = mockSessions.filter((s) => s.status === 'completed').length;
-  const totalAnalyses = Object.keys(mockAnalysisResults).length;
+  // 실시간 활동 통계 — GET /sessions 응답 기반 (mock 의존 제거)
+  const [sessions, setSessions] = useState<Session[]>([]);
+  useEffect(() => {
+    getSessions().then(setSessions).catch((e) => console.log('[ProfileScreen] getSessions error:', e));
+  }, []);
+  const totalSessions     = sessions.length;
+  const completedSessions = sessions.filter((s) => s.analysis_status === 'completed').length;
+  const totalAnalyses     = completedSessions;  // 분석 완료 = 분석 수와 동일
 
   const handleSave = useCallback(async () => {
     if (!nickname.trim()) {
