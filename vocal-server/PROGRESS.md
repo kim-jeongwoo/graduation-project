@@ -181,6 +181,12 @@ TrainingScreen 관련 작업이 5/9 데드라인 이후 vocal-server에도 영�
 - v2 신규 필드 통과 검증: `score_mapper_version`, `scores_v2`, `scores_meta`, `academic_analysis_scores`, `reliability.{shown_v2, shown_v2_tiers, academic_only_v2, deferred_v2}` 모두 DB 저장 + 응답 정상
 - `_ANALYZE_TIMEOUT` 120s → **180s** (cold start + 긴 wav 여유)
 
+### training-analyze v2 필드 통과 수정 (2026-05-12)
+- POST `/sessions/{id}/training-analyze`가 화이트리스트 8개 필드만 반환 → v2 신규 5개(`score_mapper_version`, `scores_v2`, `scores_meta`, `low_confidence_items`, `chunk_duration_s`) 누락 사례 발견
+- **통째 통과 + `run_id` 제외 + `session_id`/`chunk_meta` 추가** 패턴으로 전환 (`/analyze`와 일관성 확보)
+- 실측: dml-server `/analyze-chunk` 11 keys → vocal-server 12 keys (`-run_id +session_id +chunk_meta`)
+- §15-3 운영 규칙 적용 범위가 **모든 dml-server endpoint** (단순 `/analyze`뿐 아니라 `/analyze-chunk` 등)임을 학습. 향후 신규 dml-forward endpoint 추가 시 처음부터 통째 통과 패턴 권장.
+
 ### dml-server StreamingResponse 자동 통과 (2026-05-12, P1-2)
 - dml-server `/_test_stream?duration=130` (chunked + leading whitespace keepalive) 실측 검증
 - 결과: HTTP 200 / 130.7s (Cloudflare 524 발생 안 함) / `Transfer-Encoding: chunked` / 첫 30 bytes `'                           {"t'` (leading whitespace ping) / `response.json()` 정상 파싱

@@ -163,3 +163,10 @@ vocal-server/          ← 이 폴더 (모노레포 내 서브프로젝트)
   긴 응답 (>100s)은 청크 분할 또는 비동기 처리 필요.
   이전 작업에서 `_ANALYZE_TIMEOUT` 120s → 180s 늘렸지만 Cloudflare 한계는 별도.
   v2 score_mapper로 모델 cold start 시 127s 이상 가능 — 짧은 wav (90s 이내) 권장.
+  *(2026-05-12 갱신: dml-server StreamingResponse 도입으로 TTFB 기준 우회됨 — 위 한계 사실상 해소)*
+
+- [2026-05-12] [응답 화이트리스트 위험] dml-server forward endpoint 응답을 화이트리스트(특정 키만 추출)로
+  구현하면 dml-server schema 변경 시 신규 필드가 자동 누락됨. /analyze처럼 통째 통과 패턴(필요한 것만 pop,
+  나머지 dict 그대로) 권장. 이번에 training-analyze가 화이트리스트 8개로 구현돼 있어 v2 신규 필드 5개
+  (score_mapper_version, scores_v2, scores_meta, low_confidence_items, chunk_duration_s) 누락 발생 →
+  통째 통과 + run_id만 제외로 전환.

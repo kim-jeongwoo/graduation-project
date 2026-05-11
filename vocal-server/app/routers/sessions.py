@@ -292,13 +292,10 @@ def training_analyze(
         db.rollback()
         logger.warning(f"[training-analyze] attempt save failed: {exc}")
 
-    return {
-        "session_id": str(session_id),
-        "status": body.get("status"),
-        "scores": body.get("scores"),
-        "reason": body.get("reason"),
-        "duration_sec": body.get("duration_sec"),
-        "indicators": body.get("indicators"),
-        "processing_time_ms": body.get("processing_time_ms"),
-        "chunk_meta": parsed_meta,
-    }
+    # dml-server 응답 통째 통과 (run_id만 제외 — 휘발 ID, 우리 AnalysisRun.run_id와 혼동 방지)
+    # 화이트리스트 패턴은 schema 변경 시 신규 필드(v2 등) 자동 누락 → 통째 통과로 미래 호환
+    response_data = dict(body)
+    response_data.pop("run_id", None)
+    response_data["session_id"] = str(session_id)
+    response_data["chunk_meta"] = parsed_meta
+    return response_data

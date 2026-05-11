@@ -353,31 +353,34 @@ curl -X POST http://host:8000/sessions/{session_id}/training-analyze \
   -F 'chunk_meta={"chunk_index":5,"start_sec":24.0,"end_sec":31.0}'
 ```
 
-**Response 200** (정상)
+**응답 패턴 (2026-05-12 변경)**: dml-server `/analyze-chunk` 응답을 **통째 통과** + `session_id`, `chunk_meta` 추가 + `run_id` 제외. dml-server schema에 신규 필드(v2 등) 추가 시 자동 통과됨.
+
+**Response 200** (정상, v2 score_mapper)
 ```json
 {
   "session_id": "7cd855b1-...",
   "status": "success",
   "scores": {
-    "3_vocal_fold_contact": {
-      "ai_score": 3.4,
-      "rounded_score": 3,
-      "zone": "appropriate",
-      "confidence": "high"
-    },
-    "4_breathiness": {
-      "ai_score": 2.8,
-      "rounded_score": 3,
-      "zone": "appropriate",
-      "confidence": "high"
-    }
+    "3_vocal_fold_contact": {"ai_score": 3.4, "rounded_score": 3, "zone": "appropriate", "confidence": "high"},
+    "4_breathiness":         {"ai_score": 2.8, "rounded_score": 3, "zone": "appropriate", "confidence": "high"}
   },
-  "reason": null,
-  "duration_sec": 7.0,
-  "indicators": {
-    "cpp_mean": 0.21,
-    "voiced_ratio": 0.78
+  "score_mapper_version": "v2",
+  "scores_v2": {
+    "3_vocal_fold_contact": { },
+    "4_breathiness": { },
+    "6_soft_palate": { },
+    "8_tongue_tension": { }
   },
+  "scores_meta": {
+    "3_vocal_fold_contact": { },
+    "4_breathiness": { },
+    "6_soft_palate": { },
+    "8_tongue_tension": { }
+  },
+  "low_confidence_items": [],
+  "duration_sec": 8.0,
+  "chunk_duration_s": 8.0,
+  "indicators": { "cpp_mean": 0.21, "voiced_ratio": 0.78 },
   "processing_time_ms": 412.3,
   "chunk_meta": {"chunk_index": 5, "start_sec": 24.0, "end_sec": 31.0}
 }
@@ -397,18 +400,26 @@ curl -X POST http://host:8000/sessions/{session_id}/training-analyze \
 }
 ```
 
-`chunk_meta`는 클라이언트가 보낸 값을 그대로 echo. 보내지 않았으면 `null`. `run_id`는 의도적으로 제외 (휘발 분석이므로 정식 `AnalysisRun.run_id`와 혼동 방지).
+`chunk_meta`는 클라이언트가 보낸 값을 그대로 echo. 보내지 않았으면 `null`.  
+`run_id`는 의도적으로 제외 (dml-server 발급 휘발 ID — 정식 `AnalysisRun.run_id`와 혼동 방지).
 
 **필드별 케이스**
 
 | 필드 | success | no_voice | 비고 |
 |------|---------|----------|------|
-| `scores` | dict (2개 항목) | `null` | `3_vocal_fold_contact`, `4_breathiness` |
-| `reason` | `null` | string (한국어 메시지) | 앱에서 사용자에게 표시 권장 |
+| `scores` (legacy) | dict (2개) | `null` | `3_vocal_fold_contact`, `4_breathiness` |
+| `score_mapper_version` | `"v2"` | `null` 가능 | v2 mapper 식별자 |
+| `scores_v2` | dict (4개) | `null` 가능 | `3/4/6/8` (mapper v2 결과) |
+| `scores_meta` | dict (4개) | `null` 가능 | scores_v2 항목별 메타 |
+| `low_confidence_items` | array | `null` 가능 | 저신뢰 항목 키 리스트 |
+| `chunk_duration_s` | float | float | 청크 길이 (dml 별칭) |
+| `reason` | `null` | string (한국어) | 앱에서 사용자에게 표시 권장 |
 | `duration_sec` | float | float | 청크 길이 |
-| `indicators` | dict | `null` | cpp_mean, voiced_ratio 등 원시 지표 |
+| `indicators` | dict | `null` | cpp_mean, voiced_ratio 등 |
 | `processing_time_ms` | float | float | dml-server 처리 시간 |
 | `chunk_meta` | echo | echo | 클라이언트가 보낸 값 그대로 |
+
+> **주의**: `/analyze-chunk`에는 `academic_analysis_scores`, `reliability`, `timeline_scores`, `timeline_metadata`, `user_f0`, `feedback`, `registers`, `audio_info`, `register_boundaries` **없음**. 이 필드들은 `/analyze`(정식 분석)에만 있음. 두 endpoint 응답 구조 차이 — vocal-app은 호출하는 endpoint에 맞춰 분기 처리.
 
 **Response 400** (chunk_too_short)
 ```json
