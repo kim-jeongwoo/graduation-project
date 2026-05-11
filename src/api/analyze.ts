@@ -35,7 +35,14 @@ function adaptChunkScore(raw: { ai_score: number; zone?: Zone; rounded_score: nu
 
 function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResult {
   const inner: ServerAnalyzeResult = response.result_json;
+  // ─── V2 진단 — 서버 응답 raw (v1 vs v2 격리) ───
+  console.log('[V2 진단] raw 응답 keys:', Object.keys(inner));
+  console.log('[V2 진단] score_mapper_version:', inner.score_mapper_version);
+  console.log('[V2 진단] has scores_v2:', !!inner.scores_v2, 'has scores_meta:', !!inner.scores_meta);
+  console.log('[V2 진단] reliability keys:', Object.keys(inner.reliability || {}));
+  console.log('[V2 진단] reliability.shown_v2:', (inner.reliability as any)?.shown_v2);
   const isV2 = inner.score_mapper_version === 'v2' && !!inner.scores_v2;
+  console.log('[V2 진단] isV2 detect:', isV2);
 
   return {
     run_id:              inner.run_id,

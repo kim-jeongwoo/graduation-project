@@ -22,6 +22,7 @@ interface EvalItemCardProps {
   // v2 신규
   tier?:    ScoreTier;
   tooltip?: string | null;
+  isHighlighted?: boolean;  // 호흡 카드 정적 글로우 (v2)
 }
 
 export default function EvalItemCard({
@@ -36,6 +37,7 @@ export default function EvalItemCard({
   trainDisabled = false,
   tier,
   tooltip,
+  isHighlighted = false,
 }: EvalItemCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -44,6 +46,7 @@ export default function EvalItemCard({
       CARD_STYLE,
       styles.card,
       isFocus && styles.focusCard,
+      isHighlighted && styles.highlightCard,
     ]}>
       {/* 상단: 항목명 + 뱃지 + (옵션) 훈련 버튼 */}
       <View style={styles.header}>
@@ -97,6 +100,16 @@ const styles = StyleSheet.create({
   focusCard: {
     borderColor: FOCUS_BORDER_COLOR,
     borderWidth: FOCUS_BORDER_WIDTH,
+  },
+  // v2 호흡 카드 정적 글로우 (보라 유사색 #8B83FF)
+  highlightCard: {
+    borderColor:   '#8B83FF',
+    borderWidth:   2,
+    shadowColor:   '#8B83FF',
+    shadowOffset:  { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius:  8,
+    elevation:     8,
   },
   header: {
     flexDirection: 'row',

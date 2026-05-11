@@ -10,6 +10,7 @@ interface Props {
 
 // v2 score_mapper_v2 — high_star tier 항목에 별표(*) 표시. tap 시 tooltip Alert.
 export default function TierBadge({ tier, tooltip, nameKo }: Props) {
+  console.log('[V2 진단] TierBadge render', { nameKo, tier, tooltip });
   if (tier !== 'high_star') return null;
   return (
     <TouchableOpacity

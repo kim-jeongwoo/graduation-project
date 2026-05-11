@@ -368,6 +368,14 @@ export default function EvalResultScreen({ route, navigation }: Props) {
       : (result.timelineMetadata?.shownIndicators ?? [])
           .map(s => s.replace(/^\d+_/, '') as EvaluationItemKey);
     const isShown       = shownStripped.includes(key);
+    // ─── V2 진단 — shown 매핑 + tier (key='breathiness'일 때만 출력, 노이즈 회피) ───
+    if (key === 'breathiness') {
+      console.log('[V2 진단] scoreMapperVersion:', result.scoreMapperVersion);
+      console.log('[V2 진단] reliability.shownV2:', result.reliability.shownV2);
+      console.log('[V2 진단] shownStripped:', shownStripped);
+      console.log('[V2 진단] breathiness tier:', result.scoresMeta?.['breathiness']?.tier);
+      console.log('[V2 진단] breathiness tooltip:', result.scoresMeta?.['breathiness']?.tooltip);
+    }
     const trainDisabled = !isShown;
     const onTrainPress = () => {
       if (trainDisabled) {
@@ -409,6 +417,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         trainDisabled={trainDisabled}
         tier={result.scoresMeta?.[key]?.tier}
         tooltip={result.scoresMeta?.[key]?.tooltip}
+        isHighlighted={key === 'breathiness' && result.scoreMapperVersion === 'v2'}
       />
     );
   };
