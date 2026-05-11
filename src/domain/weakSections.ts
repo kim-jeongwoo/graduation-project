@@ -1,17 +1,21 @@
 import type { TimelineChunkScore, Zone } from '../types/analyze';
 
 // 앱 내부 키 (EvaluationItemKey와 동일 형식, prefix 제거 snake_case)
-export type IndicatorAppKey = 'breathiness' | 'vocal_fold_contact';
+export type IndicatorAppKey = 'breathiness' | 'vocal_fold_contact' | 'soft_palate' | 'tongue_tension';
 
-// timeline_scores 내부 키 (camelCase) 매핑
-const APP_TO_TIMELINE: Record<IndicatorAppKey, 'breathiness' | 'vocalFoldContact'> = {
+// timeline_scores 내부 키 (camelCase) 매핑 — v2 4항목
+const APP_TO_TIMELINE: Record<IndicatorAppKey, 'breathiness' | 'vocalFoldContact' | 'softPalate' | 'tongueTension'> = {
   breathiness:         'breathiness',
   vocal_fold_contact:  'vocalFoldContact',
+  soft_palate:         'softPalate',
+  tongue_tension:      'tongueTension',
 };
 
 export const INDICATOR_LABELS: Record<IndicatorAppKey, string> = {
   breathiness:         '호흡소리식별',
   vocal_fold_contact:  '성대접촉강도',
+  soft_palate:         '연구개위치',
+  tongue_tension:      '혀경직도',
 };
 
 export const ZONE_LABELS: Record<Zone, string> = {
