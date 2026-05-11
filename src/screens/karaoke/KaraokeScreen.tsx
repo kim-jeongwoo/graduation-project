@@ -543,7 +543,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
               />
             ))}
           </View>
-          <Text style={styles.analyzeHint}>잠시만 기다려주세요 (10~30초)</Text>
+          <Text style={styles.analyzeHint}>분석 중... (1~2분 소요)</Text>
         </View>
       )}
     </View>

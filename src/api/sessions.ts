@@ -82,7 +82,7 @@ export async function trainingAnalyze(
   const res = await apiClient.post<TrainingAnalyzeResponse>(
     `/sessions/${sessionId}/training-analyze`,
     formData,
-    { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 10000 },
+    { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000 },
   );
   return res.data;
 }
@@ -92,7 +92,7 @@ export async function startAnalysis(sessionId: string): Promise<{ run_id: string
   const res = await apiClient.post<{ run_id: string; status: string; reason?: string }>(
     `/sessions/${sessionId}/analyze`,
     {},
-    { timeout: 90000 },
+    { timeout: 200000 },  // v2: dml-server v2 chunk 처리 + Cloudflare Tunnel streaming 여유
   );
   return res.data;
 }
