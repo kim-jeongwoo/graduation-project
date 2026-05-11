@@ -1,7 +1,7 @@
 import { BASE_URL } from './client';
 import { pollAnalysisStatus, getAnalysisResults } from './analysis';
 import { MOCK_FIXED_RESULT } from './mock';
-import type { AnalyzeResult, ServerAnalyzeResult, ServerAnalyzeResultsResponse, ScoreEntry, FeedbackEntry } from '../types/analyze';
+import type { AnalyzeResult, ServerAnalyzeResult, ServerAnalyzeResultsResponse, ScoreEntry, FeedbackEntry, ScoreMetaEntry, Zone } from '../types/analyze';
 import type { EvaluationItemKey } from '../domain/evaluationItems';
 
 const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
@@ -15,8 +15,28 @@ function stripPrefix(key: string): EvaluationItemKey {
   return key.replace(/^\d+_/, '') as EvaluationItemKey;
 }
 
+// v2 chunk score: zone 필드 없음 → rounded_score로 유도
+//  0~1 → insufficient / 2~3 → appropriate / 4~5 → excessive
+function deriveZone(roundedScore: number): Zone {
+  if (roundedScore <= 1) return 'insufficient';
+  if (roundedScore >= 4) return 'excessive';
+  return 'appropriate';
+}
+
+// chunk.scores raw entry → 내부 표현 (zone derive 포함)
+function adaptChunkScore(raw: { ai_score: number; zone?: Zone; rounded_score: number; tier?: 'high'|'high_star' }) {
+  return {
+    aiScore:      raw.ai_score,
+    zone:         raw.zone ?? deriveZone(raw.rounded_score),
+    roundedScore: raw.rounded_score,
+    tier:         raw.tier,
+  };
+}
+
 function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResult {
   const inner: ServerAnalyzeResult = response.result_json;
+  const isV2 = inner.score_mapper_version === 'v2' && !!inner.scores_v2;
+
   return {
     run_id:              inner.run_id,
     session_id:          response.session_id,
@@ -36,30 +56,52 @@ function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResul
       high_reliability:   inner.reliability.high_reliability.map(stripPrefix),
       medium_reliability: inner.reliability.medium_reliability.map(stripPrefix),
       unavailable:        inner.reliability.unavailable.map(stripPrefix),
+      shownV2:        inner.reliability.shown_v2?.map(stripPrefix),
+      academicOnlyV2: inner.reliability.academic_only_v2?.map(stripPrefix),
+      deferredV2:     inner.reliability.deferred_v2?.map(stripPrefix),
     },
     timelineScores: (inner.timeline_scores ?? []).map((chunk) => ({
-      startSec: chunk.start_sec,
-      endSec:   chunk.end_sec,
-      lrcText:  chunk.lrc_text,
+      startSec:       chunk.start_sec,
+      endSec:         chunk.end_sec,
+      lrcText:        chunk.lrc_text,
+      chunkDurationS: chunk.chunk_duration_s,
       scores: {
-        breathiness: chunk.scores['4_breathiness'] ? {
-          aiScore:      chunk.scores['4_breathiness'].ai_score,
-          zone:         chunk.scores['4_breathiness'].zone,
-          roundedScore: chunk.scores['4_breathiness'].rounded_score,
-        } : undefined,
-        vocalFoldContact: chunk.scores['3_vocal_fold_contact'] ? {
-          aiScore:      chunk.scores['3_vocal_fold_contact'].ai_score,
-          zone:         chunk.scores['3_vocal_fold_contact'].zone,
-          roundedScore: chunk.scores['3_vocal_fold_contact'].rounded_score,
-        } : undefined,
+        breathiness:      chunk.scores['4_breathiness']        ? adaptChunkScore(chunk.scores['4_breathiness'])        : undefined,
+        vocalFoldContact: chunk.scores['3_vocal_fold_contact'] ? adaptChunkScore(chunk.scores['3_vocal_fold_contact']) : undefined,
+        softPalate:       chunk.scores['6_soft_palate']        ? adaptChunkScore(chunk.scores['6_soft_palate'])        : undefined,
+        tongueTension:    chunk.scores['8_tongue_tension']     ? adaptChunkScore(chunk.scores['8_tongue_tension'])     : undefined,
       },
+      lowConfidenceItems: chunk.low_confidence_items?.map(stripPrefix),
     })),
     timelineMetadata: inner.timeline_metadata ? {
-      chunkMethod:           inner.timeline_metadata.chunk_method,
+      chunkMethod:           inner.timeline_metadata.chunk_method ?? '',
       shownIndicators:       inner.timeline_metadata.shown_indicators,
       shownIndicatorsReason: inner.timeline_metadata.shown_indicators_reason,
     } : undefined,
     userF0: inner.user_f0 ? { frameHz: inner.user_f0.frame_hz, values: inner.user_f0.values } : null,
+    // v2 신규 매핑
+    scoreMapperVersion: isV2 ? 'v2' : (inner.score_mapper_version ?? 'v1'),
+    scoresV2: inner.scores_v2
+      ? (Object.fromEntries(
+          Object.entries(inner.scores_v2).map(([k, v]) => [stripPrefix(k), v]),
+        ) as Partial<Record<EvaluationItemKey, number>>)
+      : undefined,
+    scoresMeta: inner.scores_meta
+      ? (Object.fromEntries(
+          Object.entries(inner.scores_meta).map(([k, m]) => [
+            stripPrefix(k),
+            {
+              tier:         m.tier,
+              caveats:      m.caveats,
+              displayMark:  m.display_mark,
+              tooltip:      m.tooltip,
+              roundedScore: m.rounded_score,
+              icc:          m.icc,
+              iccRatio:     m.icc_ratio,
+            } as ScoreMetaEntry,
+          ]),
+        ) as Partial<Record<EvaluationItemKey, ScoreMetaEntry>>)
+      : undefined,
   };
 }
 

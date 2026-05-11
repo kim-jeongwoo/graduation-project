@@ -2,14 +2,32 @@ import type { EvaluationItemKey, ConfidenceLevel } from '../domain/evaluationIte
 
 export type Zone = 'insufficient' | 'appropriate' | 'excessive';
 
+// v2 — score_mapper_v2 tier (5/11)
+export type ScoreTier = 'high' | 'high_star';
+
+export interface ScoreMetaEntry {
+  tier:         ScoreTier;
+  caveats:      string[];
+  displayMark:  'asterisk' | null;
+  tooltip:      string | null;
+  roundedScore: number;
+  icc:          number;
+  iccRatio:     number;
+}
+
+// timeline chunk score: v1 호환 + v2 4항목 + low_confidence_items
 export interface TimelineChunkScore {
-  startSec: number;
-  endSec:   number;
-  lrcText:  string;
+  startSec:         number;
+  endSec:           number;
+  lrcText:          string;
+  chunkDurationS?:  number;
   scores: {
-    breathiness?:      { aiScore: number; zone: Zone; roundedScore: number };
-    vocalFoldContact?: { aiScore: number; zone: Zone; roundedScore: number };
+    breathiness?:      { aiScore: number; zone: Zone; roundedScore: number; tier?: ScoreTier };
+    vocalFoldContact?: { aiScore: number; zone: Zone; roundedScore: number; tier?: ScoreTier };
+    softPalate?:       { aiScore: number; zone: Zone; roundedScore: number; tier?: ScoreTier };
+    tongueTension?:    { aiScore: number; zone: Zone; roundedScore: number; tier?: ScoreTier };
   };
+  lowConfidenceItems?: EvaluationItemKey[];
 }
 
 export interface TimelineMetadata {
@@ -72,6 +90,10 @@ export interface AnalyzeResult {
     high_reliability: EvaluationItemKey[];
     medium_reliability: EvaluationItemKey[];
     unavailable: EvaluationItemKey[];
+    // v2 신규 (선택, v1 응답엔 없음)
+    shownV2?:        EvaluationItemKey[];
+    academicOnlyV2?: EvaluationItemKey[];
+    deferredV2?:     EvaluationItemKey[];
   };
   run_id: string;
   session_id?: string;
@@ -81,30 +103,59 @@ export interface AnalyzeResult {
   timelineScores?:      TimelineChunkScore[];
   timelineMetadata?:    TimelineMetadata;
   userF0?:              { frameHz: number; values: (number | null)[] } | null;
+  // v2 신규 (5/11 score_mapper_v2)
+  scoreMapperVersion?:  'v1' | 'v2' | string;
+  scoresV2?:            Partial<Record<EvaluationItemKey, number>>;
+  scoresMeta?:          Partial<Record<EvaluationItemKey, ScoreMetaEntry>>;
 }
 
 // ─── 서버 raw 응답 타입 ───
 // GET /analysis/{run_id}/results 응답의 result_json 필드 구조
 // 키에 숫자 prefix 포함: "1_nasal_oral_ratio" 등
+// v2 server score_meta raw (snake_case)
+export interface ServerScoreMeta {
+  tier:          ScoreTier;
+  caveats:       string[];
+  display_mark:  'asterisk' | null;
+  tooltip:       string | null;
+  rounded_score: number;
+  icc:           number;
+  icc_ratio:     number;
+}
+
 export interface ServerAnalyzeResult
-  extends Omit<AnalyzeResult, 'scores' | 'feedback' | 'reliability' | 'timelineScores' | 'timelineMetadata'> {
+  extends Omit<AnalyzeResult, 'scores' | 'feedback' | 'reliability' | 'timelineScores' | 'timelineMetadata' | 'scoresV2' | 'scoresMeta'> {
   scores: Record<string, ScoreEntry>;
   feedback: Record<string, FeedbackEntry>;
   reliability: {
     high_reliability: string[];
     medium_reliability: string[];
     unavailable: string[];
+    // v2 신규
+    shown_v2?:         string[];
+    shown_v2_tiers?:   Record<string, ScoreTier>;
+    academic_only_v2?: string[];
+    deferred_v2?:      string[];
   };
+  // v2 신규 top-level
+  score_mapper_version?: string;
+  scores_v2?:            Record<string, number>;
+  scores_meta?:          Record<string, ServerScoreMeta>;
+  academic_analysis_scores?: Record<string, unknown>;  // 학술 전용, 앱 표시 X
   timeline_scores?: Array<{
     start_sec: number;
     end_sec:   number;
     lrc_text:  string;
-    scores: Record<string, { ai_score: number; zone: Zone; rounded_score: number }>;
+    chunk_duration_s?: number;
+    scores: Record<string, { ai_score: number; zone?: Zone; rounded_score: number; tier?: ScoreTier }>;
+    low_confidence_items?: string[];
   }>;
   timeline_metadata?: {
-    chunk_method:            string;
-    shown_indicators:        string[];
-    shown_indicators_reason: string;
+    chunk_method?:            string;
+    shown_indicators:         string[];
+    shown_indicators_reason:  string;
+    score_mapper_version?:    string;
+    // 그 외 v2 필드는 인지하지만 클라이언트에서 사용 X
   };
   user_f0?: { frame_hz: number; values: (number | null)[] } | null;
 }
