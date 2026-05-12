@@ -22,10 +22,21 @@ graduation-project/           # 이 레포 루트
 │   ├── tests/                #   테스트 코드
 │   ├── PROJECT_LOG.md
 │   └── CLAUDE.md
-├── app/                      # Expo 앱 (별도 작업)
+├── vocal-app/                # React Native/Expo 모바일 앱
 ├── CLAUDE.md                 # 모노레포 공통 규칙
 └── README.md                 # 본 파일
 ```
+
+## Vocal App
+
+React Native/Expo 기반 모바일 앱. 사용자가 노래 연습을 녹음하고, 서버 분석 결과를 피치 가이드/실시간 피치/발성 항목 카드로 확인한 뒤 약점 구간별 훈련으로 이어지도록 구성되어 있다.
+
+- 앱 코드: [`vocal-app/`](vocal-app/)
+- 프로젝트 전체 설명: [`docs/VOCAL_FIT_PROJECT_OVERVIEW.md`](docs/VOCAL_FIT_PROJECT_OVERVIEW.md)
+- 앱 현재 상태: [`docs/VOCAL_APP_CURRENT_STATE.md`](docs/VOCAL_APP_CURRENT_STATE.md)
+- 변경 이력: [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- 앱 개발 흐름: [`vocal-app/docs/dev-flow.md`](vocal-app/docs/dev-flow.md)
+- Android 설치 가이드: [`vocal-app/docs/android-install.md`](vocal-app/docs/android-install.md)
 
 ## 핵심 결과
 
