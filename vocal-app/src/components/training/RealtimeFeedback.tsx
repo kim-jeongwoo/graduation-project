@@ -57,9 +57,9 @@ const BREATH_COLOR: Record<Zone | 'unknown', string> = {
 };
 
 const BREATH_TEXT: Record<Zone | 'unknown', string> = {
-  appropriate:  '호흡 적절',
-  excessive:    '성대를 너무 모으고 있어요',
-  insufficient: '호흡이 새는 소리가 많아요',
+  appropriate:  '호흡 지표 적절',
+  excessive:    '호흡 지표가 높아요',
+  insufficient: '호흡 지표가 낮아요',
   unknown:      '측정 중...',
 };
 
@@ -108,7 +108,7 @@ export function SoftPalateInfoCard() {
     <View style={styles.card}>
       <Text style={styles.label}>연구개 위치</Text>
       <Text style={styles.infoText}>
-        연구개는 입천장 뒤쪽의 부드러운 부위입니다. 하품하듯 살짝 들어올리면 공명 공간이 넓어져 더 풍부한 소리에 도움이 됩니다.
+        연구개 위치 지표는 녹음 종료 후 측정됩니다. 같은 구간을 다시 부르며 결과 변화를 확인해보세요.
       </Text>
     </View>
   );
@@ -119,7 +119,7 @@ export function TongueTensionInfoCard() {
     <View style={styles.card}>
       <Text style={styles.label}>혀경직도</Text>
       <Text style={styles.infoText}>
-        혀가 너무 긴장하면 발음과 소리가 뻣뻣해질 수 있습니다. 발음에 필요한 만큼만 가볍게 사용하세요.
+        혀/구강 공간 경직도 지표는 녹음 종료 후 측정됩니다. 같은 구간을 다시 부르며 결과 변화를 확인해보세요.
       </Text>
     </View>
   );

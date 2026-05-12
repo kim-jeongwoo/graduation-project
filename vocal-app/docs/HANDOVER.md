@@ -72,7 +72,10 @@
 
 ---
 
-## 3. 진단 로그 정리 필요 (Step 3 G 완료 후 일괄 제거)
+## 3. 진단 로그 정리 완료 (11-B PR 반영)
+
+> 2026-05-13 11-B 기준: 아래 항목은 정우 갤럭시 검증 OK 후 앱 코드에서 제거 완료.
+> 완료 후 runtime `src/` 검색에서 `[V2 진단]`, `[V2 진단 chunk]`, `_test_stream`, `stream test` 잔여물 0건 확인.
 
 ### 3-A. `[V2 진단]` (Step 1 검증용)
 | 파일 | 라인 위치 | 내용 |
@@ -86,7 +89,7 @@
 |---|---|---|
 | `src/api/sessions.ts` | `trainingAnalyze` 응답 직후 (return 직전) | 1줄 (response.data raw 1500자 slice) |
 
-### 3-C. `[stream test]` (P1-3 streaming 사전 점검 — 검증 OK 후 제거 필요)
+### 3-C. `[stream test]` (P1-3 streaming 사전 점검 — 제거 완료)
 | 파일 | 정리 |
 |---|---|
 | `src/utils/testStream.ts` | **파일 자체 삭제** (dml-server `_test_stream` endpoint 제거됨) |
@@ -222,6 +225,8 @@ vocal-app/
 ---
 
 ## 9. 다음 단계 (5/12 EOD)
+
+> 2026-05-13 11-B 기준: 1~4번은 정우 갤럭시 검증 OK 후 앱 코드와 `docs/V2_CLOSEOUT_CHECKLIST.md`에 반영 완료.
 
 1. **정우 갤럭시 Metro에서 사후 측정 응답 확인** (`[V2 진단 chunk]` raw)
    - Case A: v2 응답 → Step 3 G 작업 시작

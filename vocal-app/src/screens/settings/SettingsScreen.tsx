@@ -14,7 +14,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
-import { testStreamEndpoint } from '../../utils/testStream';
 
 type NavProp = NativeStackNavigationProp<{ Profile: undefined }>;
 
@@ -140,16 +139,6 @@ export default function SettingsScreen() {
             </Text>
           </View>
         </>,
-      )}
-
-      {/* (Dev) P1-3 streaming 사전 점검 — __DEV__에서만 보임. 점검 완료 후 제거 예정. */}
-      {__DEV__ && (
-        <TouchableOpacity
-          style={[styles.logoutBtn, { backgroundColor: COLORS.surface, marginBottom: 12 }]}
-          onPress={testStreamEndpoint}
-        >
-          <Text style={styles.logoutBtnText}>(Dev) _test_stream 호출 (130s)</Text>
-        </TouchableOpacity>
       )}
 
       {/* 로그아웃 */}

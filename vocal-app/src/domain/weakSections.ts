@@ -39,6 +39,12 @@ export interface WeakSection {
 const PAD_START_SEC = 4;
 const PAD_END_SEC   = 3;
 
+function deriveZoneFromRoundedScore(roundedScore: number): Zone {
+  if (roundedScore <= 1) return 'insufficient';
+  if (roundedScore >= 4) return 'excessive';
+  return 'appropriate';
+}
+
 /**
  * 약점 구간 추출 — zone !== 'appropriate' 필터 + 앞 패딩 4초 / 뒤 패딩 3초
  *  - 앞 패딩: max(0, c.startSec - 4)  (이전 chunk 클램프 제거)
@@ -55,7 +61,9 @@ export function extractWeakSections(
   for (let i = 0; i < timelineScores.length; i++) {
     const c = timelineScores[i];
     const entry = c.scores[tlKey];
-    if (!entry || entry.zone === 'appropriate') continue;
+    if (!entry || typeof entry.roundedScore !== 'number') continue;
+    const zone = deriveZoneFromRoundedScore(entry.roundedScore);
+    if (zone === 'appropriate') continue;
     const paddedStart = Math.max(0, c.startSec - PAD_START_SEC);
     const paddedEnd   = Math.min(totalDurationSec ?? Infinity, c.endSec + PAD_END_SEC);
     out.push({
@@ -66,7 +74,7 @@ export function extractWeakSections(
       endSec:         c.endSec,
       lrcText:        c.lrcText,
       aiScore:        entry.aiScore,
-      zone:           entry.zone,
+      zone,
       lowConfidenceItems: c.lowConfidenceItems,
     });
   }

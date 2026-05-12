@@ -4,6 +4,14 @@
 
 ## 2026-05-13
 
+### V2 Closeout PR
+
+- 녹음 재시작, pitch-guide cache/fallback, no_voice 결과 화면 차단 흐름을 Galaxy 검증 결과 기준으로 반영.
+- `shown_v2` 4항목 카드/그래프와 weak section/구간훈련 흐름을 `rounded_score` 기준으로 보정.
+- V2 진단 로그와 dml-server `_test_stream` dev 버튼/유틸 제거.
+- `result_json.status` 실패 guard와 `training-analyze` v2 fallback을 추가.
+- `vocal-app/docs/V2_CLOSEOUT_CHECKLIST.md` 추가.
+
 ### Added
 
 - `vocal-app/` workspace를 monorepo에 추가.

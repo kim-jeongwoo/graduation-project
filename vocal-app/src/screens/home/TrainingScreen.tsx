@@ -10,24 +10,24 @@ import type { Zone } from '../../types/analyze';
 // 이슈 3 — 사후 측정 결과 zone별 피드백 텍스트 (클라이언트 hardcode, 5/10 임시)
 const FEEDBACK_BY_ZONE: Record<IndicatorAppKey, Record<Zone, string>> = {
   breathiness: {
-    insufficient: '성대를 더 모아 호흡 새는 소리를 줄이세요.',
-    appropriate:  '현재 발성 유지하세요.',
-    excessive:    '호흡을 더 섞어 부드럽게 발성하세요.',
+    insufficient: '호흡 소리 지표가 낮게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
+    appropriate:  '호흡 소리 지표가 적절 범위로 측정됐습니다.',
+    excessive:    '호흡 소리 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
   },
   vocal_fold_contact: {
-    insufficient: '성대를 더 모아 발성하세요.',
-    appropriate:  '현재 발성 유지하세요.',
-    excessive:    '성대 접촉을 줄이세요.',
+    insufficient: '성대 접촉 강도 지표가 낮게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
+    appropriate:  '성대 접촉 강도 지표가 적절 범위로 측정됐습니다.',
+    excessive:    '성대 접촉 강도 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
   },
   soft_palate: {
-    insufficient: '연구개를 더 들어올려 공명 공간을 확보하세요.',
-    appropriate:  '현재 연구개 위치를 유지하세요.',
-    excessive:    '연구개 긴장을 풀어 자연스럽게 발성하세요.',
+    insufficient: '연구개 위치 지표가 낮게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
+    appropriate:  '연구개 위치 지표가 적절 범위로 측정됐습니다.',
+    excessive:    '연구개 위치 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
   },
   tongue_tension: {
-    insufficient: '혀에 적당한 텐션을 유지해 발음을 명확하게 하세요.',
-    appropriate:  '현재 혀 위치를 유지하세요.',
-    excessive:    '혀 긴장을 풀어 자연스러운 발성을 하세요.',
+    insufficient: '혀/구강 공간 경직도 지표가 낮게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
+    appropriate:  '혀/구강 공간 경직도 지표가 적절 범위로 측정됐습니다.',
+    excessive:    '혀/구강 공간 경직도 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
   },
 };
 
@@ -93,8 +93,51 @@ import {
   type PitchVerdict,
 } from '../../components/training/RealtimeFeedback';
 import { buildRealtimeWsUrl } from '../../api/dmlClient';
-import { trainingAnalyze, type TrainingAnalyzeScore } from '../../api/sessions';
+import { trainingAnalyze, type TrainingAnalyzeResponse } from '../../api/sessions';
 import ResultCard, { type BeforeAfterScore } from '../../components/training/ResultCard';
+
+function deriveZoneFromRoundedScore(roundedScore: number): Zone {
+  if (roundedScore <= 1) return 'insufficient';
+  if (roundedScore >= 4) return 'excessive';
+  return 'appropriate';
+}
+
+function getKeyedValue<T>(
+  record: Record<string, T> | null | undefined,
+  indicatorKey: IndicatorAppKey,
+  serverIndicatorKey: string,
+): T | undefined {
+  return record?.[serverIndicatorKey] ?? record?.[indicatorKey];
+}
+
+function getTrainingAnalyzeScore(
+  res: TrainingAnalyzeResponse,
+  indicatorKey: IndicatorAppKey,
+  serverIndicatorKey: string,
+): BeforeAfterScore | null {
+  const legacy = getKeyedValue(res.scores, indicatorKey, serverIndicatorKey);
+  if (legacy) {
+    return { aiScore: legacy.ai_score, zone: legacy.zone as Zone };
+  }
+
+  const meta = getKeyedValue(res.scores_meta, indicatorKey, serverIndicatorKey);
+  const roundedScore = typeof meta?.rounded_score === 'number'
+    ? meta.rounded_score
+    : getKeyedValue(res.scores_v2, indicatorKey, serverIndicatorKey);
+  if (typeof roundedScore !== 'number') return null;
+  return { aiScore: roundedScore, zone: deriveZoneFromRoundedScore(roundedScore) };
+}
+
+function hasLowConfidenceItem(
+  items: string[] | null | undefined,
+  indicatorKey: IndicatorAppKey,
+  serverIndicatorKey: string,
+): boolean {
+  return items?.some((item) => {
+    const stripped = item.replace(/^\d+_/, '');
+    return item === serverIndicatorKey || item === indicatorKey || stripped === indicatorKey;
+  }) ?? false;
+}
 
 type Props = NativeStackScreenProps<
   {
@@ -409,19 +452,19 @@ export default function TrainingScreen({ route }: Props) {
         setStatus('stopped');
         return;
       }
-      if (res.status !== 'success' || !res.scores) {
+      if (res.status !== 'success') {
         Alert.alert('분석 실패', res.reason ?? '분석에 실패했습니다.');
         setStatus('stopped');
         return;
       }
-      const entry: TrainingAnalyzeScore | undefined = res.scores[serverIndicatorKey];
-      if (!entry) {
+      const after = getTrainingAnalyzeScore(res, indicatorKey, serverIndicatorKey);
+      if (!after) {
         Alert.alert('분석 결과 없음', '진입 항목 점수가 응답에 없습니다.');
         setStatus('stopped');
         return;
       }
-      setAfterScore({ aiScore: entry.ai_score, zone: entry.zone as Zone });
-      setAfterLowConfidence(res.low_confidence_items?.includes(serverIndicatorKey) ?? false);
+      setAfterScore(after);
+      setAfterLowConfidence(hasLowConfidenceItem(res.low_confidence_items, indicatorKey, serverIndicatorKey));
       setStatus('result');
     } catch (e: unknown) {
       const { code, detail, message } = getApiErrorInfo(e);

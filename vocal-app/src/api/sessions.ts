@@ -174,7 +174,6 @@ export async function trainingAnalyze(
     formData,
     { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000 },
   );
-  console.log('[V2 진단 chunk] training-analyze response:', JSON.stringify(res.data).slice(0, 1500));
   return res.data;
 }
 
