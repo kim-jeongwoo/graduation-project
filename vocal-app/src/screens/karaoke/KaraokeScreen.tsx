@@ -316,11 +316,20 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       {
         text: '확인',
         onPress: async () => {
-          const s = soundRef.current;
-          if (s) { await s.stopAsync(); await s.setPositionAsync(0); }
-          await recorderRef.current.cancel();
+          try {
+            const s = soundRef.current;
+            if (s) {
+              try { await s.stopAsync(); } catch {}
+              try { await s.unloadAsync(); } catch {}
+              soundRef.current = null;
+            }
+            await recorderRef.current.cancel();
+          } catch (e) {
+            console.error('[KaraokeScreen] restart cleanup error:', e);
+          }
           setCurrentTime(0);
           currentTimeRef.current = 0;
+          setPlaying(false);
           if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
           else setUserPitch([]);
           startCountdown();

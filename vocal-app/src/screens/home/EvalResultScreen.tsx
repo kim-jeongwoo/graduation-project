@@ -17,8 +17,8 @@ import { getResultsByRunId } from '../../api/analyze';
 import { getSongMidiSegmentsRaw } from '../../api/songs';
 import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
 import { EVALUATION_ITEMS } from '../../domain/evaluationItems';
-import type { AnalyzeResult, TimelineChunkScore } from '../../types/analyze';
-import type { EvaluationItemKey } from '../../domain/evaluationItems';
+import type { AnalyzeResult, TimelineChunkScore, Zone, ScoreMetaEntry } from '../../types/analyze';
+import type { EvaluationItemKey, ConfidenceLevel } from '../../domain/evaluationItems';
 import { extractWeakSections, type IndicatorAppKey } from '../../domain/weakSections';
 
 type Tab = 'basic' | 'advanced';
@@ -51,8 +51,105 @@ function scoreColor(pct: number | null): string {
 }
 
 type VisualizationMode = 'pitch' | 'breathiness' | 'vocalFoldContact' | 'softPalate' | 'tongueTension';
+type TimelineIndicatorMode = Exclude<VisualizationMode, 'pitch'>;
+type TimelineScoreField = keyof TimelineChunkScore['scores'];
 type RawSeg = { start: number; end: number; midi: number };
 type UserF0 = { frameHz: number; values: (number | null)[] };
+
+const COLOR_APPROPRIATE = '#59dda5';
+const COLOR_WARNING = '#ffb4ab';
+const COLOR_DATA_MISSING = '#7ecfff';
+const COLOR_LOW_CONFIDENCE = '#9ca3af';
+
+const TIMELINE_MODE_CONFIG = {
+  breathiness: {
+    appKey: 'breathiness',
+    serverKey: '4_breathiness',
+    scoreField: 'breathiness',
+    label: '호흡 소리 식별',
+  },
+  vocalFoldContact: {
+    appKey: 'vocal_fold_contact',
+    serverKey: '3_vocal_fold_contact',
+    scoreField: 'vocalFoldContact',
+    label: '성대 접촉 강도',
+  },
+  softPalate: {
+    appKey: 'soft_palate',
+    serverKey: '6_soft_palate',
+    scoreField: 'softPalate',
+    label: '연구개 위치',
+  },
+  tongueTension: {
+    appKey: 'tongue_tension',
+    serverKey: '8_tongue_tension',
+    scoreField: 'tongueTension',
+    label: '혀/구강 공간 경직도',
+  },
+} as const satisfies Record<TimelineIndicatorMode, {
+  appKey: IndicatorAppKey;
+  serverKey: string;
+  scoreField: TimelineScoreField;
+  label: string;
+}>;
+type TimelineModeConfig = typeof TIMELINE_MODE_CONFIG[TimelineIndicatorMode];
+
+function isTimelineIndicatorMode(mode: string): mode is TimelineIndicatorMode {
+  return Object.prototype.hasOwnProperty.call(TIMELINE_MODE_CONFIG, mode);
+}
+
+function stripServerPrefix(key: string): string {
+  return key.replace(/^\d+_/, '');
+}
+
+function deriveZoneFromRoundedScore(roundedScore: number): Zone {
+  if (roundedScore <= 1) return 'insufficient';
+  if (roundedScore >= 4) return 'excessive';
+  return 'appropriate';
+}
+
+function hasLowConfidence(
+  lowConfidenceItems: string[] | undefined,
+  config: TimelineModeConfig,
+): boolean {
+  return lowConfidenceItems?.some((item) => {
+    const stripped = stripServerPrefix(item);
+    return item === config.serverKey
+      || item === config.appKey
+      || item === config.scoreField
+      || stripped === config.appKey;
+  }) ?? false;
+}
+
+function getTimelineModeForAppKey(key: EvaluationItemKey): TimelineIndicatorMode | null {
+  if (key === 'breathiness') return 'breathiness';
+  if (key === 'vocal_fold_contact') return 'vocalFoldContact';
+  if (key === 'soft_palate') return 'softPalate';
+  if (key === 'tongue_tension') return 'tongueTension';
+  return null;
+}
+
+function getMappedScoreMeta(
+  record: Partial<Record<EvaluationItemKey, ScoreMetaEntry>> | undefined,
+  key: EvaluationItemKey,
+  config: TimelineModeConfig | null,
+): ScoreMetaEntry | undefined {
+  const raw = record as Record<string, ScoreMetaEntry | undefined> | undefined;
+  if (!raw) return undefined;
+  const candidates = config ? [key, config.serverKey, config.scoreField] : [key];
+  return candidates.map(candidate => raw[candidate]).find(Boolean);
+}
+
+function getMappedNumber(
+  record: Partial<Record<EvaluationItemKey, number>> | undefined,
+  key: EvaluationItemKey,
+  config: TimelineModeConfig | null,
+): number | undefined {
+  const raw = record as Record<string, number | undefined> | undefined;
+  if (!raw) return undefined;
+  const candidates = config ? [key, config.serverKey, config.scoreField] : [key];
+  return candidates.map(candidate => raw[candidate]).find(value => typeof value === 'number');
+}
 
 const MODE_BUTTONS: { id: string; label: string; active: boolean; v2Only?: boolean }[] = [
   { id: 'pitch',            label: '음정',          active: true  },
@@ -109,19 +206,23 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
             : Math.min(Math.abs(tMaster - sA), Math.abs(tMaster - eA));
           if (d < minDist) { minDist = d; nearest = s; }
         }
-        if (!nearest || minDist > 1.5) return '#7ecfff';
+        if (!nearest || minDist > 1.5) return COLOR_DATA_MISSING;
         const diff = Math.abs(midi - nearest.midi);
-        return diff < 0.5 ? '#59dda5' : diff < 1.0 ? '#ffb780' : '#ffb4ab';
+        return diff < 0.5 ? COLOR_APPROPRIATE : diff < 1.0 ? '#ffb780' : COLOR_WARNING;
       }
-      // breathiness / vocalFoldContact / softPalate / tongueTension — chunk zone 기준 (v2)
+      // dml-server v2 timeline_scores 기준: rounded_score가 source of truth, low_confidence 우선.
+      if (!isTimelineIndicatorMode(activeMode)) return COLOR_DATA_MISSING;
+      const config = TIMELINE_MODE_CONFIG[activeMode];
       const chunk = timelineScores.find(c => tMaster >= c.startSec && tMaster <= c.endSec);
-      const zone  = activeMode === 'breathiness'      ? chunk?.scores.breathiness?.zone
-                  : activeMode === 'vocalFoldContact' ? chunk?.scores.vocalFoldContact?.zone
-                  : activeMode === 'softPalate'       ? chunk?.scores.softPalate?.zone
-                  : activeMode === 'tongueTension'    ? chunk?.scores.tongueTension?.zone
-                  : undefined;
-      if (!zone) return '#7ecfff';
-      return zone === 'appropriate' ? '#59dda5' : '#ffb4ab';
+      if (!chunk) return COLOR_DATA_MISSING;
+      if (hasLowConfidence(chunk.lowConfidenceItems, config)) return COLOR_LOW_CONFIDENCE;
+      const entry = chunk.scores[config.scoreField];
+      if (!entry) return COLOR_DATA_MISSING;
+      const zone = typeof entry.roundedScore === 'number'
+        ? deriveZoneFromRoundedScore(entry.roundedScore)
+        : entry.zone;
+      if (!zone) return COLOR_DATA_MISSING;
+      return zone === 'appropriate' ? COLOR_APPROPRIATE : COLOR_WARNING;
     };
 
     const nodes: React.ReactNode[] = [];
@@ -212,16 +313,17 @@ const tlStyles = StyleSheet.create({
 
 // ─── Color legend ───
 const ZONE_LEGEND = [
-  { color: '#59dda5', label: '적절' },
-  { color: '#ffb4ab', label: '과함/미달' },
-  { color: '#7ecfff', label: '데이터 없음' },
+  { color: COLOR_APPROPRIATE, label: '적절 (2~3)' },
+  { color: COLOR_WARNING, label: '미달/과함 (0~1, 4~5)' },
+  { color: COLOR_LOW_CONFIDENCE, label: '신뢰도 낮음' },
+  { color: COLOR_DATA_MISSING, label: '데이터 없음' },
 ];
 const LEGEND_ITEMS: Record<VisualizationMode, Array<{ color: string; label: string }>> = {
   pitch: [
-    { color: '#59dda5', label: '정확 (≤0.5반음)' },
+    { color: COLOR_APPROPRIATE, label: '정확 (≤0.5반음)' },
     { color: '#ffb780', label: '살짝 어긋남 (≤1.0)' },
-    { color: '#ffb4ab', label: '틀림 (>1.0반음)' },
-    { color: '#7ecfff', label: '가이드 없음' },
+    { color: COLOR_WARNING, label: '틀림 (>1.0반음)' },
+    { color: COLOR_DATA_MISSING, label: '가이드 없음' },
   ],
   breathiness:      ZONE_LEGEND,
   vocalFoldContact: ZONE_LEGEND,
@@ -363,30 +465,37 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         ...result.reliability.medium_reliability,
         ...result.reliability.unavailable,
       ];
+  const shownStripped: EvaluationItemKey[] = result.scoreMapperVersion === 'v2' && result.reliability.shownV2
+    ? result.reliability.shownV2
+    : (result.timelineMetadata?.shownIndicators ?? [])
+        .map(s => s.replace(/^\d+_/, '') as EvaluationItemKey);
+  const activeTimelineMode: VisualizationMode =
+    activeMode === 'pitch'
+    || result.scoreMapperVersion !== 'v2'
+    || (isTimelineIndicatorMode(activeMode) && shownStripped.includes(TIMELINE_MODE_CONFIG[activeMode].appKey))
+      ? activeMode
+      : 'pitch';
 
   const renderCard = (key: EvaluationItemKey) => {
     const meta       = EVALUATION_ITEMS.find(m => m.key === key)!;
     const scoreEntry = result.scores[key];
     const fb         = result.feedback[key];
-    const confidence = scoreEntry?.confidence ?? meta.defaultConfidence;
     const nameKo     = fb?.name_ko ?? meta.nameKo;
+    const timelineMode = getTimelineModeForAppKey(key);
+    const timelineConfig = timelineMode ? TIMELINE_MODE_CONFIG[timelineMode] : null;
+    const scoreMeta = getMappedScoreMeta(result.scoresMeta, key, timelineConfig);
+    const v2Score = typeof scoreMeta?.roundedScore === 'number'
+      ? scoreMeta.roundedScore
+      : getMappedNumber(result.scoresV2, key, timelineConfig);
+    const hasV2Score = result.scoreMapperVersion === 'v2' && typeof v2Score === 'number';
+    const score = hasV2Score ? v2Score : (scoreEntry?.ai_score ?? null);
+    const zone = hasV2Score ? deriveZoneFromRoundedScore(v2Score) : (scoreEntry?.zone ?? null);
+    const confidence: ConfidenceLevel = hasV2Score ? 'high' : (scoreEntry?.confidence ?? meta.defaultConfidence);
 
     // 9항목 모두 동적 분기 — v2 분기: reliability.shownV2 우선, fallback: timelineMetadata.shownIndicators
     // SectionList/Training 코어는 v2 4항목 지원
     const SUPPORTED: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact', 'soft_palate', 'tongue_tension'];
-    const shownStripped: EvaluationItemKey[] = result.scoreMapperVersion === 'v2' && result.reliability.shownV2
-      ? result.reliability.shownV2
-      : (result.timelineMetadata?.shownIndicators ?? [])
-          .map(s => s.replace(/^\d+_/, '') as EvaluationItemKey);
-    const isShown       = shownStripped.includes(key);
-    // ─── V2 진단 — shown 매핑 + tier (key='breathiness'일 때만 출력, 노이즈 회피) ───
-    if (key === 'breathiness') {
-      console.log('[V2 진단] scoreMapperVersion:', result.scoreMapperVersion);
-      console.log('[V2 진단] reliability.shownV2:', result.reliability.shownV2);
-      console.log('[V2 진단] shownStripped:', shownStripped);
-      console.log('[V2 진단] breathiness tier:', result.scoresMeta?.['breathiness']?.tier);
-      console.log('[V2 진단] breathiness tooltip:', result.scoresMeta?.['breathiness']?.tooltip);
-    }
+    const isShown = shownStripped.includes(key);
     const trainDisabled = !isShown;
     const onTrainPress = () => {
       if (trainDisabled) {
@@ -398,11 +507,19 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         return;
       }
       const indicatorKey = key as IndicatorAppKey;
+      if (!songId) {
+        Alert.alert('곡 정보 없음', '이 결과는 구간 훈련에 필요한 곡 정보가 없습니다.');
+        return;
+      }
       const weakSections = extractWeakSections(
         result.timelineScores ?? [],
         indicatorKey,
         result.audio_info?.duration_sec,
       );
+      if (weakSections.length === 0) {
+        Alert.alert('연습 구간 없음', '이 항목에서 바로 연습할 약점 구간이 없습니다.');
+        return;
+      }
       navigation.navigate('SectionList' as never, {
         indicatorKey,
         weakSections,
@@ -418,16 +535,16 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         key={key}
         itemKey={key}
         nameKo={nameKo}
-        score={scoreEntry?.ai_score ?? null}
-        zone={scoreEntry?.zone ?? null}
+        score={score}
+        zone={zone}
         confidence={confidence}
         feedbackText={fb?.feedback_text ?? ''}
         scoreDescription={fb?.score_description}
         isFocus={FOCUS_ITEMS_FROM_USER.includes(key)}
         onTrainPress={onTrainPress}
         trainDisabled={trainDisabled}
-        tier={result.scoresMeta?.[key]?.tier}
-        tooltip={result.scoresMeta?.[key]?.tooltip}
+        tier={scoreMeta?.tier}
+        tooltip={scoreMeta?.tooltip}
         isHighlighted={key === 'breathiness' && result.scoreMapperVersion === 'v2'}
         isDimmed={result.scoreMapperVersion === 'v2' && trainDisabled}
       />
@@ -453,7 +570,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
           timelineScores={result.timelineScores ?? []}
           midiSegments={midiSegs}
           userF0={result.userF0 ?? null}
-          activeMode={activeMode}
+          activeMode={activeTimelineMode}
           lrcOffsetSec={lrcOffsetSec}
           guideOffset={guideOffset}
         />
@@ -466,22 +583,27 @@ export default function EvalResultScreen({ route, navigation }: Props) {
           contentContainerStyle={{ paddingHorizontal: SPACING.base, alignItems: 'center', paddingVertical: 4 }}
         >
           {MODE_BUTTONS.map(btn => {
-            // v2Only 버튼은 score_mapper_version === 'v2'일 때만 활성
-            const effectiveActive = btn.active && (!btn.v2Only || result.scoreMapperVersion === 'v2');
+            const mode = btn.id as VisualizationMode;
+            const isShownMode = mode === 'pitch'
+              || result.scoreMapperVersion !== 'v2'
+              || (isTimelineIndicatorMode(mode) && shownStripped.includes(TIMELINE_MODE_CONFIG[mode].appKey));
+            const effectiveActive = btn.active
+              && (!btn.v2Only || result.scoreMapperVersion === 'v2')
+              && isShownMode;
             return (
               <TouchableOpacity
                 key={btn.id}
                 activeOpacity={effectiveActive ? 0.7 : 1}
                 style={[
                   styles.modeBtn,
-                  effectiveActive && (btn.id as VisualizationMode) === activeMode && styles.modeBtnActive,
+                  effectiveActive && mode === activeTimelineMode && styles.modeBtnActive,
                   !effectiveActive && styles.modeBtnDisabled,
                 ]}
-                onPress={() => { if (effectiveActive) setActiveMode(btn.id as VisualizationMode); }}
+                onPress={() => { if (effectiveActive) setActiveMode(mode); }}
               >
                 <Text style={[
                   styles.modeBtnLabel,
-                  effectiveActive && (btn.id as VisualizationMode) === activeMode && styles.modeBtnLabelActive,
+                  effectiveActive && mode === activeTimelineMode && styles.modeBtnLabelActive,
                   !effectiveActive && styles.modeBtnLabelDisabled,
                 ]}>
                   {btn.label}
@@ -493,7 +615,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
       )}
 
       {/* 색상 범례 */}
-      {showTimeline && <LegendRow activeMode={activeMode} />}
+      {showTimeline && <LegendRow activeMode={activeTimelineMode} />}
 
       <ScrollView style={{ flex: 1 }}>
       {/* 음정·박자 점수 */}
