@@ -181,6 +181,12 @@ TrainingScreen 관련 작업이 5/9 데드라인 이후 vocal-server에도 영�
 - v2 신규 필드 통과 검증: `score_mapper_version`, `scores_v2`, `scores_meta`, `academic_analysis_scores`, `reliability.{shown_v2, shown_v2_tiers, academic_only_v2, deferred_v2}` 모두 DB 저장 + 응답 정상
 - `_ANALYZE_TIMEOUT` 120s → **180s** (cold start + 긴 wav 여유)
 
+### GPT 이관 — HANDOVER.md 작성 (2026-05-12)
+- Claude → GPT+Codex 이관 결정 (토큰 사용량 + 캐시 버그)
+- `HANDOVER.md` 신규 작성 — GPT 측이 단일 문서로 컨텍스트 복원 가능 (16 섹션)
+- 추천 view 순서: `HANDOVER.md` → `CLAUDE.md` → `PROGRESS.md` → `docs/api.md` → `docs/admin_reference.md`
+- 6환경 (dml-server / vocal-app / vocal-server × gpt.ai + Codex) 유지
+
 ### training-analyze v2 필드 통과 수정 (2026-05-12)
 - POST `/sessions/{id}/training-analyze`가 화이트리스트 8개 필드만 반환 → v2 신규 5개(`score_mapper_version`, `scores_v2`, `scores_meta`, `low_confidence_items`, `chunk_duration_s`) 누락 사례 발견
 - **통째 통과 + `run_id` 제외 + `session_id`/`chunk_meta` 추가** 패턴으로 전환 (`/analyze`와 일관성 확보)
