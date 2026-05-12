@@ -97,13 +97,39 @@ npm run start:tunnel
 | Step 3G 4항목 버튼 기존 동작 | 검증 완료 |
 | `npx tsc --noEmit` | 기존 navigation typing baseline 오류로 실패 가능 |
 
+### 2026-05-13 Galaxy 검증 조건
+
+| 항목 | 값 |
+|---|---|
+| 실행 방식 | tunnel dev-client |
+| 테스트 곡 | `004` |
+| 녹음 길이 | 약 4분 완곡 |
+| 확인 화면 | Karaoke, EvalResult, 과거 분석 결과 재진입, Training 진입 |
+| 서버/API | 개발 검증은 local/tunnel 조합, 외부 검증 전 production 전환 예정 |
+
+검증 완료 기준:
+
+- 녹음 전 pitch guide가 로드된다.
+- 완곡 녹음 후 분석이 성공한다.
+- 결과 화면에서 회색 가이드라인과 사용자 실시간 피치가 함께 표시된다.
+- 과거 분석 결과 재진입 후에도 가이드라인이 유지된다.
+- 목소리 입력이 없을 때 결과 화면으로 이동하지 않고 안내가 표시된다.
+
+### 알려진 검증 한계
+
+- `npx tsc --noEmit`은 기존 navigation typing 오류가 있어 현재 snapshot 품질을 단독으로 판단하는 기준으로 쓰기 어렵다.
+- `혀, 구강 공간의 경직도` 훈련 화면 내용과 재시작 버튼 문제는 아직 해결되지 않은 backlog다.
+- 외부 공유 전에는 API URL과 서버 상태를 production 기준으로 다시 확인해야 한다.
+
 ## 남은 backlog
 
-- `혀, 구강 공간의 경직도` 연습 화면 내용이 비어 있음
-- 녹음 구간에서 재시작 버튼 확인 후 녹음이 다시 시작되지 않음
-- 외부 검증 전 API URL을 `https://api.vocal-fit.com`으로 전환
-- 진단 로그 제거 시점 결정
-- navigation typing baseline 오류 정리 여부 결정
+| 항목 | 분류 | 완료 기준 |
+|---|---|---|
+| `혀, 구강 공간의 경직도` 연습 화면 내용이 비어 있음 | 앱 UX | 훈련 화면에 항목별 안내/피드백 표시 |
+| 녹음 구간에서 재시작 버튼 확인 후 녹음이 다시 시작되지 않음 | 앱 버그 | 재시작 확인 후 녹음 flow 재개 |
+| 외부 검증 전 API URL을 `https://api.vocal-fit.com`으로 전환 | 운영 검증 필요 | login/record/analyze/result production smoke test |
+| 진단 로그 제거 시점 결정 | 운영/개발 정책 | 검증 완료 후 제거 또는 유지 범위 결정 |
+| navigation typing baseline 오류 정리 여부 결정 | 앱 코드 정리 | baseline 오류 목록과 신규 오류 구분 |
 
 ## 보존 문서
 

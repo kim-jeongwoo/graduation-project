@@ -31,6 +31,21 @@ Vocal Fit은 보컬 연습 녹음, 서버 기반 발성 분석, 피치 비교, �
 
 프로젝트는 GitHub `graduation-project` monorepo에서 관리한다. 기존 `vocal-server`와 `dml-server`를 보존하면서 `vocal-app/`을 새 하위 워크스페이스로 추가했다.
 
+### 문서 기준과 출처
+
+이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot과 기존 monorepo 문서를 기준으로 작성했다.
+
+| 기준 | 값 |
+|---|---|
+| GitHub repo | `kim-jeongwoo/graduation-project` |
+| 작업 branch | `add-vocal-app-2026-05-13` |
+| 최초 app snapshot commit | `f1168fb feat: add vocal-app project snapshot` |
+| base branch | `main` |
+| base commit | `16a11e0 Add HANDOVER.md for GPT migration` |
+| 앱 원본 작업 경로 | `/Users/kimjeongwoo/vocal-app` |
+| 포함 범위 | 현재 앱 source/docs snapshot |
+| 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak` |
+
 ## 졸업작품 목표
 
 - 스마트폰 앱에서 실제 보컬 연습 흐름을 기록한다.
@@ -149,6 +164,89 @@ v2는 서버 응답의 `score_mapper_version === "v2"`와 `scores_v2` 존재 여
 | `GET /songs/{id}/pitch-guide` | 피치 가이드 | points, midi segments, offset |
 | `POST /sessions/{id}/training-analyze` | 약점 구간 사후 측정 | `scores_v2`, `scores_meta`, `low_confidence_items` |
 
+### 주요 request/response shape
+
+#### `POST /sessions/{id}/analyze`
+
+앱은 완곡 녹음 파일 업로드 후 이 API를 호출한다. 현재 앱은 즉시 응답 body의 `status`를 확인하고 실패 terminal status면 결과 화면으로 이동하지 않는다.
+
+```json
+{
+  "run_id": "analysis-run-id",
+  "status": "success",
+  "reason": null
+}
+```
+
+앱에서 성공으로 처리하는 status:
+
+- `success`
+- `completed`
+- `complete`
+- `done`
+
+앱에서 실패로 처리하는 status:
+
+- `failed`
+- `invalid`
+- `no_voice`
+- `error`
+
+`no_voice`는 사용자가 목소리 없이 녹음했을 때 결과 화면으로 이동하지 않고 안내를 표시하는 검증이 완료된 상태다.
+
+#### `GET /analysis/{run_id}/results`
+
+분석 결과 조회는 서버가 저장한 `result_json`을 앱 adapter가 화면 타입으로 변환한다. v1/v2 모두 유지한다.
+
+```json
+{
+  "run_id": "analysis-run-id",
+  "status": "success",
+  "result_json": {
+    "score_mapper_version": "v2",
+    "scores_v2": {
+      "4_breathiness": 3.0,
+      "3_vocal_fold_contact": 2.0
+    },
+    "scores_meta": {
+      "4_breathiness": {
+        "zone": "appropriate",
+        "tier": "A",
+        "tooltip": "..."
+      }
+    },
+    "reliability": {
+      "shown_v2": ["4_breathiness", "3_vocal_fold_contact", "6_soft_palate", "8_tongue_tension"],
+      "academic_only_v2": [],
+      "deferred_v2": []
+    },
+    "timeline_scores": []
+  }
+}
+```
+
+#### `POST /sessions/{id}/training-analyze`
+
+약점 구간 훈련 후 사후 측정에 사용한다. `chunk_meta`는 선택된 구간 정보를 담고, 응답은 v2 필드를 optional로 처리한다.
+
+```json
+{
+  "status": "success",
+  "scores_v2": {
+    "6_soft_palate": 2.0
+  },
+  "scores_meta": {
+    "6_soft_palate": {
+      "zone": "appropriate",
+      "tier": "B"
+    }
+  },
+  "low_confidence_items": []
+}
+```
+
+v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록 optional/null-safe로 처리한다.
+
 ## 앱 화면 구조
 
 주요 화면:
@@ -188,20 +286,34 @@ v2는 서버 응답의 `score_mapper_version === "v2"`와 `scores_v2` 존재 여
 
 ## 현재 남은 검증 항목
 
-- `npx tsc --noEmit` baseline navigation typing 오류 분리
-- `혀, 구강 공간의 경직도` 연습 화면 내용 보강
-- 녹음 구간 재시작 버튼 확인 후 녹음이 다시 시작되지 않는 문제
-- 외부 검증 전 API URL production 전환 확인
-- 진단 로그 유지/제거 시점 결정
+| 항목 | 분류 | 완료 기준 |
+|---|---|---|
+| `npx tsc --noEmit` baseline navigation typing 오류 분리 | 앱 코드 정리 | 기존 navigation typing 오류와 신규 regression을 구분해 보고 |
+| `혀, 구강 공간의 경직도` 연습 화면 내용 보강 | 앱 UX | 훈련 화면에서 빈 안내 없이 의미 있는 코칭 문구 표시 |
+| 녹음 구간 재시작 버튼 확인 후 녹음 미시작 문제 | 앱 버그 | 재시작 확인 후 countdown/recording이 정상 재개 |
+| 외부 검증 전 API URL production 전환 | 운영 검증 필요 | `https://api.vocal-fit.com` 기준 login/record/analyze/result 확인 |
+| 진단 로그 유지/제거 시점 결정 | 운영/개발 정책 | Galaxy/server 검증 완료 후 제거 또는 유지 범위 확정 |
 
 ## 미해결 백로그
 
-- 401 token 만료 UX
-- OTA 업데이트 전략
-- admin 사용자 상세/운영 화면 고도화
-- DML PCM/VAD 임계값 조정
-- 마이크 입력 정규화
-- deferred 항목 활성화 기준 정리
+| 항목 | 영역 | 우선순위 | 비고 |
+|---|---|---|---|
+| 401 token 만료 UX | vocal-app | 발표 전 권장 | 만료 시 로그인 화면 유도 |
+| OTA 업데이트 전략 | vocal-app/운영 | 선택 | 네이티브 변경 없는 빠른 수정 배포용 |
+| admin 사용자 상세/운영 화면 고도화 | vocal-server | 선택 | 운영 편의 |
+| DML PCM/VAD 임계값 조정 | dml-server | 운영 검증 필요 | no_voice 민감도와 관련 |
+| 마이크 입력 정규화 | vocal-app/dml-server | 운영 검증 필요 | 기기/환경별 입력 편차 완화 |
+| deferred 항목 활성화 기준 정리 | dml-server/문서 | 연구 검증 필요 | 추가 데이터/검증 후 앱 표시 확대 |
+
+## 검증 근거와 한계
+
+2026-05-13 기준 Galaxy dev-client에서 곡 004를 사용한 완곡 녹음/분석 흐름이 확인되었다. 과거 분석 결과 재진입 시 pitch guide가 유지되고, 목소리 없는 녹음은 결과 화면으로 이동하지 않는 것도 확인되었다.
+
+현재 한계:
+
+- `npx tsc --noEmit`은 기존 navigation typing baseline 오류 때문에 실패 가능성이 있다.
+- 이 문서는 서버/DML 최신 runtime을 직접 고정하지 않는다. server contract가 바뀌면 `vocal-server`와 `dml-server` 문서를 함께 확인해야 한다.
+- 앱 snapshot에는 개발용 local/tunnel URL 설정 코드가 남아 있다. 실제 외부 검증 전 production API 전환이 필요하다.
 
 ## 실험 계획
 

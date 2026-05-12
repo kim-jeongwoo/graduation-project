@@ -11,6 +11,24 @@
 - `docs/VOCAL_APP_CURRENT_STATE.md` 추가.
 - root `README.md`에 Vocal App 요약/링크 섹션 추가.
 
+### Snapshot Details
+
+| 항목 | 내용 |
+|---|---|
+| branch | `add-vocal-app-2026-05-13` |
+| commit | `f1168fb feat: add vocal-app project snapshot` |
+| base | `main` / `16a11e0` |
+| 포함 | `vocal-app/` source, app docs, root project docs |
+| 제외 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak` |
+
+주요 앱 변경 범위:
+
+- Step 3G 4항목 훈련 지원 관련 snapshot
+- full analyze status UX hardening
+- pitch-guide 로드/재진입 안정화
+- 앱 handover/current-state 문서 포함
+- 개인 LAN IP가 박힌 `package.json` script는 포함하지 않음
+
 ### Verified
 
 - Galaxy dev-client에서 곡 004 pitch guide 로드 확인.
@@ -26,6 +44,13 @@
 - 기존 `vocal-server/`, `dml-server/`, root README/docs를 삭제하지 않음.
 - 앱 snapshot 복사 시 `.env*`, `.git/`, `node_modules/`, `.expo/`, `.claude/`, `assets/*.bak` 등은 제외.
 - 개인 LAN IP script 변경은 포함하지 않음.
+- PR 생성 후 main merge는 정우 최종 OK 전까지 보류.
+
+### Known Limitations
+
+- `npx tsc --noEmit`은 기존 navigation typing baseline 오류가 있어 별도 정리가 필요하다.
+- `혀, 구강 공간의 경직도` 연습 화면 내용과 녹음 재시작 flow는 backlog로 남아 있다.
+- 외부 검증 전 production API 전환과 smoke test가 필요하다.
 
 ## 2026-05-10~2026-05-12
 
