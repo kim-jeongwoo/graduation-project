@@ -424,6 +424,7 @@ flowchart TD
 
 - 기존 monorepo root와 server workspaces는 보존한다.
 - 앱 변경은 `vocal-app/` 하위에서만 수행한다.
+- root `README.md`는 졸업작품 전체 설명, 동기, 시스템 구조, 검증 상태를 담는 GitHub 진입 문서로 유지한다.
 - 기능 확정 단위로 branch/commit/push한다.
 - `main` 직접 push는 하지 않고 PR 또는 명시 승인 후 병합한다.
 - force push, reset/revert, root overwrite는 금지한다.

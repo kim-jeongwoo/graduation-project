@@ -98,6 +98,7 @@ npm run start:tunnel
   "start": "expo start --dev-client",
   "start:lan": "expo start --dev-client --lan",
   "start:tunnel": "expo start --dev-client --tunnel",
+  "start:tunnel:clear": "expo start --dev-client --tunnel --clear",
   "android": "expo start --android --dev-client",
   "ios": "expo start --ios --dev-client"
 }

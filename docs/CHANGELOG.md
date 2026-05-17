@@ -30,6 +30,8 @@
 - 이 PR은 Batch #1 반영용이며 main merge는 포함하지 않는다.
 - pitch-guide asset work는 여러 곡 수동 정렬 완료 후 재개한다.
 - `.codex/ACTIVE_PLAN.md`, raw handover docs, 개인 LAN IP scripts는 snapshot에서 제외한다.
+- PR #3 후속 보강으로 root `README.md`를 졸업작품 전체 소개 문서로 확장했다.
+- `vocal-app/package.json`에는 개인 LAN IP 없이 `start:tunnel:clear` 편의 script를 추가했다.
 
 ## 2026-05-13
 
