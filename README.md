@@ -38,6 +38,8 @@ React Native/Expo 기반 모바일 앱. 사용자가 노래 연습을 녹음하�
 - 앱 개발 흐름: [`vocal-app/docs/dev-flow.md`](vocal-app/docs/dev-flow.md)
 - Android 설치 가이드: [`vocal-app/docs/android-install.md`](vocal-app/docs/android-install.md)
 
+최근 Batch #1에서는 production full analyze polling, 구간훈련 window/`chunk_meta` 정렬, 완곡 업로드 UX, song004 pitch-guide 현 단계 종료, 결과 카드 피드백/신뢰도 UI 정리를 반영했다. main merge는 PR 검토 후 별도 승인으로 진행한다.
+
 ## 핵심 결과
 
 - EGG 추정 모델: Test Corr 0.8249 (Exp20 Progressive Window)

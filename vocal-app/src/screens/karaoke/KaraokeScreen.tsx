@@ -13,8 +13,15 @@ import Svg, { Path, Line } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
 import { useAuth } from '../../context/AuthContext';
-import { getSongKaraokeData, getSongMrUrl } from '../../api/songs';
-import { AnalyzeStatusError, createSession, uploadSessionFile, startAnalysis } from '../../api/sessions';
+import { getSongKaraokeData, getSongKaraokeLyricsOnly, getSongMrUrl } from '../../api/songs';
+import {
+  AnalyzeStatusError,
+  SESSION_FILE_UPLOAD_TIMEOUT_MS,
+  createSession,
+  uploadSessionFile,
+  startAnalysis,
+} from '../../api/sessions';
+import { AnalysisPollingTimeoutError, pollAnalysisStatus } from '../../api/analysis';
 import { requestMicrophonePermission } from '../../services/audio/microphone';
 import { VocalRecorder } from '../../services/audio/recorder';
 import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
@@ -29,6 +36,7 @@ import {
 const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
 const USE_REALTIME_PITCH = true; // false = 가짜 피치 시뮬레이션
 const MOCK_RUN_ID = 'c65d43fa-ef3f-4a46-a70e-c102c61eee6c';
+const GUIDE_FAILURE_NOTICE_DELAY_SEC = 5;
 
 // ─── Pitch graph constants ───
 const SCREEN_W = Dimensions.get('window').width;
@@ -55,7 +63,53 @@ type AppRootParams = {
 type Props = NativeStackScreenProps<AppRootParams, 'Karaoke'>;
 
 // ─── Analyze step labels ───
-const ANALYZE_STEPS = ['녹음 업로드 중...', 'AI 분석 중...', '결과 정리 중...'];
+const ANALYZE_STEPS = ['녹음 업로드 중...', '분석 요청 접수 중...', 'AI 분석 중...', '결과 정리 중...'];
+
+interface UploadFileInfo {
+  exists: boolean;
+  size: number | null;
+  uri: string | null;
+  error?: string;
+}
+
+async function getUploadFileInfo(uri: string | null): Promise<UploadFileInfo> {
+  if (!uri) return { exists: false, size: null, uri: null };
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return { exists: true, size: blob.size, uri };
+  } catch (e) {
+    return {
+      exists: false,
+      size: null,
+      uri,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+function getUploadErrorMeta(error: unknown) {
+  const err = error as Error & {
+    code?: string;
+    status?: number;
+    apiMeta?: {
+      code?: string;
+      status?: number;
+      hasResponse?: boolean;
+      hasRequest?: boolean;
+      message?: string;
+      timeout?: number;
+    };
+  };
+  return {
+    code: err.code ?? err.apiMeta?.code,
+    hasResponse: err.apiMeta?.hasResponse,
+    hasRequest: err.apiMeta?.hasRequest,
+    status: err.status ?? err.apiMeta?.status,
+    timeout: err.apiMeta?.timeout,
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
 
 // ─── Pitch graph component ───
 interface PitchGraphProps {
@@ -209,6 +263,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   const [countdown, setCountdown]         = useState<number | null>(null);
   const [lyrics, setLyrics]               = useState<LyricLine[]>([]);
   const [pitchGuide, setPitchGuide]       = useState<PitchGuide | null>(null);
+  const [pitchGuideStatus, setPitchGuideStatus] = useState<'loading' | 'success' | 'failed' | null>(null);
   const [userPitch, setUserPitch]         = useState<PitchPoint[]>([]);
   const [currentTime, setCurrentTime]     = useState(0);
   const [playing, setPlaying]             = useState(false);
@@ -218,6 +273,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   const soundRef       = useRef<Audio.Sound | null>(null);
   const recorderRef    = useRef(new VocalRecorder());
   const currentTimeRef = useRef(0);
+  const timingAlignLoggedRef = useRef(false);
 
   // ─── Permission check + data load ───
   useEffect(() => {
@@ -234,16 +290,100 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         return;
       }
 
-      // 2. Karaoke data
+      // 2. Required karaoke data: lyrics first, pitch-guide in background.
       try {
-        const { lyrics: lrc, pitchGuide: guide } = await getSongKaraokeData(songId);
+        const lrc = await getSongKaraokeLyricsOnly(songId);
         if (cancelled) return;
-        console.log('[KaraokeScreen] pitchGuide.points:', guide.points.length, 'voiced:', guide.points.filter(p => p.voiced).length);
+        if (__DEV__) {
+          console.log('[Timing audit]', {
+            screen: 'karaoke',
+            phase: 'lyrics-loaded',
+            songId,
+            guideSource: null,
+            guideFromCache: 'unknown',
+            firstGuideStart: null,
+            firstGuideEnd: null,
+            guideDurationSec: null,
+            lrcOffsetSec: null,
+            lyricCount: lrc.length,
+            firstLrcStart: lrc[0]?.timeStart ?? null,
+            firstLrcEnd: lrc[0]?.timeEnd ?? null,
+            sectionStart: null,
+            sectionEnd: null,
+            effectiveSectionStart: null,
+            effectiveSectionEnd: null,
+            chunkStart: null,
+            chunkEnd: null,
+            trainingSectionEnd: null,
+            trainingChunkEnd: null,
+            mrStart: 0,
+            mrEnd: mrDurationSec ?? null,
+            playbackStartPosition: null,
+            currentPlaybackPosition: currentTimeRef.current,
+            guidePointCount: null,
+            guideSegmentCount: null,
+            mrDurationSec,
+          });
+        }
         setLyrics(lrc);
-        setPitchGuide(guide);
-        if (!USE_REALTIME_PITCH) setUserPitch(generateFakeUserPitch(guide.points));
+        setPitchGuide(null);
+        setPitchGuideStatus('loading');
+        setUserPitch([]);
         setLoading(false);
         startCountdown();
+
+        getSongKaraokeData(songId)
+          .then(({ lyrics: guideAdjustedLrc, pitchGuide: guide, pitchGuideLoadFailed }) => {
+            if (cancelled) return;
+            if (guide) {
+              console.log('[KaraokeScreen] pitchGuide.points:', guide.points.length, 'voiced:', guide.points.filter(p => p.voiced).length);
+              if (__DEV__) {
+                const firstMidiSegment = guide.midiSegments[0] ?? null;
+                console.log('[Timing audit]', {
+                  screen: 'karaoke',
+                  phase: 'guide-loaded',
+                  songId,
+                  lrcOffsetSec: guide.lrcOffsetSec,
+                  guideSource: guide.guideSource,
+                  guideFromCache: 'unknown',
+                  firstGuideStart: firstMidiSegment ? firstMidiSegment.start + guide.lrcOffsetSec : null,
+                  firstGuideEnd: firstMidiSegment ? firstMidiSegment.end + guide.lrcOffsetSec : null,
+                  guideDurationSec: guide.durationSec,
+                  firstLrcStart: guideAdjustedLrc[0]?.timeStart ?? null,
+                  firstLrcEnd: guideAdjustedLrc[0]?.timeEnd ?? null,
+                  sectionStart: null,
+                  sectionEnd: null,
+                  effectiveSectionStart: null,
+                  effectiveSectionEnd: null,
+                  chunkStart: null,
+                  chunkEnd: null,
+                  trainingSectionEnd: null,
+                  trainingChunkEnd: null,
+                  mrStart: 0,
+                  mrEnd: mrDurationSec ?? guide.durationSec,
+                  playbackStartPosition: null,
+                  currentPlaybackPosition: currentTimeRef.current,
+                  guidePointCount: guide.points.length,
+                  guideSegmentCount: guide.midiSegments.length,
+                  mrDurationSec,
+                });
+              }
+              setLyrics(guideAdjustedLrc);
+              setPitchGuide(guide);
+              setPitchGuideStatus('success');
+              if (!USE_REALTIME_PITCH) setUserPitch(generateFakeUserPitch(guide.points));
+              return;
+            }
+            if (pitchGuideLoadFailed) {
+              console.warn('[KaraokeScreen] pitch-guide unavailable; continuing without realtime guide');
+              setPitchGuideStatus('failed');
+            }
+          })
+          .catch((e) => {
+            if (cancelled) return;
+            console.warn('[KaraokeScreen] pitch-guide background load error:', e);
+            setPitchGuideStatus('failed');
+          });
       } catch (e) {
         console.error('[KaraokeScreen] load error:', e);
         Alert.alert('오류', '곡 데이터를 불러오지 못했습니다.', [
@@ -302,6 +442,40 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       );
       // ③ position 0에서 명시적 재생 시작
       await sound.playFromPositionAsync(0);
+      if (__DEV__) {
+        console.log('[Timing audit]', {
+          screen: 'karaoke',
+          phase: 'mr-start',
+          songId,
+          guideSource: pitchGuide?.guideSource ?? null,
+          guideFromCache: 'unknown',
+          firstGuideStart: pitchGuide?.midiSegments[0]
+            ? pitchGuide.midiSegments[0].start + pitchGuide.lrcOffsetSec
+            : null,
+          firstGuideEnd: pitchGuide?.midiSegments[0]
+            ? pitchGuide.midiSegments[0].end + pitchGuide.lrcOffsetSec
+            : null,
+          guideDurationSec: pitchGuide?.durationSec ?? null,
+          lrcOffsetSec: pitchGuide?.lrcOffsetSec ?? null,
+          firstLrcStart: lyrics[0]?.timeStart ?? null,
+          firstLrcEnd: lyrics[0]?.timeEnd ?? null,
+          sectionStart: null,
+          sectionEnd: null,
+          effectiveSectionStart: null,
+          effectiveSectionEnd: null,
+          chunkStart: null,
+          chunkEnd: null,
+          trainingSectionEnd: null,
+          trainingChunkEnd: null,
+          mrStart: 0,
+          mrEnd: mrDurationSec ?? pitchGuide?.durationSec ?? null,
+          playbackStartPosition: 0,
+          currentPlaybackPosition: currentTimeRef.current,
+          guidePointCount: pitchGuide?.points.length ?? null,
+          guideSegmentCount: pitchGuide?.midiSegments.length ?? null,
+          mrDurationSec,
+        });
+      }
       soundRef.current = sound;
     } catch (e) {
       console.error('[KaraokeScreen] startMrAndRecord error:', e);
@@ -372,11 +546,44 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       const session = await createSession({ song_id: songId });
       if (__DEV__) console.log('[handleStop] session:', session.session_id);
 
-      if (__DEV__) console.log('[handleStop] uploading:', fileName, mimeType, uri.slice(0, 60));
-      await uploadSessionFile(session.session_id, uri, fileName, mimeType);
-      if (__DEV__) console.log('[handleStop] upload done');
+      const uploadFileInfo = await getUploadFileInfo(uri);
+      const uploadStartedAt = Date.now();
+      if (__DEV__) {
+        console.log('[Upload diag] request', {
+          sessionId: session.session_id,
+          uri,
+          fileName,
+          mimeType,
+          fileInfo: uploadFileInfo,
+          timeout: SESSION_FILE_UPLOAD_TIMEOUT_MS,
+          startedAt: new Date(uploadStartedAt).toISOString(),
+        });
+      }
+      try {
+        await uploadSessionFile(session.session_id, uri, fileName, mimeType);
+        if (__DEV__) {
+          console.log('[Upload diag] success', {
+            sessionId: session.session_id,
+            elapsedMs: Date.now() - uploadStartedAt,
+            fileSize: uploadFileInfo.size,
+          });
+        }
+      } catch (uploadError) {
+        const meta = getUploadErrorMeta(uploadError);
+        console.warn('[Upload diag] failed', {
+          sessionId: session.session_id,
+          elapsedMs: Date.now() - uploadStartedAt,
+          fileSize: uploadFileInfo.size,
+          ...meta,
+        });
+        Alert.alert(
+          '녹음 파일 업로드 실패',
+          '녹음 파일 업로드에 실패했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+        );
+        return;
+      }
 
-      // Step 1: analyze (full-song duration varies by song length and timeline chunks)
+      // Step 1: request server-side async analysis
       setAnalyzeStep(1);
       if (__DEV__) console.log('[handleStop] startAnalysis...');
       const { run_id, status, reason } = await startAnalysis(session.session_id);
@@ -410,8 +617,12 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         throw new Error(`AI 분석에 실패했습니다. ${reason ?? '다시 시도해주세요.'}`);
       }
 
-      // Step 2: brief done state
+      // Step 2: wait until queued async analysis reaches a terminal result
       setAnalyzeStep(2);
+      await pollAnalysisStatus(run_id);
+
+      // Step 3: brief done state
+      setAnalyzeStep(3);
       await new Promise<void>((r) => setTimeout(r, 600));
 
       goToEvalResult(run_id);
@@ -436,6 +647,14 @@ export default function KaraokeScreen({ navigation, route }: Props) {
             },
             { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
           ],
+        );
+        return;
+      }
+      if (err instanceof AnalysisPollingTimeoutError) {
+        Alert.alert(
+          '분석 진행 중',
+          '분석이 계속 진행 중입니다. 잠시 후 히스토리에서 결과를 확인해주세요.',
+          [{ text: '확인', onPress: () => navigation.goBack() }],
         );
         return;
       }
@@ -487,12 +706,63 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         })),
     [pitchGuide, guideOffset],
   );
+  const adjustedGuidePoints = useMemo(
+    () => guideOffset === 0
+      ? pitchGuide?.points ?? []
+      : (pitchGuide?.points ?? []).map((p) => ({
+          ...p,
+          time: p.time + guideOffset,
+        })),
+    [pitchGuide, guideOffset],
+  );
+
+  useEffect(() => {
+    if (!__DEV__ || !pitchGuide || timingAlignLoggedRef.current || currentTime < 1) return;
+    timingAlignLoggedRef.current = true;
+    const activeLrc = lyrics.find((l) => l.timeStart <= currentTime && currentTime < l.timeEnd) ?? null;
+    const nearestGuide = adjustedMidiSegments.find((s) => s.end >= currentTime) ?? null;
+    const rawGuide = pitchGuide.midiSegments.find((s) => s.end + guideOffset >= currentTime) ?? null;
+    console.log('[Render timing audit]', {
+      screen: 'karaoke',
+      songId,
+      mrCurrentTime: currentTime,
+      activeLrcStart: activeLrc?.timeStart ?? null,
+      activeLrcEnd: activeLrc?.timeEnd ?? null,
+      nearestGuideStart: nearestGuide?.start ?? null,
+      nearestGuideEnd: nearestGuide?.end ?? null,
+      nearestGuideMidi: nearestGuide?.midi ?? null,
+      guideTimeRaw: rawGuide?.start ?? null,
+      guideTimeRendered: nearestGuide?.start ?? null,
+      markerStart: null,
+      markerEnd: null,
+      sectionStart: null,
+      sectionEnd: null,
+      chunkStart: null,
+      chunkEnd: null,
+      trainingChunkStart: null,
+      trainingChunkEnd: null,
+      appliedOffsetSec: guideOffset,
+      appliedGuideOffsetSec: guideOffset,
+      firstGuideStart: pitchGuide.midiSegments[0]?.start ?? null,
+      firstLrcStart: lyrics[0]?.timeStart ?? null,
+      chartWindowStart: currentTime - WINDOW_BEFORE_SEC,
+      chartWindowEnd: currentTime + WINDOW_AFTER_SEC,
+    });
+  }, [
+    pitchGuide,
+    lyrics,
+    adjustedMidiSegments,
+    guideOffset,
+    currentTime,
+    songId,
+  ]);
 
   // ─── Progress ───
   const totalSec = mrDurationSec > 0
     ? mrDurationSec
     : (pitchGuide?.points[pitchGuide.points.length - 1]?.time ?? 0);
   const progress = totalSec > 0 ? Math.min(currentTime / totalSec, 1) : 0;
+  const showGuideFailureNotice = pitchGuideStatus === 'failed' && currentTime >= GUIDE_FAILURE_NOTICE_DELAY_SEC;
   const fmt = (s: number) =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -523,11 +793,19 @@ export default function KaraokeScreen({ navigation, route }: Props) {
           currentTime={currentTime}
           guideSource={pitchGuide.guideSource}
           midiSegments={adjustedMidiSegments}
-          guidePoints={pitchGuide.points}
+          guidePoints={adjustedGuidePoints}
           userPoints={userPitch}
         />
       ) : (
         <View style={graphStyles.container} />
+      )}
+
+      {showGuideFailureNotice && (
+        <View style={styles.guideWarning}>
+          <Text style={styles.guideWarningText}>
+            피치 가이드를 불러오지 못했습니다. MR과 녹음은 계속할 수 있습니다.
+          </Text>
+        </View>
       )}
 
       {/* 가사 영역 */}
@@ -612,6 +890,19 @@ const styles = StyleSheet.create({
   lyricsArea: {
     height: 96, justifyContent: 'center', alignItems: 'center',
     paddingHorizontal: 24, gap: 8, backgroundColor: COLORS.background,
+  },
+  guideWarning: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: COLORS.card,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  guideWarningText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   currentLyric: {
     fontSize: 22, fontWeight: '700', color: COLORS.textPrimary,

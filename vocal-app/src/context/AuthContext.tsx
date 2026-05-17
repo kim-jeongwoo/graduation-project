@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import * as authApi from '../api/auth';
+import { API_BASE_MARKER_KEY, BASE_URL } from '../api/client';
 import type { AuthResponse } from '../types/api';
 
 const TOKEN_KEY = 'auth_token';
@@ -30,6 +31,23 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+async function clearStoredAuth() {
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(USER_KEY);
+  await SecureStore.deleteItemAsync(API_BASE_MARKER_KEY);
+}
+
+function logAuthDiag(phase: string, token: string | null, extra: Record<string, unknown> = {}) {
+  if (!__DEV__) return;
+  console.log('[auth diag]', {
+    phase,
+    apiUrl: BASE_URL,
+    hasToken: Boolean(token),
+    tokenLength: token?.length ?? 0,
+    ...extra,
+  });
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<AuthState>({
     token: null,
@@ -43,13 +61,26 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         const storedToken = await SecureStore.getItemAsync(TOKEN_KEY);
         const storedUser = await SecureStore.getItemAsync(USER_KEY);
+        const storedApiBase = await SecureStore.getItemAsync(API_BASE_MARKER_KEY);
         if (storedToken) {
+          if (storedApiBase !== BASE_URL) {
+            await clearStoredAuth();
+            logAuthDiag('load-token-cleared-api-base-mismatch', storedToken, {
+              storedApiBase,
+            });
+            setState({ token: null, user: null, isLoading: false });
+            return;
+          }
           const user = storedUser ? JSON.parse(storedUser) : null;
+          logAuthDiag('load-token', storedToken);
           setState({ token: storedToken, user, isLoading: false });
         } else {
+          logAuthDiag('load-token', null);
           setState({ token: null, user: null, isLoading: false });
         }
       } catch {
+        await clearStoredAuth();
+        logAuthDiag('load-token-error', null);
         setState({ token: null, user: null, isLoading: false });
       }
     })();
@@ -60,6 +91,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const userInfo = { user_id: data.user_id, email: data.email, nickname: data.nickname };
     await SecureStore.setItemAsync(TOKEN_KEY, data.token);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userInfo));
+    await SecureStore.setItemAsync(API_BASE_MARKER_KEY, BASE_URL);
+    logAuthDiag('after-login', data.token);
     setState({ token: data.token, user: userInfo, isLoading: false });
   }, []);
 
@@ -69,14 +102,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const userInfo = { user_id: data.user_id, email: data.email, nickname: data.nickname };
       await SecureStore.setItemAsync(TOKEN_KEY, data.token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userInfo));
+      await SecureStore.setItemAsync(API_BASE_MARKER_KEY, BASE_URL);
+      logAuthDiag('after-signup', data.token);
       setState({ token: data.token, user: userInfo, isLoading: false });
     },
     [],
   );
 
   const logout = useCallback(async () => {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    await SecureStore.deleteItemAsync(USER_KEY);
+    await clearStoredAuth();
+    logAuthDiag('logout', null);
     setState({ token: null, user: null, isLoading: false });
   }, []);
 

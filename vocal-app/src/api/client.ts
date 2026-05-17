@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 // ─── 서버 주소 설정 ───
@@ -21,6 +21,69 @@ const CURRENT_SERVER: keyof typeof SERVER_URLS = 'production';
 export const BASE_URL: string =
   process.env.EXPO_PUBLIC_API_URL ?? SERVER_URLS[CURRENT_SERVER];
 const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
+export const API_BASE_MARKER_KEY = 'auth_api_base_url';
+
+if (__DEV__) {
+  console.log('[api boot]', {
+    baseURL: BASE_URL,
+    currentServer: CURRENT_SERVER,
+    hasEnvApiUrl: Boolean(process.env.EXPO_PUBLIC_API_URL),
+  });
+}
+
+function isExpectedTrainingAnalyzeValidationError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const detail = error.response?.data?.detail;
+  const detailRecord = detail && typeof detail === 'object'
+    ? detail as Record<string, unknown>
+    : null;
+  const detailError = detailRecord?.error;
+  return error.config?.url?.includes('/training-analyze') === true
+    && error.response?.status === 400
+    && (
+      detailError === 'chunk_too_short'
+      || detailError === 'no_voice'
+      || detailError === 'invalid'
+      || detailError === 'failed'
+      || (typeof detail === 'string' && (detail.includes('최소 3초') || detail.includes('음성')))
+    );
+}
+
+function isExpectedTrainingAnalyzeRecoverableError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  return isExpectedTrainingAnalyzeValidationError(error)
+    || (
+      error.config?.url?.includes('/training-analyze') === true
+      && (error.response?.status === 504 || error.code === 'ECONNABORTED')
+    );
+}
+
+function apiErrorMeta(error: AxiosError) {
+  return {
+    method: error.config?.method?.toUpperCase(),
+    path: error.config?.url,
+    baseURL: error.config?.baseURL ?? BASE_URL,
+    status: error.response?.status,
+    code: error.code,
+    hasResponse: Boolean(error.response),
+    hasRequest: Boolean(error.request),
+    message: error.message,
+    timeout: error.config?.timeout,
+  };
+}
+
+function attachApiMeta(err: Error, error: AxiosError): Error {
+  const target = err as Error & {
+    status?: number;
+    code?: string;
+    apiMeta?: ReturnType<typeof apiErrorMeta>;
+  };
+  target.status = error.response?.status;
+  target.code = error.code;
+  target.apiMeta = apiErrorMeta(error);
+  return target;
+}
 
 /**
  * ngrok 터널 사용 시 필요한 기본 헤더.
@@ -44,10 +107,22 @@ const apiClient = axios.create({
 // Request interceptor: 저장된 토큰을 Authorization 헤더에 자동 추가 + 디버깅 로그
 apiClient.interceptors.request.use(async (config) => {
   const token = await SecureStore.getItemAsync(TOKEN_KEY);
-  if (token) {
+  const path = config.url ?? '';
+  const isAuthRequest = path.startsWith('/auth/');
+  if (token && !isAuthRequest) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  console.log(`[API] ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+  if (__DEV__) {
+    console.log('[api diag]', {
+      method: config.method?.toUpperCase(),
+      path,
+      baseURL: config.baseURL ?? BASE_URL,
+      hasToken: Boolean(token),
+      tokenLength: token?.length ?? 0,
+      hasAuthHeader: Boolean((config.headers as Record<string, unknown>)?.Authorization),
+      timeout: config.timeout,
+    });
+  }
   return config;
 });
 
@@ -56,20 +131,19 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (__DEV__ && axios.isAxiosError(error)) {
-      const payload = {
-        req: `${error.config?.method?.toUpperCase()} ${error.config?.url}`,
-        status: error.response?.status,
-        data: JSON.stringify(error.response?.data ?? null).slice(0, 400),
-        code: error.code, // ECONNABORTED = timeout
-      };
-      if (error.config?.url?.includes('/pitch-guide')) {
-        console.warn('[API] error', payload);
+      const payload = apiErrorMeta(error);
+      if (isExpectedTrainingAnalyzeRecoverableError(error)) {
+        console.warn('[API] expected training-analyze error', payload);
+      } else if (error.config?.url?.includes('/pitch-guide')) {
+        console.warn('[api error diag]', payload);
       } else {
-        console.error('[API] error', payload);
+        console.error('[api error diag]', payload);
       }
     }
     if (error.response?.status === 401) {
       await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await SecureStore.deleteItemAsync(USER_KEY);
+      await SecureStore.deleteItemAsync(API_BASE_MARKER_KEY);
     }
 
     if (axios.isAxiosError(error)) {
@@ -78,18 +152,17 @@ apiClient.interceptors.response.use(
         const err = new Error(typeof error.response.data.detail === 'string'
           ? error.response.data.detail
           : JSON.stringify(error.response.data.detail));
-        (err as Error & { status?: number }).status = error.response.status;
-        return Promise.reject(err);
+        return Promise.reject(attachApiMeta(err, error));
       }
       if (error.response?.data) {
         const err = new Error(JSON.stringify(error.response.data));
-        (err as Error & { status?: number }).status = error.response.status;
-        return Promise.reject(err);
+        return Promise.reject(attachApiMeta(err, error));
       }
       if (error.request && !error.response) {
-        return Promise.reject(
+        return Promise.reject(attachApiMeta(
           new Error('서버에 연결할 수 없습니다. 네트워크를 확인하세요.'),
-        );
+          error,
+        ));
       }
     }
 

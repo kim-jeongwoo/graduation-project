@@ -9,6 +9,7 @@ import type { ServerScoreMeta } from '../types/analyze';
 
 const ANALYZE_SUCCESS_STATUSES = new Set(['success', 'completed', 'complete', 'done']);
 const ANALYZE_FAILURE_STATUSES = new Set(['failed', 'invalid', 'no_voice', 'error']);
+export const SESSION_FILE_UPLOAD_TIMEOUT_MS = 300000;
 
 export interface StartAnalysisResponse {
   run_id: string;
@@ -89,8 +90,10 @@ export class AnalyzeStatusError extends Error {
 
 export function assertAnalyzeBodyStatus<T extends StartAnalysisResponse>(response: T): T {
   const normalized = normalizeAnalyzeStatus(response.status);
-  if (normalized === undefined || isAnalyzeSuccessStatus(normalized)) return response;
-  throw new AnalyzeStatusError(response);
+  if (normalized !== undefined && isAnalyzeFailureStatus(normalized)) {
+    throw new AnalyzeStatusError(response);
+  }
+  return response;
 }
 
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
@@ -124,7 +127,7 @@ export async function uploadSessionFile(
   const res = await apiClient.post<FileUploadResponse>(
     `/sessions/${sessionId}/files`,
     formData,
-    { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 },
+    { headers: { 'Content-Type': 'multipart/form-data' }, timeout: SESSION_FILE_UPLOAD_TIMEOUT_MS },
   );
   return res.data;
 }
@@ -148,8 +151,12 @@ export interface TrainingAnalyzeScore {
 export interface TrainingAnalyzeResponse {
   session_id:           string;
   status:               'success' | 'no_voice' | string;
+  body_status?:         'success' | 'no_voice' | string | null;
   scores:               Record<string, TrainingAnalyzeScore> | null;
   reason:               string | null;
+  message?:             string | null;
+  detail?:              unknown;
+  error?:               string | null;
   duration_sec:         number;
   indicators:           Record<string, number> | null;
   scores_v2?:           Record<string, number> | null;

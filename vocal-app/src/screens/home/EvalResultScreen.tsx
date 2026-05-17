@@ -14,7 +14,7 @@ import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import EvalItemCard from '../../components/eval/EvalItemCard';
 import { getResultsByRunId } from '../../api/analyze';
-import { getSongMidiSegmentsRaw } from '../../api/songs';
+import { getSongMidiSegmentsOptional } from '../../api/songs';
 import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
 import { EVALUATION_ITEMS } from '../../domain/evaluationItems';
 import type { AnalyzeResult, TimelineChunkScore, Zone, ScoreMetaEntry } from '../../types/analyze';
@@ -164,6 +164,33 @@ const MODE_BUTTONS: { id: string; label: string; active: boolean; v2Only?: boole
   { id: 'pressure',         label: '상압하압비율',   active: false },
 ];
 
+const CONSERVATIVE_FEEDBACK_BY_ZONE: Partial<Record<EvaluationItemKey, Record<Zone, string>>> = {
+  soft_palate: {
+    insufficient: '이 구간에서는 입 안쪽 공간이 충분히 열리지 않은 경향이 보입니다. 하품하듯 입천장 뒤쪽을 살짝 들어 올리는 느낌으로 발성해 보세요.',
+    appropriate:  '입 안쪽 공간과 연구개 위치가 안정적인 편입니다. 현재 발성 느낌을 유지해 보세요.',
+    excessive:    '이 구간에서는 입 안쪽 공간에 긴장이 많아 보일 수 있습니다. 목과 입천장 뒤쪽의 힘을 조금 풀고 자연스럽게 발성해 보세요.',
+  },
+  tongue_tension: {
+    insufficient: '이 구간에서는 발음이 흐려질 수 있는 경향이 보입니다. 혀를 과하게 누르지 말고 발음에 필요한 만큼만 또렷하게 사용해 보세요.',
+    appropriate:  '혀와 구강 공간의 긴장도가 안정적인 편입니다. 현재 발음과 발성 느낌을 유지해 보세요.',
+    excessive:    '이 구간에서는 혀나 입 안쪽에 힘이 많이 들어간 경향이 보일 수 있습니다. 혀끝과 턱의 힘을 조금 풀고 자연스럽게 발성해 보세요.',
+  },
+};
+
+const HIDE_HIGH_STAR_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
+
+function getResultCardFeedbackText(
+  key: EvaluationItemKey,
+  serverFeedbackText: string | undefined,
+  zone: Zone | null,
+  score: number | null,
+): string {
+  const text = serverFeedbackText?.trim();
+  if (text) return text;
+  if (score === null || !zone) return '';
+  return CONSERVATIVE_FEEDBACK_BY_ZONE[key]?.[zone] ?? '';
+}
+
 interface TimelineSectionProps {
   timelineScores: TimelineChunkScore[];
   midiSegments:   RawSeg[];
@@ -171,16 +198,63 @@ interface TimelineSectionProps {
   activeMode:     VisualizationMode;
   lrcOffsetSec:   number;
   guideOffset:    number;
+  guideUnavailable?: boolean;
 }
 
-function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrcOffsetSec, guideOffset }: TimelineSectionProps) {
+function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrcOffsetSec, guideOffset, guideUnavailable = false }: TimelineSectionProps) {
   const scrollRef = useRef<ScrollView>(null);
+  const auditedModesRef = useRef<Set<VisualizationMode>>(new Set());
 
   useEffect(() => {
     if (!midiSegments.length) return;
     const x = Math.max(0, midiSegments[0].start * PX_PER_SEC - 20);
     scrollRef.current?.scrollTo({ x, animated: false });
   }, [midiSegments]);
+
+  useEffect(() => {
+    if (!__DEV__ || !isTimelineIndicatorMode(activeMode) || auditedModesRef.current.has(activeMode)) return;
+    auditedModesRef.current.add(activeMode);
+    const config = TIMELINE_MODE_CONFIG[activeMode];
+    const distribution = {
+      insufficient: 0,
+      appropriate: 0,
+      excessive: 0,
+      lowConfidence: 0,
+      dataNone: 0,
+    };
+    const sampleScores: Array<{ startSec: number; roundedScore?: number; zone?: Zone; lowConfidence: boolean }> = [];
+    for (const chunk of timelineScores) {
+      const lowConfidence = hasLowConfidence(chunk.lowConfidenceItems, config);
+      if (lowConfidence) distribution.lowConfidence += 1;
+      const entry = chunk.scores[config.scoreField];
+      if (!entry) {
+        distribution.dataNone += 1;
+        continue;
+      }
+      const zone = typeof entry.roundedScore === 'number'
+        ? deriveZoneFromRoundedScore(entry.roundedScore)
+        : entry.zone;
+      if (zone === 'insufficient') distribution.insufficient += 1;
+      else if (zone === 'appropriate') distribution.appropriate += 1;
+      else if (zone === 'excessive') distribution.excessive += 1;
+      else distribution.dataNone += 1;
+      if (sampleScores.length < 5) {
+        sampleScores.push({
+          startSec: chunk.startSec,
+          roundedScore: entry.roundedScore,
+          zone,
+          lowConfidence,
+        });
+      }
+    }
+    console.log('[V2 graph audit]', {
+      mode: activeMode,
+      serverKey: config.serverKey,
+      scoreField: config.scoreField,
+      distribution,
+      sampleScores,
+    });
+  }, [activeMode, timelineScores]);
 
   const midiLastSec   = midiSegments.length ? midiSegments[midiSegments.length - 1].end : 0;
   const f0DurationSec = userF0 ? (userF0.values.length / userF0.frameHz) + lrcOffsetSec : 0;
@@ -283,6 +357,11 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
           ))}
           {f0Paths}
         </Svg>
+        {guideUnavailable && (
+          <View style={tlStyles.guideNotice}>
+            <Text style={tlStyles.guideNoticeText}>피치 가이드를 불러오지 못했습니다. 결과와 사용자 피치는 계속 표시됩니다.</Text>
+          </View>
+        )}
         {timelineScores.length > 0 && (
           <View style={{ width: totalW, height: LRC_H, backgroundColor: '#1a1a2e', position: 'relative' }}>
             {timelineScores.map((chunk, i) => chunk.lrcText.trim() ? (
@@ -309,6 +388,19 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
 
 const tlStyles = StyleSheet.create({
   scroll: { borderTopWidth: 1, borderTopColor: COLORS.divider, flexGrow: 0 },
+  guideNotice: {
+    position: 'absolute',
+    top: 8,
+    left: 12,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  guideNoticeText: { fontSize: 12, color: COLORS.textSecondary, textAlign: 'center' },
 });
 
 // ─── Color legend ───
@@ -357,6 +449,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
   const { runId, songId } = route.params ?? {};
   const [result, setResult]     = useState<AnalyzeResult | null>(null);
   const [midiSegs, setMidiSegs] = useState<RawSeg[]>([]);
+  const [guideUnavailable, setGuideUnavailable] = useState(false);
   const [loading, setLoading]   = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [tab, setTab]               = useState<Tab>('basic');
@@ -378,12 +471,20 @@ export default function EvalResultScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (!songId || !result) return;
-    getSongMidiSegmentsRaw(songId)
-      .then(({ segments, lrcOffsetSec: offset }) => {
+    setGuideUnavailable(false);
+    getSongMidiSegmentsOptional(songId, 'eval')
+      .then((data) => {
+        if (!data) {
+          setMidiSegs([]);
+          setLrcOffsetSec(0);
+          setGuideUnavailable(true);
+          return;
+        }
+        const { segments, lrcOffsetSec: offset } = data;
         setMidiSegs(segments);
         setLrcOffsetSec(offset);
-      })
-      .catch((e) => { if (__DEV__) console.warn('[EvalResult] midiSegs fetch failed:', e); });
+        setGuideUnavailable(false);
+      });
   }, [songId, result]);
 
   const guideOffset = SONG_GUIDE_OFFSETS[songId ?? ''] ?? 0;
@@ -490,12 +591,19 @@ export default function EvalResultScreen({ route, navigation }: Props) {
     const hasV2Score = result.scoreMapperVersion === 'v2' && typeof v2Score === 'number';
     const score = hasV2Score ? v2Score : (scoreEntry?.ai_score ?? null);
     const zone = hasV2Score ? deriveZoneFromRoundedScore(v2Score) : (scoreEntry?.zone ?? null);
-    const confidence: ConfidenceLevel = hasV2Score ? 'high' : (scoreEntry?.confidence ?? meta.defaultConfidence);
+    const isShown = shownStripped.includes(key);
+    const rawConfidence: ConfidenceLevel = scoreEntry?.confidence ?? meta.defaultConfidence;
+    const confidence: ConfidenceLevel = HIDE_HIGH_STAR_ITEMS.has(key) && isShown && hasV2Score && rawConfidence === 'unavailable'
+      ? 'high'
+      : rawConfidence;
+    const feedbackText = getResultCardFeedbackText(key, fb?.feedback_text, zone, score);
+    const displayTier = HIDE_HIGH_STAR_ITEMS.has(key) && scoreMeta?.tier === 'high_star'
+      ? 'high'
+      : scoreMeta?.tier;
 
     // 9항목 모두 동적 분기 — v2 분기: reliability.shownV2 우선, fallback: timelineMetadata.shownIndicators
     // SectionList/Training 코어는 v2 4항목 지원
     const SUPPORTED: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact', 'soft_palate', 'tongue_tension'];
-    const isShown = shownStripped.includes(key);
     const trainDisabled = !isShown;
     const onTrainPress = () => {
       if (trainDisabled) {
@@ -523,7 +631,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
       navigation.navigate('SectionList' as never, {
         indicatorKey,
         weakSections,
-        feedbackText: fb?.feedback_text ?? '',
+        feedbackText,
         runId,
         songId,
         sessionId: result.session_id,
@@ -538,12 +646,12 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         score={score}
         zone={zone}
         confidence={confidence}
-        feedbackText={fb?.feedback_text ?? ''}
+        feedbackText={feedbackText}
         scoreDescription={fb?.score_description}
         isFocus={FOCUS_ITEMS_FROM_USER.includes(key)}
         onTrainPress={onTrainPress}
         trainDisabled={trainDisabled}
-        tier={scoreMeta?.tier}
+        tier={displayTier}
         tooltip={scoreMeta?.tooltip}
         isHighlighted={key === 'breathiness' && result.scoreMapperVersion === 'v2'}
         isDimmed={result.scoreMapperVersion === 'v2' && trainDisabled}
@@ -573,6 +681,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
           activeMode={activeTimelineMode}
           lrcOffsetSec={lrcOffsetSec}
           guideOffset={guideOffset}
+          guideUnavailable={guideUnavailable}
         />
       )}
 

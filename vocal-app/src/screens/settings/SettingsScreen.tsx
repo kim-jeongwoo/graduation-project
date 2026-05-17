@@ -57,7 +57,7 @@ export default function SettingsScreen() {
         onPress: async () => {
           await SecureStore.deleteItemAsync('token');
           await SecureStore.deleteItemAsync('nickname');
-          logout();
+          await logout();
         },
       },
     ]);
