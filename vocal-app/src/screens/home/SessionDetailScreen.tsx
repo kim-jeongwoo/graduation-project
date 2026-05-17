@@ -14,10 +14,15 @@ import Pitchy from 'react-native-pitchy';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AnalyzeStatusError, getSessionDetail, startAnalysis } from '../../api/sessions';
+import { AnalysisPollingTimeoutError, pollAnalysisStatus } from '../../api/analysis';
 import { getSongLrc, getSongMrUrl, getSongPitchGuideCompat } from '../../api/songs';
 
 // [deprecated] 구형 화면 aliases — P1에서 정리 예정
-const requestAnalysis = (sid: string) => startAnalysis(sid).then(r => ({ run_id: r.run_id, status: r.status }));
+const requestAnalysis = async (sid: string) => {
+  const response = await startAnalysis(sid);
+  await pollAnalysisStatus(response.run_id);
+  return { run_id: response.run_id, status: response.status };
+};
 const getSongLyrics = getSongLrc;
 const getSongAudioUrl = getSongMrUrl;
 const getSongPitch = (songId: string) => getSongPitchGuideCompat(songId).catch(() => null);
@@ -481,7 +486,7 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
     // 단계별 진행 (0.8초 간격)
     let step = 0;
     analysisTimerRef.current = setInterval(() => {
-      step += 1;
+      step = Math.min(step + 1, analysisSteps.length - 1);
       setAnalysisStep(step);
     }, 800);
 
@@ -521,6 +526,11 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
         Alert.alert(
           e.status === 'no_voice' ? '음성이 감지되지 않았습니다' : '분석 실패',
           e.message,
+        );
+      } else if (e instanceof AnalysisPollingTimeoutError) {
+        Alert.alert(
+          '분석 진행 중',
+          '분석이 계속 진행 중입니다. 잠시 후 히스토리에서 결과를 확인해주세요.',
         );
       } else {
         Alert.alert('오류', e instanceof Error ? e.message : '분석 요청에 실패했습니다.');

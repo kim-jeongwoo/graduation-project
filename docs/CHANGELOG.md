@@ -2,6 +2,37 @@
 
 이 파일은 `graduation-project` monorepo의 주요 변경 이력을 기록한다.
 
+## 2026-05-14
+
+### Vocal App Stability Batch #1
+
+- full analyze를 즉시 응답 + polling UX에 맞춰 안정화했다.
+- 구간훈련 녹음 window와 `chunk_meta`를 실제 target chunk 기준으로 정렬했다.
+- production 완곡 업로드 timeout/UX를 보강하고 결과 화면 이동 흐름을 안정화했다.
+- song004 pitch-guide 작업은 현 단계에서 종료하고 앱 임의 offset을 제거했다.
+- 결과 카드 피드백/신뢰도 UI를 정리했다.
+  - 연구개위치 / 혀경직도에 보수적 feedback fallback 추가.
+  - 연구개위치 / 혀경직도의 `high_star` 노란 별 표시 제거.
+  - v2 표시 항목에 점수가 있을 때 legacy `unavailable` 때문에 “측정 불가”가 뜨는 모순 보정.
+
+### Validation
+
+- production API 기준 앱 진입, 로그인, 곡 목록 로드 확인.
+- song004 KaraokeScreen 진입, MR 재생, 가사 표시, 녹음 확인.
+- 완곡 업로드와 full analyze async polling 성공.
+- 결과 화면 이동과 히스토리 저장 정상 확인.
+- 구간훈련 녹음 window / `chunk_meta` 정렬 후 한 소절 정상 발성 success 확인.
+- 연구개위치 / 혀경직도 결과 카드 점수와 피드백 표시 확인.
+- 혀경직도 “측정 불가” 뱃지 제거, 연구개/혀경직도 노란 별 제거 확인.
+
+### Notes
+
+- 이 PR은 Batch #1 반영용이며 main merge는 포함하지 않는다.
+- pitch-guide asset work는 여러 곡 수동 정렬 완료 후 재개한다.
+- `.codex/ACTIVE_PLAN.md`, raw handover docs, 개인 LAN IP scripts는 snapshot에서 제외한다.
+- PR #3 후속 보강으로 root `README.md`를 졸업작품 전체 소개 문서로 확장했다.
+- `vocal-app/package.json`에는 개인 LAN IP 없이 `start:tunnel:clear` 편의 script를 추가했다.
+
 ## 2026-05-13
 
 ### V2 Closeout PR

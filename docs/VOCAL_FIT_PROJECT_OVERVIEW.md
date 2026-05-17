@@ -33,18 +33,17 @@ Vocal Fit은 보컬 연습 녹음, 서버 기반 발성 분석, 피치 비교, �
 
 ### 문서 기준과 출처
 
-이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot과 기존 monorepo 문서를 기준으로 작성했다.
+이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot과 2026-05-14 Batch #1 안정화 반영 상태를 기준으로 작성했다.
 
 | 기준 | 값 |
 |---|---|
 | GitHub repo | `kim-jeongwoo/graduation-project` |
-| 작업 branch | `add-vocal-app-2026-05-13` |
-| 최초 app snapshot commit | `f1168fb feat: add vocal-app project snapshot` |
+| 작업 branch | `codex/vocal-app-batch1-2026-05-14` |
 | base branch | `main` |
-| base commit | `16a11e0 Add HANDOVER.md for GPT migration` |
+| base commit | `1606663 Merge pull request #2 from kim-jeongwoo/codex/v2-closeout-2026-05-13` |
 | 앱 원본 작업 경로 | `/Users/kimjeongwoo/vocal-app` |
-| 포함 범위 | 현재 앱 source/docs snapshot |
-| 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak` |
+| 포함 범위 | Batch #1 검증 완료 앱 source/docs snapshot |
+| 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak`, raw handover docs, `.codex/ACTIVE_PLAN.md` |
 
 ## 졸업작품 목표
 
@@ -151,6 +150,14 @@ v2는 서버 응답의 `score_mapper_version === "v2"`와 `scores_v2` 존재 여
 - `academic_only_v2`: 논문/연구 설명에는 남기되 앱 핵심 UX에서는 제한적으로 표시하는 항목
 - `deferred_v2`: 데이터/검증이 더 필요해 후순위로 미루는 항목
 - `excluded`: 현재 앱 UX와 분석 신뢰도 기준에서 제외하는 항목
+
+Batch #1 결과 카드 표시 정책:
+
+- 호흡식별 / 성대 접촉 강도는 기존 서버 feedback과 `high_star` 표시 흐름을 유지한다.
+- 연구개 위치 / 혀 경직도는 서버 feedback이 비어 있을 때 zone 기반 보수 문구를 fallback으로 표시한다.
+- 연구개 위치 / 혀 경직도는 `high_star` 노란 별을 표시하지 않는다.
+- `shown_v2`에 포함되고 v2 점수가 있는 연구개/혀 항목은 legacy `unavailable` 때문에 “측정 불가” 뱃지가 뜨지 않도록 보정한다.
+- low confidence 표시는 별도 hint로 유지하며 점수 계산이나 timeline threshold는 앱에서 바꾸지 않는다.
 
 ## API schema 요약
 
@@ -274,8 +281,13 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 - 훈련 화면과 사후 측정
 - `no_voice` 등 실패 status에서 결과 화면 이동 차단
 - pitch guide 중복 요청 캐시 및 과거 결과 재진입 안정화
+- full analyze async polling UX
+- 구간훈련 녹음 window와 `chunk_meta` 정렬
+- production 완곡 업로드 timeout/UX 안정화
+- song004 pitch-guide 현 단계 종료 및 앱 임의 offset 제거
+- 결과 카드 피드백/신뢰도 UI 정리
 
-## 5/10~5/13 진행 로그
+## 5/10~5/14 진행 로그
 
 | 날짜 | 진행 |
 |---|---|
@@ -283,16 +295,21 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 | 2026-05-11~05-12 | v2 score mapper adapter, shown_v2, TierBadge, timeline 5 mode, weakSections 4항목 매핑 |
 | 2026-05-12 | full analyze status UX hardening, no_voice/failed/invalid/error 처리 |
 | 2026-05-13 | pitch-guide 재진입/중복 요청 문제 수정 검증, monorepo에 `vocal-app/` snapshot 추가 |
+| 2026-05-14 | Batch #1 5/5 완료: async polling, 구간훈련 window/chunk_meta, production upload UX, song004 pitch-guide closeout, 결과 카드 신뢰도 UI |
 
 ## 현재 남은 검증 항목
 
 | 항목 | 분류 | 완료 기준 |
 |---|---|---|
 | `npx tsc --noEmit` baseline navigation typing 오류 분리 | 앱 코드 정리 | 기존 navigation typing 오류와 신규 regression을 구분해 보고 |
-| `혀, 구강 공간의 경직도` 연습 화면 내용 보강 | 앱 UX | 훈련 화면에서 빈 안내 없이 의미 있는 코칭 문구 표시 |
-| 녹음 구간 재시작 버튼 확인 후 녹음 미시작 문제 | 앱 버그 | 재시작 확인 후 countdown/recording이 정상 재개 |
-| 외부 검증 전 API URL production 전환 | 운영 검증 필요 | `https://api.vocal-fit.com` 기준 login/record/analyze/result 확인 |
+| song004 및 다른 곡 pitch-guide 수동 정렬 완료 후 재반영 | 앱/asset | 수동 정렬된 guide asset 기준 재검증 |
+| MR/LRC/pitch-guide 정합성 최종 검증 | 앱/asset | 여러 곡에서 청감/화면 timing 검증 |
+| 구간훈련 입력 calibration 기능 | 앱 UX | 기기/환경별 입력 레벨 보정 |
+| 연구개/혀경직도 문구 정교화 | 앱 UX/평가표 | 4/6~5/10 전체 평가표 기준으로 문구 확정 |
 | 진단 로그 유지/제거 시점 결정 | 운영/개발 정책 | Galaxy/server 검증 완료 후 제거 또는 유지 범위 확정 |
+| expo-av deprecated warning | 앱 코드 정리 | 대체 API 검토 |
+| NativeEventEmitter warning | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
+| production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
 
 ## 미해결 백로그
 
@@ -309,11 +326,13 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 
 2026-05-13 기준 Galaxy dev-client에서 곡 004를 사용한 완곡 녹음/분석 흐름이 확인되었다. 과거 분석 결과 재진입 시 pitch guide가 유지되고, 목소리 없는 녹음은 결과 화면으로 이동하지 않는 것도 확인되었다.
 
+2026-05-14 Batch #1 검증에서는 production API 기준 앱 진입, 로그인, 곡 목록 로드, song004 Karaoke 진입, MR/가사/녹음, 완곡 업로드, full analyze async polling, 결과 화면 이동, 히스토리 저장, 구간훈련 한 소절 success, 연구개/혀경직도 결과 카드 feedback과 badge 보정이 확인되었다.
+
 현재 한계:
 
 - `npx tsc --noEmit`은 기존 navigation typing baseline 오류 때문에 실패 가능성이 있다.
 - 이 문서는 서버/DML 최신 runtime을 직접 고정하지 않는다. server contract가 바뀌면 `vocal-server`와 `dml-server` 문서를 함께 확인해야 한다.
-- 앱 snapshot에는 개발용 local/tunnel URL 설정 코드가 남아 있다. 실제 외부 검증 전 production API 전환이 필요하다.
+- pitch-guide asset 정렬은 현 단계에서 종료했으며, 여러 곡 수동 정렬 완료 후 재개한다.
 
 ## 실험 계획
 
@@ -405,6 +424,7 @@ flowchart TD
 
 - 기존 monorepo root와 server workspaces는 보존한다.
 - 앱 변경은 `vocal-app/` 하위에서만 수행한다.
+- root `README.md`는 졸업작품 전체 설명, 동기, 시스템 구조, 검증 상태를 담는 GitHub 진입 문서로 유지한다.
 - 기능 확정 단위로 branch/commit/push한다.
 - `main` 직접 push는 하지 않고 PR 또는 명시 승인 후 병합한다.
 - force push, reset/revert, root overwrite는 금지한다.

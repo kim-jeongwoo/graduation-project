@@ -48,6 +48,15 @@ npx expo start --android      # Android 에뮬레이터
 - key/schema/API 응답 매핑은 추측하지 말고 raw/schema/code를 먼저 확인한다.
 - Galaxy 검증 실패 시 추측 수정하지 말고 진단 로그와 raw 출력 확인을 먼저 요청한다.
 
+## Codex ExecPlan workflow
+- 긴 작업은 `/compact` 단독에 의존하지 말고 `AGENTS.md` + `.codex/PLANS.md` + `.codex/ACTIVE_PLAN.md` 조합으로 운영한다.
+- 새 긴 작업을 시작하면 `.codex/PLANS.md` 템플릿을 복사해 `.codex/ACTIVE_PLAN.md`에 현재 목표, 금지 범위, 진행 상태, 검증 기준을 기록한다.
+- context 압축, 새 Codex 재개, 장시간 중단 후에는 먼저 `AGENTS.md`를 읽고 이어서 `.codex/ACTIVE_PLAN.md`를 읽은 뒤 현재 작업을 복원한다.
+- 작업 중 결정, 검증 결과, 남은 리스크가 바뀌면 기능 코드와 분리해 `.codex/ACTIVE_PLAN.md`를 갱신한다.
+- `.codex/ACTIVE_PLAN.md`는 현재 진행 중인 작업의 source of continuity이며, 사용자 최신 지시문과 충돌하면 사용자 최신 지시문이 우선한다.
+- `.codex/PLANS.md`는 템플릿/운영 규칙 파일이다. 특정 작업의 상세 진행 상황은 `ACTIVE_PLAN.md`에만 적는다.
+- ExecPlan 문서 업데이트 작업은 앱 기능 코드 변경과 분리한다. 사용자가 명시하지 않으면 `src/`, API URL, package scripts, server repo를 건드리지 않는다.
+
 ## Model selection
 - 복잡한 설계, 다중 파일 의존성, 디버깅, schema migration, 위험한 edge case는 GPT-5 high reasoning 또는 사용 가능한 가장 강력한 GPT/Codex 모델을 사용한다.
 - 단순 매핑, 로그 추가, timeout/text 변경, 기존 패턴 복사는 빠른 Codex/GPT 모델을 사용할 수 있다.
@@ -60,6 +69,35 @@ npx expo start --android      # Android 에뮬레이터
 - 병렬 에이전트는 보통 inspect/report만 수행한다.
 - 최종 patch 적용은 하나의 main integrator가 담당한다.
 - 병렬 에이전트를 사용한 경우 완료 보고에 각 agent의 scope, key findings, conflicts/disagreements, final integrated decision을 포함한다.
+
+## Codex Computer Use / Browser verification
+
+정우 has enabled Codex Computer Use and Google Chrome for verification tasks.
+
+Use Computer Use or Chrome when verification can be done through:
+- public or approved web pages
+- local development servers
+- API health pages
+- GitHub PR pages
+- browser-visible app/admin pages
+- Expo/Metro web-accessible diagnostics
+
+Prefer Codex self-verification for:
+- production API health checks
+- endpoint reachability checks
+- GitHub PR/document review
+- browser-based UI checks
+- local server pages that can be opened in Chrome
+- console/log inspection that does not require secrets
+
+Do not ask 정우 to manually verify browser/API things Codex can verify with allowed tools.
+
+Limits:
+- Real Galaxy microphone input, singing, vocal training feel, MR/MIDI/LRC timing by ear, and physical device UX still require 정우 verification.
+- Do not enter passwords, tokens, or sensitive credentials unless 정우 is present and explicitly approves.
+- Do not use Computer Use for destructive actions such as deploy, reset, delete, merge, or production state changes without explicit approval.
+- Keep browser tasks narrow: one app/page/flow at a time.
+- If Computer Use is unavailable or permission is missing, report that clearly and provide a one-shot command or URL for 정우.
 
 ## Hard constraints
 - `KaraokeScreen`은 명시 요청 없이는 건드리지 않는다.

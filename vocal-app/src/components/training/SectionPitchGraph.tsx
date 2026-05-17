@@ -10,6 +10,7 @@ const GRAPH_H    = 200;
 const TIMELINE_H = 24;
 const MIDI_MIN   = 40;
 const MIDI_MAX   = 88;
+const TARGET_MARKER_COLOR = '#59dda5';
 
 function midiToY(midi: number): number {
   return GRAPH_H - ((midi - MIDI_MIN) / (MIDI_MAX - MIDI_MIN)) * GRAPH_H;
@@ -19,7 +20,7 @@ function accuracyColor(acc: PitchAccuracy | null): string {
   if (acc === 'accurate')   return '#59dda5';
   if (acc === 'slight_off') return '#ffb780';
   if (acc === 'wrong')      return '#ffb4ab';
-  return '#7ecfff';
+  return COLORS.textMuted;
 }
 
 interface Props {
@@ -36,6 +37,7 @@ export default function SectionPitchGraph({
   midiSegments, startSec, endSec, originalStartSec, originalEndSec, currentTimeSec, userPitch,
 }: Props) {
   const scrollRef = useRef<ScrollView>(null);
+  const safeMidiSegments = midiSegments ?? [];
   const totalW    = Math.max(1, Math.ceil((endSec - startSec) * PX_PER_SEC));
 
   // 자동 스크롤: currentTime을 viewport 좌측 80px 안쪽 위치로
@@ -46,7 +48,7 @@ export default function SectionPitchGraph({
 
   // 가이드 라인 (구간 안쪽 segments만, 양 끝 클램프)
   const guideLines = useMemo(() => {
-    return midiSegments
+    return safeMidiSegments
       .filter(s => s.end >= startSec && s.start <= endSec)
       .map((s, i) => {
         const x1 = (Math.max(s.start, startSec) - startSec) * PX_PER_SEC;
@@ -59,7 +61,7 @@ export default function SectionPitchGraph({
           />
         );
       });
-  }, [midiSegments, startSec, endSec]);
+  }, [safeMidiSegments, startSec, endSec]);
 
   // 사용자 피치 path (정확도 색상 분기)
   const userPaths = useMemo(() => {
@@ -78,7 +80,7 @@ export default function SectionPitchGraph({
     for (const p of pts) {
       // 가장 가까운 가이드 segment
       let nearest: MidiSegment | null = null, bestDist = Infinity;
-      for (const s of midiSegments) {
+      for (const s of safeMidiSegments) {
         const dist = p.time >= s.start && p.time <= s.end ? 0
           : Math.min(Math.abs(p.time - s.start), Math.abs(p.time - s.end));
         if (dist < bestDist) { bestDist = dist; nearest = s; }
@@ -94,7 +96,7 @@ export default function SectionPitchGraph({
     }
     flush();
     return nodes;
-  }, [userPitch, midiSegments, startSec, endSec]);
+  }, [userPitch, safeMidiSegments, startSec, endSec]);
 
   const latestUser = useMemo(() => {
     for (let i = userPitch.length - 1; i >= 0; i--) {
@@ -125,7 +127,7 @@ export default function SectionPitchGraph({
             {/* 실제 연습 구간 배경 강조 (가이드라인 SVG 안) */}
             <Line
               x1={origX1} y1={GRAPH_H - 1} x2={origX2} y2={GRAPH_H - 1}
-              stroke={COLORS.primary} strokeWidth={2}
+              stroke={TARGET_MARKER_COLOR} strokeWidth={2}
             />
             {guideLines}
             {userPaths}
@@ -168,9 +170,9 @@ export default function SectionPitchGraph({
 const styles = StyleSheet.create({
   container:    { height: GRAPH_H + TIMELINE_H, backgroundColor: COLORS.surface, position: 'relative' },
   timeline:     { height: TIMELINE_H, backgroundColor: COLORS.background, position: 'relative' },
-  origStripe:   { position: 'absolute', top: 0, bottom: 0, backgroundColor: COLORS.primary + '33' },
+  origStripe:   { position: 'absolute', top: 0, bottom: 0, backgroundColor: TARGET_MARKER_COLOR + '33' },
   tickText:     { fontSize: 10, color: COLORS.textMuted },
-  tickTextActive: { color: COLORS.primaryLight, fontWeight: '600' },
+  tickTextActive: { color: TARGET_MARKER_COLOR, fontWeight: '600' },
   noteBox: {
     position: 'absolute', top: 8, right: 12,
     paddingHorizontal: 8, paddingVertical: 3,

@@ -1,6 +1,6 @@
 # Vocal App Current State
 
-작성 기준: 2026-05-13
+작성 기준: 2026-05-14
 앱 경로: `vocal-app/`
 원본 작업 경로: `/Users/kimjeongwoo/vocal-app`
 
@@ -10,6 +10,16 @@
 
 최근 Galaxy 검증 결과:
 
+- production API 기준 앱 진입, 로그인, 곡 목록 로드 확인
+- song004 KaraokeScreen 진입, MR 재생, 가사 표시, 녹음 확인
+- 완곡 업로드와 full analyze async polling 성공
+- 결과 화면 이동과 히스토리 저장 정상 확인
+- 구간훈련 녹음 window / `chunk_meta` 정렬 후 한 소절 정상 발성 success 확인
+- 첫 음절 씹힘 해결 확인
+- 연구개위치 / 혀경직도 결과 카드 점수와 피드백 표시 확인
+- 혀경직도 “측정 불가” 뱃지 제거 확인
+- 연구개위치 / 혀경직도 노란 별 제거 확인
+- 호흡소리식별 / 성대접촉강도 기존 흐름 유지 확인
 - 곡 004 녹음 전 pitch guide 로드 확인
 - 완곡 4분 녹음/분석 성공
 - 분석 결과 화면 회색 가이드라인 표시 정상
@@ -49,6 +59,12 @@
 
 이번 monorepo snapshot에는 현재 local `vocal-app` working tree 상태를 반영했다. 포함 성격:
 
+- Batch #1 5/5 안정화 변경
+- full analyze async polling UX
+- 구간훈련 녹음 window와 `chunk_meta` 정렬
+- production 완곡 업로드 timeout/UX 안정화
+- song004 pitch-guide 현 단계 종료 및 앱 임의 offset 제거
+- 결과 카드 피드백/신뢰도 UI 정리
 - Step 3G 4항목 훈련 지원 관련 변경
 - full analyze status UX hardening
 - pitch-guide fix
@@ -63,6 +79,8 @@
 - `.env*` 실제 환경 파일
 - `.claude/`
 - `assets/*.png.bak`
+- `.codex/ACTIVE_PLAN.md`
+- raw handover docs
 - native/generated/build 산출물
 
 ## 실행 명령
@@ -80,18 +98,23 @@ npm run start:tunnel
   "start": "expo start --dev-client",
   "start:lan": "expo start --dev-client --lan",
   "start:tunnel": "expo start --dev-client --tunnel",
+  "start:tunnel:clear": "expo start --dev-client --tunnel --clear",
   "android": "expo start --android --dev-client",
   "ios": "expo start --ios --dev-client"
 }
 ```
 
-개인 LAN IP가 박힌 script 변경은 commit 대상에서 제외했다.
+개인 LAN IP가 박힌 script는 GitHub snapshot에 포함하지 않았다.
 
 ## 검증 상태
 
 | 항목 | 상태 |
 |---|---|
+| production login/song list | 검증 완료 |
 | Galaxy dev-client 완곡 녹음/분석 | 검증 완료 |
+| full analyze async polling | 검증 완료 |
+| 구간훈련 window / chunk_meta 정렬 | 검증 완료 |
+| 결과 카드 feedback / 신뢰도 UI | 검증 완료 |
 | pitch guide 로드/재진입 유지 | 검증 완료 |
 | no_voice 결과 화면 이동 차단 | 검증 완료 |
 | Step 3G 4항목 버튼 기존 동작 | 검증 완료 |
@@ -125,11 +148,15 @@ npm run start:tunnel
 
 | 항목 | 분류 | 완료 기준 |
 |---|---|---|
-| `혀, 구강 공간의 경직도` 연습 화면 내용이 비어 있음 | 앱 UX | 훈련 화면에 항목별 안내/피드백 표시 |
-| 녹음 구간에서 재시작 버튼 확인 후 녹음이 다시 시작되지 않음 | 앱 버그 | 재시작 확인 후 녹음 flow 재개 |
-| 외부 검증 전 API URL을 `https://api.vocal-fit.com`으로 전환 | 운영 검증 필요 | login/record/analyze/result production smoke test |
+| song004 및 다른 곡 pitch-guide 수동 정렬 완료 후 재반영 | 앱/asset | 수동 정렬된 guide asset 기준 재검증 |
+| MR/LRC/pitch-guide 정합성 최종 검증 | 앱/asset | 여러 곡에서 청감/화면 timing 검증 |
+| 구간훈련 입력 calibration 기능 | 앱 UX | 기기/환경별 입력 레벨 보정 |
+| 연구개/혀경직도 문구 정교화 | 앱 UX/평가표 | 4/6~5/10 전체 평가표 기준으로 문구 확정 |
 | 진단 로그 제거 시점 결정 | 운영/개발 정책 | 검증 완료 후 제거 또는 유지 범위 결정 |
 | navigation typing baseline 오류 정리 여부 결정 | 앱 코드 정리 | baseline 오류 목록과 신규 오류 구분 |
+| expo-av deprecated warning | 앱 코드 정리 | 대체 API 검토 |
+| NativeEventEmitter warning | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
+| production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
 
 ## 보존 문서
 

@@ -14,6 +14,7 @@ interface ServerSong {
   has_pitch_guide: boolean;
 }
 
+const PITCH_GUIDE_TIMEOUT_MS = 45000;
 const pitchGuideCache = new Map<string, ServerPitchGuide>();
 const pitchGuideRequests = new Map<string, Promise<ServerPitchGuide>>();
 
@@ -25,7 +26,9 @@ async function getServerPitchGuide(songId: string): Promise<ServerPitchGuide> {
   const inFlight = pitchGuideRequests.get(key);
   if (inFlight) return inFlight;
 
-  const request = apiClient.get<ServerPitchGuide>(`/songs/${key}/pitch-guide`)
+  const request = apiClient.get<ServerPitchGuide>(`/songs/${key}/pitch-guide`, {
+    timeout: PITCH_GUIDE_TIMEOUT_MS,
+  })
     .then((res) => {
       pitchGuideCache.set(key, res.data);
       return res.data;
@@ -57,6 +60,15 @@ export async function getSongLrcRaw(songId: string): Promise<ServerLrcLine[]> {
   return res.data;
 }
 
+function applyClientLrcOffset(songId: string, lyrics: LyricLine[]): LyricLine[] {
+  const clientOffset = SONG_LRC_OFFSETS[songId] ?? 0;
+  return clientOffset === 0 ? lyrics : lyrics.map((l) => ({
+    ...l,
+    timeStart: l.timeStart + clientOffset,
+    timeEnd:   l.timeEnd   + clientOffset,
+  }));
+}
+
 // Pitch guide: server returns object with lrc_offset_sec
 // Adapter converts all point.t to MR time
 export async function getSongPitchGuide(songId: string): Promise<PitchGuide> {
@@ -69,19 +81,28 @@ export async function getSongPitchGuide(songId: string): Promise<PitchGuide> {
 // timestamps with the actual vocal onset (midi_segments[0].start).
 export async function getSongKaraokeData(
   songId: string,
-): Promise<{ lyrics: LyricLine[]; pitchGuide: PitchGuide }> {
-  const [rawLrc, pitchGuide] = await Promise.all([
-    getSongLrcRaw(songId),
-    getSongPitchGuide(songId),
-  ]);
-  const clientOffset = SONG_LRC_OFFSETS[songId] ?? 0;
-  const baseLyrics = adaptLrc(rawLrc, pitchGuide.lrcOffsetSec);
-  const lyrics = clientOffset === 0 ? baseLyrics : baseLyrics.map((l) => ({
-    ...l,
-    timeStart: l.timeStart + clientOffset,
-    timeEnd:   l.timeEnd   + clientOffset,
-  }));
-  return { lyrics, pitchGuide };
+): Promise<{ lyrics: LyricLine[]; pitchGuide: PitchGuide | null; pitchGuideLoadFailed: boolean }> {
+  const rawLrc = await getSongLrcRaw(songId);
+  let pitchGuide: PitchGuide | null = null;
+  let pitchGuideLoadFailed = false;
+  try {
+    pitchGuide = await getSongPitchGuide(songId);
+  } catch (e) {
+    pitchGuideLoadFailed = true;
+    console.warn('[songs] pitch-guide unavailable; continuing with lyrics only', {
+      songId,
+      phase: 'optional-guide',
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+  const baseLyrics = adaptLrc(rawLrc, pitchGuide?.lrcOffsetSec ?? 0);
+  const lyrics = applyClientLrcOffset(songId, baseLyrics);
+  return { lyrics, pitchGuide, pitchGuideLoadFailed };
+}
+
+export async function getSongKaraokeLyricsOnly(songId: string): Promise<LyricLine[]> {
+  const rawLrc = await getSongLrcRaw(songId);
+  return applyClientLrcOffset(songId, adaptLrc(rawLrc, 0));
 }
 
 // MR streaming URL — Authorization header must be added by caller (expo-av supports headers in loadAsync)
@@ -99,6 +120,30 @@ export async function getSongMidiSegmentsRaw(
     segments: (raw.midi_segments ?? []).map((s) => ({ start: s.start, end: s.end, midi: s.midi })),
     lrcOffsetSec: raw.lrc_offset_sec,
   };
+}
+
+export async function getSongMidiSegmentsOptional(
+  songId: string,
+  screen: 'eval' | 'training',
+): Promise<{ segments: Array<{ start: number; end: number; midi: number }>; lrcOffsetSec: number } | null> {
+  try {
+    return await getSongMidiSegmentsRaw(songId);
+  } catch (e: unknown) {
+    const meta = e as Error & {
+      code?: string;
+      status?: number;
+      apiMeta?: { hasResponse?: boolean; status?: number; code?: string; message?: string };
+    };
+    console.warn('[pitch-guide] optional failed', {
+      screen,
+      songId,
+      code: meta.code ?? meta.apiMeta?.code,
+      hasResponse: meta.apiMeta?.hasResponse,
+      status: meta.status ?? meta.apiMeta?.status,
+      message: meta.message,
+    });
+    return null;
+  }
 }
 
 // ─── Legacy shims for SessionDetailScreen (deprecated) ───

@@ -14,12 +14,27 @@
 - Kept full-song `/analyze` timeout handling separate from `training-analyze` timeout handling.
 - Added app-side fallback so `training-analyze` can read V2-only `scores_v2` / `scores_meta` when legacy `scores` is absent.
 
+## Completed in Batch #1
+
+- Added full analyze async polling UX for production-style analysis.
+- Aligned segment training recording window and `chunk_meta` with the actual target chunk.
+- Hardened production full-song upload timeout and result navigation UX.
+- Closed song004 pitch-guide work for the current stage and removed app-side arbitrary offset handling.
+- Added conservative feedback fallback for soft palate and tongue tension result cards.
+- Removed `high_star` yellow visual emphasis from soft palate and tongue tension cards.
+- Corrected v2 shown indicator confidence display so a scored tongue tension card does not show “측정 불가”.
+- Kept breathiness and vocal fold contact result-card behavior unchanged.
+
 ## Backlog, not for task 11
 
-- Add better feedback copy for soft palate and tongue tension cards.
-- Revisit whether the yellow high-star mark should appear only on trusted cards.
-- Investigate realtime pitch gauge / voice recognition behavior in section training.
-- Improve per-item training method and feedback copy after Jungwoo review.
+- Reapply pitch-guide work after manual alignment is completed for song004 and additional songs.
+- Complete final MR/LRC/pitch-guide timing verification across representative songs.
+- Add input calibration for segment training.
+- Refine soft palate and tongue tension copy against the 4/6~5/10 full evaluation table.
+- Resolve navigation typing baseline errors.
+- Review expo-av deprecated warning.
+- Review NativeEventEmitter warning.
+- Clarify production server auto-start/systemd operations.
 
 ## Production API switch checklist
 
