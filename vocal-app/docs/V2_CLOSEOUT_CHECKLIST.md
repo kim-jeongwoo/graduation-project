@@ -14,23 +14,25 @@
 - Kept full-song `/analyze` timeout handling separate from `training-analyze` timeout handling.
 - Added app-side fallback so `training-analyze` can read V2-only `scores_v2` / `scores_meta` when legacy `scores` is absent.
 
-## Completed in Batch #1
-
-- Added full analyze async polling UX for production-style analysis.
-- Aligned segment training recording window and `chunk_meta` with the actual target chunk.
-- Hardened production full-song upload timeout and result navigation UX.
-- Closed song004 pitch-guide work for the current stage and removed app-side arbitrary offset handling.
-- Added conservative feedback fallback for soft palate and tongue tension result cards.
-- Removed `high_star` yellow visual emphasis from soft palate and tongue tension cards.
-- Corrected v2 shown indicator confidence display so a scored tongue tension card does not show “측정 불가”.
-- Kept breathiness and vocal fold contact result-card behavior unchanged.
-
 ## Backlog, not for task 11
 
-- Add better feedback copy for soft palate and tongue tension cards.
-- Revisit whether the yellow high-star mark should appear only on trusted cards.
-- Investigate realtime pitch gauge / voice recognition behavior in section training.
-- Improve per-item training method and feedback copy after Jungwoo review.
+- Pitch-guide 수동 정렬 완료 후 song004 및 다른 곡에 재반영한다.
+- MR/LRC/pitch-guide 정합성을 여러 곡에서 최종 검증한다.
+- 공개 데이터/성별/음역대 기반 개인화 calibration은 입력 테스트와 분리해 별도 설계한다.
+- 회원가입/설정 음역대 입력과 노래별 key 자동 조절/원키 선택은 후속 기능으로 다룬다.
+- 연구개/혀경직도 미달/과함 의도 녹음과 dml-server score_mapper 분포를 추가 검증한다.
+- 4/6~5/10 평가표 기준 추가 피드백 문구는 후속으로 정교화한다.
+- `expo-av` -> `expo-audio` migration과 NativeEventEmitter root cause replacement/native patch는 SDK warning cleanup backlog로 유지한다.
+- production server auto-start/systemd 운영 정리는 서버 운영 backlog로 유지한다.
+
+## Completed through Batch #3
+
+- Favorites v2 four-indicator re-entry mapping was corrected for `breathiness`, `vocal_fold_contact`, `soft_palate`, and `tongue_tension`.
+- Karaoke MR failure cleanup and `no_voice` retry flow were stabilized.
+- 401 auth-expired re-login UX was separated from generic network errors.
+- 9-item evaluation card descriptions and state text were added as a first pass.
+- Favorites/History/SongHistory/Record loading, empty, error, and retry UX were polished.
+- Source repo `node_modules/.bin/tsc --noEmit` passed after the Batch #3 changes.
 
 ## Production API switch checklist
 
@@ -44,19 +46,3 @@
 - Confirm production accepts current shared request headers, including `ngrok-skip-browser-warning`.
 - Confirm Android permissions and cleartext settings before representative / academy validation.
 - Keep local/tunnel dev-client scripts as development-only tools; do not treat them as production API switch steps.
-
-## Batch #2 follow-up
-
-- Navigation typing baseline cleanup completed; source repo TypeScript noEmit passes.
-- Temporary V2 score distribution and rendered color audit logs were removed after Galaxy verification.
-- V2 graph color policy keeps missing score neutral, low confidence first, and rounded_score-only zone coloring.
-- Soft palate and tongue tension feedback wording is refined without changing score thresholds.
-- Settings microphone input test is a supporting input test, not completed personalized calibration.
-
-## Remaining backlog after Batch #2
-
-- Intentional recordings for soft palate / tongue tension insufficient and excessive cases.
-- dml-server score_mapper distribution validation.
-- Additional feedback wording based on the 4/6~5/10 evaluation sheets.
-- expo-av to expo-audio migration.
-- NativeEventEmitter root cause library replacement or native patch.

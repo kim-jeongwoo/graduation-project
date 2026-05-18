@@ -24,6 +24,49 @@ const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 export const API_BASE_MARKER_KEY = 'auth_api_base_url';
 
+type AuthExpiredHandler = () => void;
+
+let authExpiredHandler: AuthExpiredHandler | null = null;
+let authExpiredNotified = false;
+
+export function registerAuthExpiredHandler(handler: AuthExpiredHandler) {
+  authExpiredHandler = handler;
+  return () => {
+    if (authExpiredHandler === handler) {
+      authExpiredHandler = null;
+    }
+  };
+}
+
+export function resetAuthExpiredNotification() {
+  authExpiredNotified = false;
+}
+
+async function clearStoredAuth() {
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(USER_KEY);
+  await SecureStore.deleteItemAsync(API_BASE_MARKER_KEY);
+}
+
+function isAuthRequestPath(path: string) {
+  return path.startsWith('/auth/');
+}
+
+function hasAuthorizationHeader(headers: unknown) {
+  if (!headers || typeof headers !== 'object') return false;
+  const maybeHeaders = headers as {
+    Authorization?: unknown;
+    authorization?: unknown;
+    get?: (name: string) => unknown;
+  };
+  return Boolean(
+    maybeHeaders.Authorization
+      ?? maybeHeaders.authorization
+      ?? maybeHeaders.get?.('Authorization')
+      ?? maybeHeaders.get?.('authorization'),
+  );
+}
+
 function apiErrorMeta(error: AxiosError) {
   return {
     method: error.config?.method?.toUpperCase(),
@@ -38,15 +81,21 @@ function apiErrorMeta(error: AxiosError) {
   };
 }
 
-function attachApiMeta(err: Error, error: AxiosError): Error {
+export function isAuthExpiredError(error: unknown) {
+  return Boolean((error as { authExpired?: boolean } | null)?.authExpired);
+}
+
+function attachApiMeta(err: Error, error: AxiosError, authExpired = false): Error {
   const target = err as Error & {
     status?: number;
     code?: string;
     apiMeta?: ReturnType<typeof apiErrorMeta>;
+    authExpired?: boolean;
   };
   target.status = error.response?.status;
   target.code = error.code;
   target.apiMeta = apiErrorMeta(error);
+  if (authExpired) target.authExpired = true;
   return target;
 }
 
@@ -73,7 +122,7 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(async (config) => {
   const token = await SecureStore.getItemAsync(TOKEN_KEY);
   const path = config.url ?? '';
-  const isAuthRequest = path.startsWith('/auth/');
+  const isAuthRequest = isAuthRequestPath(path);
   if (token && !isAuthRequest) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -84,10 +133,19 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
+    let authExpired = false;
     if (error.response?.status === 401) {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
-      await SecureStore.deleteItemAsync(USER_KEY);
-      await SecureStore.deleteItemAsync(API_BASE_MARKER_KEY);
+      const path = error.config?.url ?? '';
+      const shouldNotifyAuthExpired =
+        !isAuthRequestPath(path) && hasAuthorizationHeader(error.config?.headers);
+      authExpired = shouldNotifyAuthExpired;
+
+      await clearStoredAuth();
+
+      if (shouldNotifyAuthExpired && !authExpiredNotified) {
+        authExpiredNotified = true;
+        authExpiredHandler?.();
+      }
     }
 
     if (axios.isAxiosError(error)) {
@@ -96,11 +154,11 @@ apiClient.interceptors.response.use(
         const err = new Error(typeof error.response.data.detail === 'string'
           ? error.response.data.detail
           : JSON.stringify(error.response.data.detail));
-        return Promise.reject(attachApiMeta(err, error));
+        return Promise.reject(attachApiMeta(err, error, authExpired));
       }
       if (error.response?.data) {
         const err = new Error(JSON.stringify(error.response.data));
-        return Promise.reject(attachApiMeta(err, error));
+        return Promise.reject(attachApiMeta(err, error, authExpired));
       }
       if (error.request && !error.response) {
         return Promise.reject(attachApiMeta(
@@ -110,6 +168,9 @@ apiClient.interceptors.response.use(
       }
     }
 
+    if (authExpired && error && typeof error === 'object') {
+      (error as { authExpired?: boolean }).authExpired = true;
+    }
     return Promise.reject(error);
   },
 );

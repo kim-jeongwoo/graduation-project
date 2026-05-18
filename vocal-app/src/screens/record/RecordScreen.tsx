@@ -8,6 +8,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { CommonActions } from '@react-navigation/native';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
+import { isAuthExpiredError } from '../../api/client';
 import { getSessions, getSessionDetail, extractRunId } from '../../api/sessions';
 import type { Session } from '../../types/api';
 import type { MainTabParamList, ResultStackParamList } from '../../navigation/types';
@@ -50,7 +51,8 @@ export default function LatestAnalysisScreen({ navigation }: Props) {
         }),
       );
     } catch (e: any) {
-      setErrorMsg(e?.message ?? '데이터를 불러오지 못했습니다.');
+      if (isAuthExpiredError(e)) return;
+      setErrorMsg('분석 결과를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -67,7 +69,7 @@ export default function LatestAnalysisScreen({ navigation }: Props) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>최신 분석 결과 불러오는 중...</Text>
+        <Text style={styles.loadingText}>최신 분석 결과를 불러오는 중입니다.</Text>
       </View>
     );
   }
@@ -76,8 +78,9 @@ export default function LatestAnalysisScreen({ navigation }: Props) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>{errorMsg}</Text>
+        <Text style={styles.errorSubtext}>네트워크 상태를 확인한 뒤 다시 시도해 주세요.</Text>
         <TouchableOpacity style={styles.retryBtn} onPress={loadAndRedirect}>
-          <Text style={styles.retryText}>다시 시도</Text>
+          <Text style={styles.retryText}>다시 불러오기</Text>
         </TouchableOpacity>
       </View>
     );
@@ -87,13 +90,13 @@ export default function LatestAnalysisScreen({ navigation }: Props) {
     return (
       <View style={styles.center}>
         <Text style={styles.emptyIcon}>📈</Text>
-        <Text style={styles.emptyTitle}>아직 분석한 곡이 없습니다</Text>
-        <Text style={styles.emptySubtitle}>홈 탭에서 첫 곡을 불러보세요!</Text>
+        <Text style={styles.emptyTitle}>아직 분석 기록이 없습니다.</Text>
+        <Text style={styles.emptySubtitle}>홈에서 노래를 선택해 녹음하고 분석하면 결과가 표시됩니다.</Text>
         <TouchableOpacity
           style={styles.homeBtn}
           onPress={() => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('HomeTab', { screen: 'Home' })}
         >
-          <Text style={styles.homeBtnText}>홈 탭으로 이동</Text>
+          <Text style={styles.homeBtnText}>홈에서 곡 선택하기</Text>
         </TouchableOpacity>
       </View>
     );
@@ -107,6 +110,7 @@ const styles = StyleSheet.create({
   center:        { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background, gap: SPACING.sm, padding: SPACING.base },
   loadingText:   { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
   errorText:     { ...TYPOGRAPHY.body, color: COLORS.danger, textAlign: 'center' },
+  errorSubtext:  { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
   retryBtn:      { paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, borderRadius: 10, backgroundColor: COLORS.primary, marginTop: SPACING.sm },
   retryText:     { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '600' },
   emptyIcon:     { fontSize: 56 },

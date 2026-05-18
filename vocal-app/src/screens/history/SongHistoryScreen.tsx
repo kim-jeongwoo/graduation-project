@@ -3,6 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
+import { isAuthExpiredError } from '../../api/client';
 import { getSessionDetail, extractRunId } from '../../api/sessions';
 import { formatDate } from '../../utils/labels';
 import type { Session } from '../../types/api';
@@ -23,8 +24,12 @@ export default function SongHistoryScreen({ route, navigation }: Props) {
         return;
       }
       navigation.navigate('EvalResult', { runId, songId });
-    } catch {
-      Alert.alert('오류', '세션 정보를 불러오지 못했습니다.');
+    } catch (e: unknown) {
+      if (isAuthExpiredError(e)) return;
+      Alert.alert('분석 기록을 불러오지 못했습니다.', '잠시 후 다시 시도해 주세요.', [
+        { text: '취소', style: 'cancel' },
+        { text: '다시 시도', onPress: () => { void handleSessionPress(session); } },
+      ]);
     }
   }, [navigation, songId]);
 
@@ -37,7 +42,14 @@ export default function SongHistoryScreen({ route, navigation }: Props) {
       <FlatList
         data={sessions}
         keyExtractor={(s) => s.session_id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={sessions.length === 0 ? styles.emptyList : styles.list}
+        ListEmptyComponent={
+          <View style={styles.emptyView}>
+            <Text style={styles.emptyIcon}>📋</Text>
+            <Text style={styles.emptyText}>이 곡의 분석 기록이 없습니다.</Text>
+            <Text style={styles.emptySubtext}>이 곡을 녹음하고 분석하면 기록이 표시됩니다.</Text>
+          </View>
+        }
         renderItem={({ item, index }) => {
           const attemptNum = sessions.length - index;  // 최신=N회차, 가장 옛=1회차
           return (
@@ -62,6 +74,11 @@ const styles = StyleSheet.create({
   title:        { ...TYPOGRAPHY.heading, color: COLORS.textPrimary },
   subtitle:     { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   list:         { padding: SPACING.base },
+  emptyList:    { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.base },
+  emptyView:    { alignItems: 'center', gap: SPACING.xs },
+  emptyIcon:    { fontSize: 48, marginBottom: SPACING.xs },
+  emptyText:    { ...TYPOGRAPHY.body, color: COLORS.textSecondary, textAlign: 'center' },
+  emptySubtext: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
   row:          { backgroundColor: COLORS.card, borderRadius: 10, padding: SPACING.base, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.cardBorder },
   rowLeft:      { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   attemptBadge: { backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },

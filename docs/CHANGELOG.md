@@ -4,6 +4,24 @@
 
 ## 2026-05-18
 
+### Vocal App Stability Batch #3
+
+- History/Favorites/Record 회귀 UX를 정리하고, Favorites v2 4항목 재진입 mapping을 보정했다.
+- Karaoke MR 시작 실패 시 recorder/sound cleanup을 보강하고, `no_voice` Alert의 `다시 녹음` retry가 자동 재시작되도록 정리했다.
+- 401 인증 만료 시 token/user state를 정리하고 로그인 화면으로 돌아가는 재로그인 UX를 추가했다.
+- 결과 화면 9항목 평가표 설명/상태 문구 1차를 반영했다.
+- Favorites/History/SongHistory/Record의 로딩, 빈 상태, 오류 상태, 다시 불러오기 UX를 정리했다.
+
+### Batch #3 Validation
+
+- Favorites 목록/빈 상태와 4항목 재진입 확인.
+- History, SongHistory, RecordScreen 목록/빈 상태/이동 확인.
+- History -> SongHistory -> EvalResult, Favorites -> Training, SectionList -> TrainingScreen 흐름 확인.
+- song004 KaraokeScreen 진입, MR 재생, 녹음, full analyze/result 이동, `no_voice` retry 확인.
+- 로그인/로그아웃/재로그인과 401 auth-expired 구조 반영 확인.
+- 9항목 결과 카드 설명/상태 문구 표시 확인.
+- source repo 기준 `node_modules/.bin/tsc --noEmit` 통과, 빨간 LogBox 없음 확인.
+
 ### Vocal App Stability Batch #2
 
 - navigation typing baseline을 정리하고 source repo 기준 `node_modules/.bin/tsc --noEmit` 통과 상태를 확인했다.
@@ -30,6 +48,7 @@
 - dml-server/vocal-server 변경은 포함하지 않는다.
 - 개인 LAN IP scripts, raw handover docs, `.codex/ACTIVE_PLAN.md`, 실제 env/secrets는 snapshot에서 제외한다.
 - 개인화 calibration, 성별/음역대 기준, 노래별 key 조절은 마지막 단계 backlog로 유지한다.
+- pitch-guide 수동 정렬, MR/LRC/pitch-guide 정합성 최종 검증, dml-server score_mapper 분포 검증, expo-av migration, production server auto-start/systemd 정리는 후속 backlog로 유지한다.
 
 ## 2026-05-14
 

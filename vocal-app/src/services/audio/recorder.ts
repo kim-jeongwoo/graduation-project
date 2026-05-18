@@ -54,6 +54,7 @@ export class VocalRecorder {
   async stop(): Promise<RecordingResult> {
     this.chunkCallback = null;
     const filePath = await AudioRecord.stop();
+    this.initialized = false;
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
     const uri = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
     return {

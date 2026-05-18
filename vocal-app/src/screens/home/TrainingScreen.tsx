@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Audio } from 'expo-av';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
+import { isAuthExpiredError } from '../../api/client';
 import { IndicatorAppKey, INDICATOR_LABELS, ZONE_LABELS } from '../../domain/weakSections';
 import type { Zone } from '../../types/analyze';
 
@@ -821,6 +822,10 @@ export default function TrainingScreen({ route }: Props) {
       setAfterLowConfidence(hasLowConfidenceItem(res.low_confidence_items, indicatorKey, serverIndicatorKey));
       setStatus('result');
     } catch (e: unknown) {
+      if (isAuthExpiredError(e)) {
+        setStatus('stopped');
+        return;
+      }
       const { code, detail, message } = getApiErrorInfo(e);
       const detailError = getStringDetail(detail, 'error');
       const detailReason = getStringDetail(detail, 'reason');

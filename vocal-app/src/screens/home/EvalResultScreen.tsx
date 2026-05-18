@@ -196,6 +196,33 @@ const CONSERVATIVE_FEEDBACK_BY_ZONE: Partial<Record<EvaluationItemKey, Record<Zo
   },
 };
 
+const ITEM_DISPLAY_NAMES: Record<EvaluationItemKey, string> = {
+  breathiness:        '호흡 소리 식별',
+  vocal_fold_contact: '성대 접촉 강도',
+  nasal_oral_ratio:   '비강/구강 공명 비율',
+  chest_head_voice:   '흉성/두성 경향',
+  forward_resonance:  '전방 공명 정도',
+  soft_palate:        '연구개 위치',
+  pressure_balance:   '상압/하압 비율',
+  larynx_tongue_root: '공명 개방감',
+  tongue_tension:     '혀/구강 공간 경직도',
+};
+
+const ITEM_DESCRIPTIONS: Record<EvaluationItemKey, string> = {
+  breathiness:        '소리에 섞인 호흡감과 발성 밀도의 균형을 추정합니다. 호흡이 너무 많이 새거나 지나치게 눌린 구간을 확인하는 데 도움을 줍니다.',
+  vocal_fold_contact: '소리를 낼 때 성대가 맞닿는 강도의 경향을 추정합니다. 너무 약하거나 강한 접촉 경향을 구간별로 확인할 수 있습니다.',
+  nasal_oral_ratio:   '비강과 구강 쪽 울림의 균형을 참고하는 항목입니다. 소리가 한쪽 공명에 치우치는 경향을 이해하는 데 도움을 줍니다.',
+  chest_head_voice:   '흉성/두성 사용 경향을 참고하는 항목입니다. 소리의 무게감이나 전환 구간의 변화를 이해하는 데 도움을 줍니다.',
+  forward_resonance:  '소리가 앞쪽으로 모이는 공명 경향을 참고하는 항목입니다. 발성 위치감이 어떻게 들리는지 이해하는 데 도움을 줍니다.',
+  soft_palate:        '입 안쪽 공간과 연구개 위치에 관련된 소리 특성을 추정합니다. 공명 공간이 좁거나 긴장된 경향을 참고할 수 있습니다.',
+  pressure_balance:   '발성 압력의 위아래 균형을 참고하는 항목입니다. 소리가 눌리거나 힘이 몰리는 경향을 이해하는 데 도움을 줍니다.',
+  larynx_tongue_root: '후두와 혀뿌리 주변의 열림과 긴장 경향을 참고하는 항목입니다. 목 안쪽 공간이 답답해지는 경향을 이해하는 데 도움을 줍니다.',
+  tongue_tension:     '혀와 입 안쪽 공간의 긴장감이 소리에 주는 영향을 추정합니다. 발음이 흐려지거나 과하게 힘이 들어간 구간을 참고할 수 있습니다.',
+};
+
+const INACTIVE_REFERENCE_TEXT = '현재는 학습/검증 데이터가 더 필요해 참고용으로 표시됩니다. 지금은 점수보다 항목 의미를 이해하는 용도로 참고해 주세요.';
+const UNAVAILABLE_REFERENCE_TEXT = '현재는 측정 불가 항목입니다. 추가 데이터 수집 후 정식 피드백으로 확장할 예정입니다.';
+
 const HIDE_HIGH_STAR_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
 const FALLBACK_FEEDBACK_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
 const INVALID_FEEDBACK_TEXTS = new Set(['ai측정불가', '측정불가', 'ai측정불가입니다']);
@@ -561,6 +588,9 @@ export default function EvalResultScreen({ route, navigation }: Props) {
     const nameKo     = fb?.name_ko ?? meta.nameKo;
     const timelineMode = getTimelineModeForAppKey(key);
     const timelineConfig = timelineMode ? TIMELINE_MODE_CONFIG[timelineMode] : null;
+    const isUnavailable = result.reliability.unavailable.includes(key);
+    const isAcademicOnly = result.reliability.academicOnlyV2?.includes(key) ?? false;
+    const isDeferred = result.reliability.deferredV2?.includes(key) ?? false;
     const scoreMeta = getMappedScoreMeta(result.scoresMeta, key, timelineConfig);
     const v2Score = typeof scoreMeta?.roundedScore === 'number'
       ? scoreMeta.roundedScore
@@ -574,6 +604,10 @@ export default function EvalResultScreen({ route, navigation }: Props) {
       ? 'high'
       : rawConfidence;
     const feedbackText = getResultCardFeedbackText(key, fb?.feedback_text, zone, score);
+    const isInactiveCard = !isShown || isAcademicOnly || isDeferred;
+    const statusText = isInactiveCard
+      ? (isUnavailable || confidence === 'unavailable' ? UNAVAILABLE_REFERENCE_TEXT : INACTIVE_REFERENCE_TEXT)
+      : undefined;
     const displayTier = HIDE_HIGH_STAR_ITEMS.has(key) && scoreMeta?.tier === 'high_star'
       ? 'high'
       : scoreMeta?.tier;
@@ -581,7 +615,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
     // 9항목 모두 동적 분기 — v2 분기: reliability.shownV2 우선, fallback: timelineMetadata.shownIndicators
     // SectionList/Training 코어는 v2 4항목 지원
     const SUPPORTED: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact', 'soft_palate', 'tongue_tension'];
-    const trainDisabled = !isShown;
+    const trainDisabled = isInactiveCard;
     const onTrainPress = () => {
       if (trainDisabled) {
         Alert.alert('곧 출시', '데이터 수집 후 활성화 예정입니다.');
@@ -619,11 +653,13 @@ export default function EvalResultScreen({ route, navigation }: Props) {
       <EvalItemCard
         key={key}
         itemKey={key}
-        nameKo={nameKo}
+        nameKo={ITEM_DISPLAY_NAMES[key] ?? nameKo}
         score={score}
         zone={zone}
         confidence={confidence}
         feedbackText={feedbackText}
+        itemDescription={ITEM_DESCRIPTIONS[key]}
+        statusText={statusText}
         scoreDescription={fb?.score_description}
         isFocus={FOCUS_ITEMS_FROM_USER.includes(key)}
         onTrainPress={onTrainPress}

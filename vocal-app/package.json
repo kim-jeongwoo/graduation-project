@@ -6,11 +6,11 @@
     "start": "expo start --dev-client",
     "start:lan": "expo start --dev-client --lan",
     "start:tunnel": "expo start --dev-client --tunnel",
-    "start:tunnel:clear": "expo start --dev-client --tunnel --clear",
     "start:go": "expo start",
     "android": "expo start --android --dev-client",
     "ios": "expo start --ios --dev-client",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "start:tunnel:clear": "expo start --dev-client --tunnel --clear"
   },
   "dependencies": {
     "@expo/ngrok": "^4.1.3",
