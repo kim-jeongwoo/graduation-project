@@ -1,6 +1,6 @@
 # Vocal App Current State
 
-작성 기준: 2026-05-18
+작성 기준: 2026-05-19
 앱 경로: `vocal-app/`
 원본 작업 경로: `/Users/kimjeongwoo/vocal-app`
 
@@ -46,6 +46,11 @@
 - 과거 분석 결과 재진입 시 가이드라인 유지 확인
 - Step 3G 4항목 카드/연습하기 버튼 기존 동작 유지 확인
 - 목소리 입력 없이 녹음하면 결과 화면으로 이동하지 않고 안내 표시 확인
+- 결과 화면 활성 4항목 평가표 기반 피드백 문구 확인
+- SectionList / TrainingScreen 피드백 문구 동기화 확인
+- 평가 기준 보기 문구 방향 확인
+- 비활성 5항목 참고용/측정 불가 UX와 훈련 CTA 미노출 확인
+- `npm run start:cf` 실행, `expo-dev.vocal-fit.com` Metro URL, `/status` 응답 확인
 
 ## 기술 스택
 
@@ -80,6 +85,7 @@
 - Batch #1 5/5 안정화 변경
 - Batch #2 5/5 안정화 변경
 - Batch #3 5/5 안정화 변경
+- Batch #4 5/5 피드백/평가 기준/비활성 카드/Cloudflare dev tunnel 실행 정리
 - full analyze async polling UX
 - 구간훈련 녹음 window와 `chunk_meta` 정렬
 - production 완곡 업로드 timeout/UX 안정화
@@ -119,7 +125,7 @@
 ```bash
 cd vocal-app
 npm install
-npm run start:tunnel
+npm run start:cf
 ```
 
 주요 scripts:
@@ -130,6 +136,7 @@ npm run start:tunnel
   "start:lan": "expo start --dev-client --lan",
   "start:tunnel": "expo start --dev-client --tunnel",
   "start:tunnel:clear": "expo start --dev-client --tunnel --clear",
+  "start:cf": "./scripts/start-expo-cloudflare.sh",
   "android": "expo start --android --dev-client",
   "ios": "expo start --ios --dev-client"
 }
@@ -153,6 +160,9 @@ npm run start:tunnel
 | Favorites/History/SongHistory/Record 빈 상태/오류 UX | 검증 완료 |
 | 401 auth-expired 재로그인 UX | 코드 반영 및 앱 흐름 확인 |
 | 9항목 결과 카드 설명/상태 문구 | 검증 완료 |
+| Batch #4 결과/구간훈련/평가 기준 문구 | 검증 완료 |
+| 비활성 5항목 참고용/측정 불가 UX | 검증 완료 |
+| Cloudflare dev tunnel `start:cf` | 검증 완료 |
 | `node_modules/.bin/tsc --noEmit` | source repo 기준 통과 |
 
 ### 2026-05-13 Galaxy 검증 조건
@@ -190,7 +200,7 @@ npm run start:tunnel
 | 노래별 key 자동 조절 및 원키 선택 | 앱/asset | 사용자 음역대와 곡 key 매칭 |
 | 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
 | dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
-| 4/6~5/10 평가표 기준 추가 피드백 정교화 | 앱 UX/평가표 | 실제 평가표 기준 문구 보강 |
+| 대표님 피드백 반영 후 문구 수정 | 앱 UX/평가표 | 최종 피드백 기준 copy 재검토 |
 | expo-av -> expo-audio migration | 앱 코드 정리 | Expo SDK 변화에 맞춰 대체 API 검토 |
 | NativeEventEmitter root cause library replacement or native patch | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |

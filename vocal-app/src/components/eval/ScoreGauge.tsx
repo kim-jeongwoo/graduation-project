@@ -9,13 +9,14 @@ interface ScoreGaugeProps {
   zone: Zone | null;
   size?: 'sm' | 'md' | 'lg';
   label?: string;
+  unavailableLabel?: string;
 }
 
 const CELL_HEIGHTS = { sm: 10, md: 14, lg: 18 } as const;
 const LABEL_SIZES  = { sm: 11, md: 13, lg: 15 } as const;
 const TOTAL_CELLS  = 6; // 0~5
 
-export default function ScoreGauge({ score, zone, size = 'md', label }: ScoreGaugeProps) {
+export default function ScoreGauge({ score, zone, size = 'md', label, unavailableLabel }: ScoreGaugeProps) {
   const cellHeight = CELL_HEIGHTS[size];
   const labelSize  = LABEL_SIZES[size];
   const isUnavailable = score === null;
@@ -41,7 +42,7 @@ export default function ScoreGauge({ score, zone, size = 'md', label }: ScoreGau
       </View>
       <View style={styles.scoreRow}>
         {isUnavailable ? (
-          <Text style={[styles.unavailableText, { fontSize: labelSize }]}>AI 측정 불가</Text>
+          <Text style={[styles.unavailableText, { fontSize: labelSize }]}>{unavailableLabel ?? 'AI 측정 불가'}</Text>
         ) : (
           <>
             <Text style={[styles.scoreText, { fontSize: labelSize, color: zone ? ZONE_COLORS[zone] : COLORS.textPrimary }]}>

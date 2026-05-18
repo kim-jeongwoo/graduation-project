@@ -5,32 +5,13 @@ import { Audio } from 'expo-av';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import { isAuthExpiredError } from '../../api/client';
-import { IndicatorAppKey, INDICATOR_LABELS, ZONE_LABELS } from '../../domain/weakSections';
+import {
+  IndicatorAppKey,
+  INDICATOR_LABELS,
+  SECTION_FEEDBACK_BY_ZONE as FEEDBACK_BY_ZONE,
+  ZONE_LABELS,
+} from '../../domain/weakSections';
 import type { Zone } from '../../types/analyze';
-
-// 이슈 3 — 사후 측정 결과 zone별 피드백 텍스트 (클라이언트 hardcode, 5/10 임시)
-const FEEDBACK_BY_ZONE: Record<IndicatorAppKey, Record<Zone, string>> = {
-  breathiness: {
-    insufficient: '호흡 소리 지표가 낮게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
-    appropriate:  '호흡 소리 지표가 적절 범위로 측정됐습니다.',
-    excessive:    '호흡 소리 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
-  },
-  vocal_fold_contact: {
-    insufficient: '성대 접촉 강도 지표가 낮게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
-    appropriate:  '성대 접촉 강도 지표가 적절 범위로 측정됐습니다.',
-    excessive:    '성대 접촉 강도 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
-  },
-  soft_palate: {
-    insufficient: '입 안쪽 공간이 좁아져 소리가 답답하게 느껴질 수 있는 경향이 보입니다. 하품하듯 입천장 뒤쪽을 살짝 들어 올리는 느낌으로 발성해 보세요.',
-    appropriate:  '입 안쪽 공간과 연구개 위치가 비교적 안정적인 편입니다. 현재 발성 느낌을 자연스럽게 이어가 보세요.',
-    excessive:    '입천장 뒤쪽이나 목 주변에 긴장이 많아지는 경향이 보입니다. 힘을 조금 풀고 소리가 자연스럽게 지나가도록 발성해 보세요.',
-  },
-  tongue_tension: {
-    insufficient: '혀의 움직임이 덜 또렷해 발음이 흐려질 수 있는 경향이 보입니다. 혀를 과하게 누르지 말고 필요한 만큼만 선명하게 사용해 보세요.',
-    appropriate:  '혀와 구강 공간의 긴장도가 비교적 안정적인 편입니다. 현재 발음과 발성 느낌을 자연스럽게 이어가 보세요.',
-    excessive:    '혀, 턱, 입 안쪽에 힘이 많이 들어간 경향이 보입니다. 혀끝과 턱의 힘을 조금 풀고 자연스럽게 발성해 보세요.',
-  },
-};
 
 const SERVER_INDICATOR_KEY: Record<IndicatorAppKey, string> = {
   breathiness:         '4_breathiness',

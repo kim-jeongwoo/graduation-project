@@ -120,9 +120,9 @@ const BREATH_COLOR: Record<Zone | 'unknown', string> = {
 };
 
 const BREATH_TEXT: Record<Zone | 'unknown', string> = {
-  appropriate:  '호흡 지표 적절',
-  excessive:    '호흡 지표가 높아요',
-  insufficient: '호흡 지표가 낮아요',
+  appropriate:  '호흡 균형 적절',
+  excessive:    '압축/눌림 경향',
+  insufficient: '숨소리 과다 경향',
   unknown:      '측정 중...',
 };
 

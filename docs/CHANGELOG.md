@@ -2,6 +2,34 @@
 
 이 파일은 `graduation-project` monorepo의 주요 변경 이력을 기록한다.
 
+## 2026-05-19
+
+### Vocal App Feedback Batch #4
+
+- 활성 4항목 결과 카드에 평가표 기반 피드백 문구 1차를 반영했다.
+- SectionList와 TrainingScreen의 구간별 피드백 문구 흐름을 동기화했다.
+- 결과 카드의 평가 기준 보기 문구를 평가표 방향과 맞췄다.
+- 비활성 5항목 카드를 참고용/측정 불가 UX로 정리하고 훈련 진입 CTA를 숨겼다.
+- Cloudflare named tunnel 기반 `npm run start:cf` 실행 script와 dev-flow 문서를 추가했다.
+
+### Batch #4 Validation
+
+- 결과 화면 활성 4항목 문구 확인.
+- SectionList / TrainingScreen 피드백 문구 동기화 확인.
+- 사후측정 기능 유지 확인.
+- 평가 기준 보기 문구 방향 확인.
+- 비활성 5항목 참고용/측정 불가 UX와 훈련 CTA 미노출 확인.
+- `npm run start:cf`, `expo-dev.vocal-fit.com` Metro URL, `/status`의 `packager-status:running` 확인.
+- QR 스캔 후 앱 진입, 결과 화면 고급 탭 유지, 빨간 LogBox 없음 확인.
+- source repo 기준 `node_modules/.bin/tsc --noEmit` 통과.
+
+### Notes
+
+- 이 PR은 Batch #4 반영용이며 main merge는 포함하지 않는다.
+- Cloudflare token, credential, `/etc/cloudflared/config.yml`, credential json은 포함하지 않는다.
+- `expo-dev.vocal-fit.com`은 준비된 dev tunnel host로만 문서화한다.
+- 대표님 피드백 후 문구 수정, pitch-guide 다곡 정렬, score_mapper 분포 검증은 후속 backlog로 유지한다.
+
 ## 2026-05-18
 
 ### Vocal App Stability Batch #3
