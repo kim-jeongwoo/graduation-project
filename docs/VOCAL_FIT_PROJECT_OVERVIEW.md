@@ -33,16 +33,16 @@ Vocal Fit은 보컬 연습 녹음, 서버 기반 발성 분석, 피치 비교, �
 
 ### 문서 기준과 출처
 
-이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2 안정화 반영 상태를 기준으로 작성했다.
+이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화 반영 상태를 기준으로 작성했다.
 
 | 기준 | 값 |
 |---|---|
 | GitHub repo | `kim-jeongwoo/graduation-project` |
-| 작업 branch | `codex/vocal-app-batch2-2026-05-17` |
+| 작업 branch | `codex/vocal-app-batch3-2026-05-18` |
 | base branch | `main` |
-| base commit | `359c7b9 Merge pull request #3 from kim-jeongwoo/codex/vocal-app-batch1-2026-05-14` |
+| base commit | `8407809 Merge pull request #4 from kim-jeongwoo/codex/vocal-app-batch2-2026-05-17` |
 | 앱 원본 작업 경로 | `/Users/kimjeongwoo/vocal-app` |
-| 포함 범위 | Batch #1 + Batch #2 검증 완료 앱 source/docs snapshot |
+| 포함 범위 | Batch #1 + Batch #2 + Batch #3 검증 완료 앱 source/docs snapshot |
 | 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak`, raw handover docs, `.codex/ACTIVE_PLAN.md` |
 
 ## 졸업작품 목표
@@ -293,8 +293,13 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 - 연구개위치 / 혀경직도 피드백 문구 정교화
 - V2 score distribution / graph color mapping 검증 및 보정
 - Settings microphone input test supporting cleanup
+- Favorites v2 4항목 재진입 mapping 보정
+- Karaoke MR 실패 cleanup과 `no_voice` 다시 녹음 retry
+- 401 인증 만료 재로그인 UX
+- 9항목 평가표 텍스트 매핑 1차
+- Favorites/History/SongHistory/Record 빈 상태와 오류 UX 정리
 
-## 5/10~5/14 진행 로그
+## 5/10~5/18 진행 로그
 
 | 날짜 | 진행 |
 |---|---|
@@ -304,6 +309,7 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 | 2026-05-13 | pitch-guide 재진입/중복 요청 문제 수정 검증, monorepo에 `vocal-app/` snapshot 추가 |
 | 2026-05-14 | Batch #1 5/5 완료: async polling, 구간훈련 window/chunk_meta, production upload UX, song004 pitch-guide closeout, 결과 카드 신뢰도 UI |
 | 2026-05-18 | Batch #2 5/5 완료: navigation typing, 진단 로그 정책, SDK warning triage, 연구개/혀경직도 문구, V2 graph 색상 매핑 |
+| 2026-05-18 | Batch #3 5/5 완료: History/Favorites/Record UX, Karaoke MR cleanup/no_voice retry, 401 재로그인 UX, 9항목 설명 문구, 빈 상태/오류 UX |
 
 ## 현재 남은 검증 항목
 
@@ -340,9 +346,11 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 
 2026-05-18 Batch #2 검증에서는 navigation typing 정리 후 TypeScript noEmit 통과, 진단 로그 정리, NativeEventEmitter warning LogBox 방해 최소화, 연구개/혀경직도 문구 표시, V2 graph missing/low-confidence 색상 경로, 구간훈련 사후측정, Settings 마이크 입력 테스트가 확인되었다.
 
+2026-05-18 Batch #3 검증에서는 Favorites 목록/빈 상태와 4항목 재진입, History/SongHistory/RecordScreen 목록과 빈 상태, History -> SongHistory -> EvalResult, Favorites -> Training, SectionList -> TrainingScreen, `no_voice` 다시 녹음 retry, 로그인/로그아웃/재로그인, 9항목 결과 카드 설명/상태 문구, 빨간 LogBox 없음이 확인되었다.
+
 현재 한계:
 
-- Batch #2 기준 source repo에서 `node_modules/.bin/tsc --noEmit`이 통과한다.
+- Batch #3 기준 source repo에서 `node_modules/.bin/tsc --noEmit`이 통과한다.
 - 이 문서는 서버/DML 최신 runtime을 직접 고정하지 않는다. server contract가 바뀌면 `vocal-server`와 `dml-server` 문서를 함께 확인해야 한다.
 - pitch-guide asset 정렬은 현 단계에서 종료했으며, 여러 곡 수동 정렬 완료 후 재개한다.
 

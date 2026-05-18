@@ -92,6 +92,7 @@ npx expo start --android      # Android 에뮬레이터
 - EAS 설정(`eas.json`, `app.json`)을 사용자 확인 없이 수정하지 않는다.
 - 기존 화면의 내비게이션 구조(라우트 이름)를 임의로 변경하지 않는다.
 - 요청받지 않은 리팩토링·기능 추가를 하지 않는다.
+
 ---
 
 ## ⚠️ 반복하지 말 것 (Known Pitfalls)

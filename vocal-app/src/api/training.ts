@@ -10,14 +10,20 @@ const APP_TO_SERVER: Record<IndicatorAppKey, string> = {
   tongue_tension:     '8_tongue_tension',
 };
 
+const SERVER_TO_APP: Record<string, IndicatorAppKey> = {
+  breathiness:         'breathiness',
+  vocal_fold_contact:  'vocal_fold_contact',
+  soft_palate:         'soft_palate',
+  tongue_tension:      'tongue_tension',
+};
+
 export function appToServerKey(k: IndicatorAppKey): string {
   return APP_TO_SERVER[k];
 }
 
 export function serverToAppKey(s: string): IndicatorAppKey | null {
   const stripped = s.replace(/^\d+_/, '');
-  if (stripped === 'breathiness' || stripped === 'vocal_fold_contact') return stripped;
-  return null;
+  return SERVER_TO_APP[stripped] ?? null;
 }
 
 // ─── 누적 시도 (GET /users/me/training-attempts) ───

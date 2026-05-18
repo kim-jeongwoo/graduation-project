@@ -18,12 +18,13 @@
 10. [현재 개발 단계](#현재-개발-단계)
 11. [Batch #1 완료 내용](#batch-1-완료-내용)
 12. [Batch #2 완료 내용](#batch-2-완료-내용)
-13. [검증된 내용](#검증된-내용)
-14. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
-15. [Repository 구조](#repository-구조)
-16. [실행 방법](#실행-방법)
-17. [주의 사항](#주의-사항)
-18. [추가 문서](#추가-문서)
+13. [Batch #3 완료 내용](#batch-3-완료-내용)
+14. [검증된 내용](#검증된-내용)
+15. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
+16. [Repository 구조](#repository-구조)
+17. [실행 방법](#실행-방법)
+18. [주의 사항](#주의-사항)
+19. [추가 문서](#추가-문서)
 
 ## 프로젝트 한 줄 요약
 
@@ -82,7 +83,7 @@ EGG는 성대 접촉과 관련된 정보를 제공할 수 있는 신호지만, �
 
 현재 README에는 개인정보, 학생명, 계정명, 정확한 학원명, 대표자명은 포함하지 않는다. 확인되지 않은 정보는 문서에 쓰지 않고, 필요한 경우 추후 승인된 공개 범위 안에서 보강한다.
 
-2026년 5월 14일 이후에는 학원 통제 실험과 production API 기반 Galaxy 검증을 염두에 두고 앱 안정화 Batch #1을 마무리했다. 2026년 5월 18일에는 navigation typing, 진단 로그, SDK warning, 연구개/혀경직도 문구, V2 그래프 색상 매핑을 묶은 Batch #2를 5/5로 완료했다.
+2026년 5월 14일 이후에는 학원 통제 실험과 production API 기반 Galaxy 검증을 염두에 두고 앱 안정화 Batch #1을 마무리했다. 2026년 5월 18일에는 navigation typing, 진단 로그, SDK warning, 연구개/혀경직도 문구, V2 그래프 색상 매핑을 묶은 Batch #2를 5/5로 완료했고, 이어 History/Favorites/Record UX, Karaoke 실패 cleanup, 401 재로그인 UX, 9항목 설명 문구를 묶은 Batch #3도 5/5로 완료했다.
 
 ## 전체 시스템 구조
 
@@ -225,7 +226,7 @@ sequenceDiagram
 
 ## 현재 개발 단계
 
-현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #2 완료” 단계다.
+현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #3 완료” 단계다.
 
 - production API 기준 앱 진입과 로그인 가능
 - 곡 목록 로드 가능
@@ -238,6 +239,10 @@ sequenceDiagram
 - navigation typing baseline 정리 후 `node_modules/.bin/tsc --noEmit` 통과
 - 진단 로그 정리 후 Metro 과다 출력 없음
 - 연구개위치/혀경직도 카드 문구와 V2 그래프 색상 매핑 검증 완료
+- History/Favorites/SongHistory/Record 빈 상태와 오류 UX 정리 완료
+- Karaoke MR 실패 cleanup과 `no_voice` 다시 녹음 retry 확인
+- 401 인증 만료 시 재로그인 UX 반영
+- 9항목 결과 카드 설명/상태 문구 1차 반영
 - Settings 마이크 입력 테스트는 calibration 본기능이 아니라 supporting input test로 정리
 - pitch-guide 작업은 현 단계에서 종료, 팀원들이 여러 곡 수동 정렬 중
 
@@ -281,6 +286,21 @@ Supporting cleanup:
 - 14번 Settings 마이크 입력 테스트 UX는 개인화 calibration 완성이 아니라 입력 테스트/보류 전환으로 정리했다.
 - 개인화 캘리브레이션, 성별/음역대 기준, 노래별 key 조절은 마지막 단계 backlog로 남긴다.
 
+## Batch #3 완료 내용
+
+Batch #3은 검증 완료 기능 5개 단위로 GitHub에 반영하는 세 번째 묶음이다.
+
+1. History/Favorites/Record 회귀 UX polish
+   - Favorites v2 4항목 재진입에서 `breathiness`, `vocal_fold_contact`, `soft_palate`, `tongue_tension` app key를 유지하도록 보정.
+2. Karaoke MR 실패 cleanup + `no_voice` 다시 녹음 retry
+   - MR 시작 실패 시 recorder/sound cleanup을 보강하고, `no_voice` Alert의 다시 녹음이 자동 재시작되도록 정리.
+3. 401 인증 만료 재로그인 UX
+   - 인증 만료를 일반 네트워크 오류와 분리하고, 로그인 만료 안내 후 로그인 화면으로 돌아가는 흐름 반영.
+4. 9항목 평가표 텍스트 매핑 1차
+   - 활성 4항목과 비활성/참고 항목의 설명과 상태 문구를 보수적인 발성 교육 보조 톤으로 정리.
+5. History/Favorites/Record 빈 상태 오류 UX 정리
+   - Favorites/History/SongHistory/RecordScreen에서 데이터 없음과 API 실패를 구분하고, 다음 행동 또는 다시 불러오기 CTA를 제공.
+
 ## 검증된 내용
 
 정우 Galaxy 검증 기준:
@@ -306,12 +326,18 @@ Supporting cleanup:
 - Settings 마이크 입력 테스트 정상 확인
 - V2 그래프 missing/low-confidence 색상 표시 보정 후 임시 audit 로그 제거 확인
 - NativeEventEmitter warning은 화면 LogBox 방해 최소화, expo-av deprecated warning은 migration backlog로 유지
+- Favorites 목록/빈 상태와 연구개/혀경직도 재진입 확인
+- History 목록/빈 상태, SongHistory 목록/빈 상태, RecordScreen 안내/Home 이동 확인
+- History -> SongHistory -> EvalResult, Favorites -> Training, SectionList -> TrainingScreen 흐름 확인
+- `no_voice` Alert의 다시 녹음 자동 재시작 확인
+- 로그인/로그아웃/재로그인과 401 auth-expired 구조 반영 확인
+- 9항목 결과 카드 설명/상태 문구 표시 확인
+- 빨간 LogBox 없음 확인
 
 개발 검증:
 
 - `git diff --check` 통과
 - source repo 기준 `node_modules/.bin/tsc --noEmit` 통과
-- `git diff --check` 통과
 
 ## 남은 Backlog / Roadmap
 

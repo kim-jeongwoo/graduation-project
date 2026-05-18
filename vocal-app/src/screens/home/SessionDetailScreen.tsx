@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AnalyzeStatusError, getSessionDetail, startAnalysis } from '../../api/sessions';
 import { AnalysisPollingTimeoutError, pollAnalysisStatus } from '../../api/analysis';
+import { isAuthExpiredError } from '../../api/client';
 import { getSongLrc, getSongMrUrl, getSongPitchGuideCompat } from '../../api/songs';
 
 // [deprecated] 구형 화면 aliases — P1에서 정리 예정
@@ -471,6 +472,9 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
         songId: effectiveSongId,
       });
     } catch (e: unknown) {
+      if (isAuthExpiredError(e)) {
+        return;
+      }
       if (e instanceof AnalyzeStatusError) {
         Alert.alert(
           e.status === 'no_voice' ? '음성이 감지되지 않았습니다' : '분석 실패',

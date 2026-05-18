@@ -13,6 +13,7 @@ import Svg, { Path, Line } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
 import { useAuth } from '../../context/AuthContext';
+import { isAuthExpiredError } from '../../api/client';
 import { getSongKaraokeData, getSongKaraokeLyricsOnly, getSongMrUrl } from '../../api/songs';
 import {
   AnalyzeStatusError,
@@ -226,6 +227,26 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   const soundRef       = useRef<Audio.Sound | null>(null);
   const recorderRef    = useRef(new VocalRecorder());
   const currentTimeRef = useRef(0);
+  const startMrAndRecordRef = useRef<(() => void) | null>(null);
+
+  const cleanupStartFailure = useCallback(async (sound?: Audio.Sound | null, recorderStarted = false) => {
+    const s = sound ?? soundRef.current;
+    if (s) {
+      try { s.setOnPlaybackStatusUpdate(null); } catch {}
+      try { await s.stopAsync(); } catch {}
+      try { await s.unloadAsync(); } catch {}
+      if (soundRef.current === s) soundRef.current = null;
+    }
+    if (recorderStarted || recorderRef.current.active) {
+      try { await recorderRef.current.cancel(); } catch {}
+    }
+    currentTimeRef.current = 0;
+    setCurrentTime(0);
+    setPlaying(false);
+    setCountdown(null);
+    setLoading(false);
+    setUserPitch([]);
+  }, []);
 
   // ─── Permission check + data load ───
   useEffect(() => {
@@ -272,6 +293,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
             setPitchGuideStatus('failed');
           });
       } catch (e) {
+        if (isAuthExpiredError(e)) return;
         console.error('[KaraokeScreen] load error:', e);
         Alert.alert('오류', '곡 데이터를 불러오지 못했습니다.', [
           { text: '닫기', onPress: () => navigation.goBack() },
@@ -292,13 +314,14 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     setCountdown(n);
     const iv = setInterval(() => {
       n -= 1;
-      if (n <= 0) { clearInterval(iv); setCountdown(null); startMrAndRecord(); }
+      if (n <= 0) { clearInterval(iv); setCountdown(null); void startMrAndRecordRef.current?.(); }
       else setCountdown(n);
     }, 1000);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startMrAndRecord = useCallback(async () => {
+    let sound: Audio.Sound | null = null;
+    let recorderStarted = false;
     try {
       if (!USE_MOCK) {
         await recorderRef.current.start(USE_REALTIME_PITCH ? (samples) => {
@@ -312,8 +335,10 @@ export default function KaraokeScreen({ navigation, route }: Props) {
             return [...trimmed, { time: t, midi: result.midi, voiced: true, freqHz: result.freq, confidence: 1 }];
           });
         } : undefined);
+        recorderStarted = true;
       }
-      const sound = new Audio.Sound();
+      sound = new Audio.Sound();
+      soundRef.current = sound;
       // ① 콜백 먼저 등록 (shouldPlay:true + loadAsync 완료 후 등록 시 초기 update 누락 방지)
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded) {
@@ -329,12 +354,19 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       );
       // ③ position 0에서 명시적 재생 시작
       await sound.playFromPositionAsync(0);
-      soundRef.current = sound;
     } catch (e) {
       console.error('[KaraokeScreen] startMrAndRecord error:', e);
-      Alert.alert('오류', 'MR 또는 녹음을 시작할 수 없습니다.');
+      await cleanupStartFailure(sound, recorderStarted);
+      Alert.alert('재생 시작 실패', 'MR 재생을 시작하지 못했습니다. 다시 시도해 주세요.', [
+        { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
+        { text: '다시 시도', onPress: startCountdown },
+      ]);
     }
-  }, [songId, token]);
+  }, [cleanupStartFailure, navigation, songId, startCountdown, token]);
+
+  useEffect(() => {
+    startMrAndRecordRef.current = startMrAndRecord;
+  }, [startMrAndRecord]);
 
   // ─── Restart ───
   const handleRestart = useCallback(() => {
@@ -373,6 +405,38 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     navigation.goBack();
   }, [navigation]);
 
+  const handleRetryRecording = useCallback(async () => {
+    const snd = soundRef.current;
+    if (snd) {
+      try { snd.setOnPlaybackStatusUpdate(null); } catch {}
+      try { await snd.stopAsync(); } catch {}
+      try { await snd.unloadAsync(); } catch {}
+      soundRef.current = null;
+    }
+    if (recorderRef.current.active) {
+      try { await recorderRef.current.cancel(); } catch {}
+    }
+    setIsAnalyzing(false);
+    setAnalyzeStep(0);
+    setCountdown(null);
+    setCurrentTime(0);
+    currentTimeRef.current = 0;
+    setPlaying(false);
+    if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
+    else setUserPitch([]);
+    setTimeout(startCountdown, 0);
+  }, [pitchGuide, startCountdown]);
+
+  const showRetryRecordingAlert = useCallback((title: string, message: string) => {
+    Alert.alert(title, message, [
+      {
+        text: '다시 녹음',
+        onPress: () => { void handleRetryRecording(); },
+      },
+      { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
+    ]);
+  }, [handleRetryRecording, navigation]);
+
   // ─── STOP → analyze → EvalResult ───
   const handleStop = useCallback(async () => {
     if (USE_MOCK) {
@@ -398,7 +462,8 @@ export default function KaraokeScreen({ navigation, route }: Props) {
 
       try {
         await uploadSessionFile(session.session_id, uri, fileName, mimeType);
-      } catch {
+      } catch (err: unknown) {
+        if (isAuthExpiredError(err)) return;
         Alert.alert(
           '녹음 파일 업로드 실패',
           '녹음 파일 업로드에 실패했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
@@ -410,31 +475,17 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       setAnalyzeStep(1);
       const { run_id, status, reason } = await startAnalysis(session.session_id);
 
-      if (status === 'no_voice') {
-        Alert.alert(
-          '음성이 감지되지 않았어요',
-          '마이크가 정상 동작하는지, 노래를 부르셨는지 확인해주세요.',
-          [
-            {
-              text: '다시 녹음',
-              onPress: async () => {
-                const snd = soundRef.current;
-                if (snd) { try { await snd.unloadAsync(); } catch {} soundRef.current = null; }
-                await recorderRef.current.cancel();
-                setCurrentTime(0);
-                currentTimeRef.current = 0;
-                if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
-                else setUserPitch([]);
-                startCountdown();
-              },
-            },
-            { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
-          ],
+      if (status === 'no_voice' || status === 'invalid') {
+        showRetryRecordingAlert(
+          status === 'no_voice' ? '음성이 감지되지 않았어요' : '다시 녹음이 필요해요',
+          status === 'no_voice'
+            ? '마이크가 정상 동작하는지, 노래를 부르셨는지 확인해주세요.'
+            : '분석할 수 없는 녹음입니다. 다시 녹음해 주세요.',
         );
         return;
       }
 
-      if (status === 'failed' || status === 'invalid' || status === 'error') {
+      if (status === 'failed' || status === 'error') {
         throw new Error(`AI 분석에 실패했습니다. ${reason ?? '다시 시도해주세요.'}`);
       }
 
@@ -448,26 +499,11 @@ export default function KaraokeScreen({ navigation, route }: Props) {
 
       goToEvalResult(run_id);
     } catch (err: unknown) {
-      if (err instanceof AnalyzeStatusError && err.status === 'no_voice') {
-        Alert.alert(
-          '음성이 감지되지 않았어요',
+      if (isAuthExpiredError(err)) return;
+      if (err instanceof AnalyzeStatusError && (err.status === 'no_voice' || err.status === 'invalid')) {
+        showRetryRecordingAlert(
+          err.status === 'no_voice' ? '음성이 감지되지 않았어요' : '다시 녹음이 필요해요',
           err.message,
-          [
-            {
-              text: '다시 녹음',
-              onPress: async () => {
-                const snd = soundRef.current;
-                if (snd) { try { await snd.unloadAsync(); } catch {} soundRef.current = null; }
-                await recorderRef.current.cancel();
-                setCurrentTime(0);
-                currentTimeRef.current = 0;
-                if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
-                else setUserPitch([]);
-                startCountdown();
-              },
-            },
-            { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
-          ],
         );
         return;
       }
@@ -488,7 +524,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       setIsAnalyzing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songId, navigation]);
+  }, [songId, navigation, showRetryRecordingAlert]);
 
   // Navigate to EvalResult (KaraokeScreen is in AppRootStack, EvalResult is in HomeStack)
   const goToEvalResult = useCallback((runId: string) => {

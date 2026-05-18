@@ -5,14 +5,29 @@ import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import { useFavorites, type FavoriteSection } from '../../context/FavoritesContext';
 import { INDICATOR_LABELS, ZONE_LABELS, zoneColor, extractWeakSections } from '../../domain/weakSections';
+import { isAuthExpiredError } from '../../api/client';
 import { getResultsByRunId } from '../../api/analyze';
 import type { HistoryStackParamList } from '../../navigation/types';
-import type { Zone } from '../../types/analyze';
+import type { TimelineChunkScore, Zone } from '../../types/analyze';
 
 type Props = NativeStackScreenProps<HistoryStackParamList, 'Favorites'>;
+type TimelineScoreKey = keyof TimelineChunkScore['scores'];
+
+const TIMELINE_KEY_BY_INDICATOR: Record<FavoriteSection['indicatorKey'], TimelineScoreKey> = {
+  breathiness:         'breathiness',
+  vocal_fold_contact:  'vocalFoldContact',
+  soft_palate:         'softPalate',
+  tongue_tension:      'tongueTension',
+};
 
 export default function FavoritesScreen({ navigation }: Props) {
-  const { favorites, removeFavoriteById } = useFavorites();
+  const {
+    favorites,
+    favoritesLoading,
+    favoritesError,
+    reloadFavorites,
+    removeFavoriteById,
+  } = useFavorites();
   const [loading, setLoading] = useState(false);
 
   // 옵션 B — 원본 데이터 재조회 후 정확한 scoreInfo/paddedBoundary로 진입
@@ -29,7 +44,7 @@ export default function FavoritesScreen({ navigation }: Props) {
         Alert.alert('데이터 없음', '원본 chunk를 찾을 수 없습니다.');
         return;
       }
-      const tlKey = fav.indicatorKey === 'breathiness' ? 'breathiness' : 'vocalFoldContact';
+      const tlKey = TIMELINE_KEY_BY_INDICATOR[fav.indicatorKey];
       const score = chunk.scores[tlKey];
       if (!score) {
         Alert.alert('데이터 없음', '점수 정보가 없습니다.');
@@ -55,19 +70,45 @@ export default function FavoritesScreen({ navigation }: Props) {
         scoreInfo:       { aiScore: score.aiScore, zone: score.zone as Zone },
         feedbackText:    result.feedback[fav.indicatorKey]?.feedback_text ?? '',
       });
-    } catch {
-      Alert.alert('오류', '원본 데이터를 불러오지 못했습니다.');
+    } catch (e: unknown) {
+      if (isAuthExpiredError(e)) return;
+      Alert.alert('즐겨찾기를 불러오지 못했습니다.', '네트워크 상태를 확인한 뒤 다시 시도해 주세요.', [
+        { text: '취소', style: 'cancel' },
+        { text: '다시 시도', onPress: () => { void onSelect(fav); } },
+      ]);
     } finally {
       setLoading(false);
     }
   }, [navigation]);
 
+  if (favoritesLoading && favorites.length === 0) {
+    return (
+      <View style={styles.empty}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.emptyText}>즐겨찾기를 불러오는 중입니다.</Text>
+      </View>
+    );
+  }
+
+  if (favoritesError && favorites.length === 0) {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyIcon}>☆</Text>
+        <Text style={styles.emptyText}>즐겨찾기를 불러오지 못했습니다.</Text>
+        <Text style={styles.emptySubtext}>네트워크 상태를 확인한 뒤 다시 시도해 주세요.</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={() => { void reloadFavorites(); }}>
+          <Text style={styles.retryText}>다시 불러오기</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (favorites.length === 0) {
     return (
       <View style={styles.empty}>
-        <Text style={styles.emptyIcon}>⭐</Text>
-        <Text style={styles.emptyText}>즐겨찾기한 구간이 없습니다</Text>
-        <Text style={styles.emptySubtext}>약점 구간 리스트에서 ☆ 버튼을 눌러 추가하세요</Text>
+        <Text style={styles.emptyIcon}>☆</Text>
+        <Text style={styles.emptyText}>즐겨찾기한 연습 구간이 없습니다.</Text>
+        <Text style={styles.emptySubtext}>분석 결과에서 연습하고 싶은 구간을 즐겨찾기에 추가해 보세요.</Text>
       </View>
     );
   }
@@ -121,6 +162,8 @@ const styles = StyleSheet.create({
   emptyIcon:   { fontSize: 48 },
   emptyText:   { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
   emptySubtext:{ fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
+  retryBtn:    { paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, borderRadius: 10, backgroundColor: COLORS.primary, marginTop: SPACING.sm },
+  retryText:   { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '600' },
   title:       { ...TYPOGRAPHY.heading, color: COLORS.textPrimary, marginBottom: SPACING.base },
   row:         { backgroundColor: COLORS.surface, borderRadius: 10, padding: SPACING.base, marginBottom: SPACING.sm },
   songLabel:   { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 6 },

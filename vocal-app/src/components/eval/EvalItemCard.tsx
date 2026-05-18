@@ -15,6 +15,8 @@ interface EvalItemCardProps {
   zone: Zone | null;
   confidence: ConfidenceLevel;
   feedbackText: string;
+  itemDescription?: string;
+  statusText?: string;
   scoreDescription?: string;
   isFocus?: boolean;
   onTrainPress?: () => void;
@@ -32,6 +34,8 @@ export default function EvalItemCard({
   zone,
   confidence,
   feedbackText,
+  itemDescription,
+  statusText,
   scoreDescription,
   isFocus = false,
   onTrainPress,
@@ -71,6 +75,10 @@ export default function EvalItemCard({
         </View>
       </View>
 
+      {itemDescription ? (
+        <Text style={styles.itemDescription}>{itemDescription}</Text>
+      ) : null}
+
       {/* 중단: 게이지 */}
       <View style={styles.gaugeArea}>
         <ScoreGauge score={score} zone={zone} size="md" />
@@ -80,6 +88,10 @@ export default function EvalItemCard({
       <Text style={styles.feedback} numberOfLines={3}>
         {feedbackText}
       </Text>
+
+      {statusText ? (
+        <Text style={styles.statusText}>{statusText}</Text>
+      ) : null}
 
       {/* 평가 기준표 (접기/펼치기) */}
       {scoreDescription ? (
@@ -154,10 +166,22 @@ const styles = StyleSheet.create({
   gaugeArea: {
     marginBottom: SPACING.sm,
   },
+  itemDescription: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+    marginBottom: SPACING.sm,
+  },
   feedback: {
     ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     lineHeight: 22,
+  },
+  statusText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+    marginTop: SPACING.xs,
   },
   toggleBtn: {
     marginTop: SPACING.xs,

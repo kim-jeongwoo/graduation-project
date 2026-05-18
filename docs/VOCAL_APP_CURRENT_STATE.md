@@ -26,6 +26,18 @@
 - 연구개위치 / 혀경직도 카드 피드백 문구 표시 정상
 - V2 그래프 missing/low-confidence 색상 표시 보정 후 임시 audit 로그 제거 확인
 - Settings 마이크 입력 테스트 정상 확인
+- Favorites 화면 진입, 기존 목록 표시, 빈 상태 문구 확인
+- Favorites v2 4항목 재진입에서 연구개/혀경직도가 성대접촉강도로 잘못 바뀌지 않음 확인
+- History 화면 진입과 목록/빈 상태 확인
+- SongHistory 진입과 목록/빈 상태 확인
+- RecordScreen 진입, 안내 문구, Home 이동 확인
+- History -> SongHistory -> EvalResult 정상 확인
+- Favorites -> Training, SectionList -> TrainingScreen 정상 확인
+- Karaoke `no_voice` Alert의 다시 녹음 자동 재시작 확인
+- 로그인/로그아웃/재로그인 정상 확인
+- 401 auth-expired 재로그인 구조 코드 반영
+- 9항목 결과 카드 설명/상태 문구 표시 정상
+- 빨간 LogBox 없음 확인
 - 곡 004 녹음 전 pitch guide 로드 확인
 - 완곡 4분 녹음/분석 성공
 - 분석 결과 화면 회색 가이드라인 표시 정상
@@ -67,6 +79,7 @@
 
 - Batch #1 5/5 안정화 변경
 - Batch #2 5/5 안정화 변경
+- Batch #3 5/5 안정화 변경
 - full analyze async polling UX
 - 구간훈련 녹음 window와 `chunk_meta` 정렬
 - production 완곡 업로드 timeout/UX 안정화
@@ -78,6 +91,11 @@
 - 연구개위치 / 혀경직도 피드백 문구 정교화
 - V2 score distribution / graph color mapping 검증 및 보정
 - Settings 마이크 입력 테스트 supporting cleanup
+- Favorites v2 4항목 재진입 mapping 보정
+- Karaoke MR 실패 cleanup과 `no_voice` retry flow
+- 401 인증 만료 재로그인 UX
+- 9항목 평가표 텍스트 매핑 1차
+- Favorites/History/SongHistory/Record 빈 상태와 오류 UX 정리
 - Step 3G 4항목 훈련 지원 관련 변경
 - full analyze status UX hardening
 - pitch-guide fix
@@ -130,7 +148,11 @@ npm run start:tunnel
 | 결과 카드 feedback / 신뢰도 UI | 검증 완료 |
 | pitch guide 로드/재진입 유지 | 검증 완료 |
 | no_voice 결과 화면 이동 차단 | 검증 완료 |
+| no_voice Alert 다시 녹음 retry | 검증 완료 |
 | Step 3G 4항목 버튼 기존 동작 | 검증 완료 |
+| Favorites/History/SongHistory/Record 빈 상태/오류 UX | 검증 완료 |
+| 401 auth-expired 재로그인 UX | 코드 반영 및 앱 흐름 확인 |
+| 9항목 결과 카드 설명/상태 문구 | 검증 완료 |
 | `node_modules/.bin/tsc --noEmit` | source repo 기준 통과 |
 
 ### 2026-05-13 Galaxy 검증 조건
@@ -163,12 +185,14 @@ npm run start:tunnel
 |---|---|---|
 | song004 및 다른 곡 pitch-guide 수동 정렬 완료 후 재반영 | 앱/asset | 수동 정렬된 guide asset 기준 재검증 |
 | MR/LRC/pitch-guide 정합성 최종 검증 | 앱/asset | 여러 곡에서 청감/화면 timing 검증 |
-| 구간훈련 입력 calibration 기능 | 앱 UX | 기기/환경별 입력 레벨 보정 |
-| 연구개/혀경직도 문구 정교화 | 앱 UX/평가표 | 4/6~5/10 전체 평가표 기준으로 문구 확정 |
-| 진단 로그 제거 시점 결정 | 운영/개발 정책 | 검증 완료 후 제거 또는 유지 범위 결정 |
-| navigation typing baseline 오류 정리 여부 결정 | 앱 코드 정리 | baseline 오류 목록과 신규 오류 구분 |
-| expo-av deprecated warning | 앱 코드 정리 | 대체 API 검토 |
-| NativeEventEmitter warning | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
+| 공개 데이터/성별/음역대 기반 개인화 calibration | 앱/DML | 입력 테스트와 분리해 별도 설계 |
+| 회원가입/설정 음역대 입력 | 앱 UX | 사용자 range 기반 설정 저장 |
+| 노래별 key 자동 조절 및 원키 선택 | 앱/asset | 사용자 음역대와 곡 key 매칭 |
+| 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
+| dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
+| 4/6~5/10 평가표 기준 추가 피드백 정교화 | 앱 UX/평가표 | 실제 평가표 기준 문구 보강 |
+| expo-av -> expo-audio migration | 앱 코드 정리 | Expo SDK 변화에 맞춰 대체 API 검토 |
+| NativeEventEmitter root cause library replacement or native patch | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
 
 ## 문서 보존/제외 정책
