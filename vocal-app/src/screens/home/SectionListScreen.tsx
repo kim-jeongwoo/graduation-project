@@ -7,6 +7,7 @@ import {
   WeakSection,
   IndicatorAppKey,
   INDICATOR_LABELS,
+  SECTION_FEEDBACK_BY_ZONE,
   ZONE_LABELS,
   zoneColor,
 } from '../../domain/weakSections';
@@ -19,9 +20,11 @@ export default function SectionListScreen({ route, navigation }: Props) {
   const { indicatorKey, weakSections, feedbackText, runId, songId, sessionId } = route.params;
   const indicatorLabel = INDICATOR_LABELS[indicatorKey];
   const { addFavorite, removeFavoriteByKey, isFavorite } = useFavorites();
+  const getSectionFeedbackText = (sec: WeakSection) => SECTION_FEEDBACK_BY_ZONE[indicatorKey][sec.zone];
 
   const toggleFavorite = (sec: WeakSection) => {
     if (!songId) return;  // 자유녹음(songId 없음) 즐겨찾기 불가
+    const sectionFeedbackText = getSectionFeedbackText(sec);
     if (isFavorite({ songId, chunkIndex: sec.chunkIndex, indicatorKey })) {
       removeFavoriteByKey({ songId, chunkIndex: sec.chunkIndex, indicatorKey });
     } else {
@@ -31,12 +34,13 @@ export default function SectionListScreen({ route, navigation }: Props) {
         songId,
         runId,
         sessionId,
-        feedbackText,
+        feedbackText: sectionFeedbackText,
       });
     }
   };
 
   const onSelectSection = (sec: WeakSection) => {
+    const sectionFeedbackText = getSectionFeedbackText(sec);
     navigation.navigate('Training', {
       indicatorKey,
       runId,
@@ -48,7 +52,7 @@ export default function SectionListScreen({ route, navigation }: Props) {
       chunkInfo:       { startSec: sec.startSec, endSec: sec.endSec, lrcText: sec.lrcText },
       scoreInfo:       { aiScore: sec.aiScore, zone: sec.zone },
       lowConfidenceItems: sec.lowConfidenceItems,
-      feedbackText,
+      feedbackText: sectionFeedbackText,
     });
   };
 
@@ -64,11 +68,18 @@ export default function SectionListScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{indicatorLabel} 약점 구간</Text>
+      {!!feedbackText.trim() && (
+        <View style={styles.feedbackBox}>
+          <Text style={styles.feedbackLabel}>피드백</Text>
+          <Text style={styles.feedbackText}>{feedbackText}</Text>
+        </View>
+      )}
       <FlatList
         data={weakSections}
         keyExtractor={(_, i) => `weak-${i}`}
         renderItem={({ item }) => {
           const fav = songId ? isFavorite({ songId, chunkIndex: item.chunkIndex, indicatorKey }) : false;
+          const sectionFeedbackText = getSectionFeedbackText(item);
           return (
             <TouchableOpacity style={styles.row} onPress={() => onSelectSection(item)}>
               <View style={styles.rowHeader}>
@@ -91,6 +102,7 @@ export default function SectionListScreen({ route, navigation }: Props) {
               <Text style={[styles.score, { color: zoneColor(item.zone) }]}>
                 {item.aiScore.toFixed(2)}점 / {ZONE_LABELS[item.zone]}
               </Text>
+              <Text style={styles.sectionFeedbackText}>{sectionFeedbackText}</Text>
             </TouchableOpacity>
           );
         }}
@@ -104,6 +116,9 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, backgroundColor: COLORS.background, padding: SPACING.base, justifyContent: 'center', alignItems: 'center' },
   title:          { ...TYPOGRAPHY.heading, color: COLORS.textPrimary, marginBottom: SPACING.base },
   empty:          { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center' },
+  feedbackBox:    { backgroundColor: COLORS.surface, borderRadius: 10, padding: SPACING.base, marginBottom: SPACING.base },
+  feedbackLabel:  { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginBottom: 4 },
+  feedbackText:   { ...TYPOGRAPHY.body, color: COLORS.textSecondary, lineHeight: 22 },
   row:            { backgroundColor: COLORS.surface, borderRadius: 10, padding: SPACING.base, marginBottom: SPACING.sm },
   rowHeader:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   lrc:            { ...TYPOGRAPHY.body, color: COLORS.textPrimary, flex: 1 },
@@ -112,4 +127,5 @@ const styles = StyleSheet.create({
   starTextActive: { color: '#ffd54f' },
   time:           { fontSize: 12, color: COLORS.textMuted, marginBottom: 4 },
   score:          { fontSize: 14, fontWeight: '600' },
+  sectionFeedbackText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, lineHeight: 18, marginTop: 6 },
 });

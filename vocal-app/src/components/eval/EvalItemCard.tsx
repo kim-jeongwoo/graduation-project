@@ -18,6 +18,7 @@ interface EvalItemCardProps {
   itemDescription?: string;
   statusText?: string;
   scoreDescription?: string;
+  scoreUnavailableLabel?: string;
   isFocus?: boolean;
   onTrainPress?: () => void;
   trainDisabled?: boolean;
@@ -37,6 +38,7 @@ export default function EvalItemCard({
   itemDescription,
   statusText,
   scoreDescription,
+  scoreUnavailableLabel,
   isFocus = false,
   onTrainPress,
   trainDisabled = false,
@@ -81,7 +83,7 @@ export default function EvalItemCard({
 
       {/* 중단: 게이지 */}
       <View style={styles.gaugeArea}>
-        <ScoreGauge score={score} zone={zone} size="md" />
+        <ScoreGauge score={score} zone={zone} size="md" unavailableLabel={scoreUnavailableLabel} />
       </View>
 
       {/* 하단: 피드백 */}

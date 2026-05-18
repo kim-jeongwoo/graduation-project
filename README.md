@@ -19,12 +19,13 @@
 11. [Batch #1 완료 내용](#batch-1-완료-내용)
 12. [Batch #2 완료 내용](#batch-2-완료-내용)
 13. [Batch #3 완료 내용](#batch-3-완료-내용)
-14. [검증된 내용](#검증된-내용)
-15. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
-16. [Repository 구조](#repository-구조)
-17. [실행 방법](#실행-방법)
-18. [주의 사항](#주의-사항)
-19. [추가 문서](#추가-문서)
+14. [Batch #4 완료 내용](#batch-4-완료-내용)
+15. [검증된 내용](#검증된-내용)
+16. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
+17. [Repository 구조](#repository-구조)
+18. [실행 방법](#실행-방법)
+19. [주의 사항](#주의-사항)
+20. [추가 문서](#추가-문서)
 
 ## 프로젝트 한 줄 요약
 
@@ -83,7 +84,7 @@ EGG는 성대 접촉과 관련된 정보를 제공할 수 있는 신호지만, �
 
 현재 README에는 개인정보, 학생명, 계정명, 정확한 학원명, 대표자명은 포함하지 않는다. 확인되지 않은 정보는 문서에 쓰지 않고, 필요한 경우 추후 승인된 공개 범위 안에서 보강한다.
 
-2026년 5월 14일 이후에는 학원 통제 실험과 production API 기반 Galaxy 검증을 염두에 두고 앱 안정화 Batch #1을 마무리했다. 2026년 5월 18일에는 navigation typing, 진단 로그, SDK warning, 연구개/혀경직도 문구, V2 그래프 색상 매핑을 묶은 Batch #2를 5/5로 완료했고, 이어 History/Favorites/Record UX, Karaoke 실패 cleanup, 401 재로그인 UX, 9항목 설명 문구를 묶은 Batch #3도 5/5로 완료했다.
+2026년 5월 14일 이후에는 학원 통제 실험과 production API 기반 Galaxy 검증을 염두에 두고 앱 안정화 Batch #1을 마무리했다. 2026년 5월 18일에는 navigation typing, 진단 로그, SDK warning, 연구개/혀경직도 문구, V2 그래프 색상 매핑을 묶은 Batch #2를 5/5로 완료했고, 이어 History/Favorites/Record UX, Karaoke 실패 cleanup, 401 재로그인 UX, 9항목 설명 문구를 묶은 Batch #3도 5/5로 완료했다. 2026년 5월 19일에는 평가표 기반 피드백 문구, 구간훈련 피드백 동기화, 평가 기준 보기, 비활성 5항목 UX, Cloudflare dev tunnel 실행 스크립트를 묶은 Batch #4를 5/5로 완료했다.
 
 ## 전체 시스템 구조
 
@@ -226,7 +227,7 @@ sequenceDiagram
 
 ## 현재 개발 단계
 
-현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #3 완료” 단계다.
+현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #4 완료” 단계다.
 
 - production API 기준 앱 진입과 로그인 가능
 - 곡 목록 로드 가능
@@ -301,6 +302,21 @@ Batch #3은 검증 완료 기능 5개 단위로 GitHub에 반영하는 세 번�
 5. History/Favorites/Record 빈 상태 오류 UX 정리
    - Favorites/History/SongHistory/RecordScreen에서 데이터 없음과 API 실패를 구분하고, 다음 행동 또는 다시 불러오기 CTA를 제공.
 
+## Batch #4 완료 내용
+
+Batch #4는 평가표 기반 문구와 구간훈련 피드백 흐름을 맞추고, Cloudflare dev tunnel 기반 실행 방법을 정리한 네 번째 묶음이다.
+
+1. 평가표 기반 피드백 문구 앱 반영 1차
+   - 활성 4항목 결과 카드 문구를 0~1 미달, 2~3 적절, 4~5 과함 방향으로 정리.
+2. 구간훈련 피드백 문구 동기화 최종 점검
+   - SectionList와 TrainingScreen에서 선택 구간 zone 기준 피드백이 이어지도록 보정.
+3. 평가 기준 보기 문구 동기화
+   - 결과 카드의 평가 기준 설명을 활성 4항목 평가표 방향과 맞춤.
+4. 비활성 5항목 카드 UX 최종 점검
+   - 비활성 항목은 참고용/측정 불가로 보이고, 훈련 진입 CTA를 노출하지 않도록 정리.
+5. Cloudflare dev tunnel 실행 스크립트 정리
+   - `npm run start:cf`가 `expo-dev.vocal-fit.com` 기반 Expo dev-client를 8081 포트로 실행하도록 문서와 script를 정리.
+
 ## 검증된 내용
 
 정우 Galaxy 검증 기준:
@@ -333,6 +349,12 @@ Batch #3은 검증 완료 기능 5개 단위로 GitHub에 반영하는 세 번�
 - 로그인/로그아웃/재로그인과 401 auth-expired 구조 반영 확인
 - 9항목 결과 카드 설명/상태 문구 표시 확인
 - 빨간 LogBox 없음 확인
+- 활성 4항목 결과 카드 피드백 문구 확인
+- SectionList / TrainingScreen 구간별 피드백 문구 동기화 확인
+- 평가 기준 보기 문구 방향 확인
+- 비활성 5항목 참고용/측정 불가 UX 확인
+- 비활성 5항목에서 `이 부분 연습하기` 버튼 없음 확인
+- `npm run start:cf` 실행, `expo-dev.vocal-fit.com` Metro URL, `/status` 응답 확인
 
 개발 검증:
 
@@ -389,7 +411,7 @@ graduation-project/
 ```bash
 cd vocal-app
 npm install
-npm run start:tunnel
+npm run start:cf
 ```
 
 주요 scripts:
@@ -400,6 +422,7 @@ npm run start:tunnel
   "start:lan": "expo start --dev-client --lan",
   "start:tunnel": "expo start --dev-client --tunnel",
   "start:tunnel:clear": "expo start --dev-client --tunnel --clear",
+  "start:cf": "./scripts/start-expo-cloudflare.sh",
   "start:go": "expo start",
   "android": "expo start --android --dev-client",
   "ios": "expo start --ios --dev-client",
@@ -424,6 +447,7 @@ npm run start:tunnel
 - `.env`, `.env.*`, 실제 token/JWT/password/API key commit 금지.
 - `node_modules`, `.expo`, `.claude`, `.codex/ACTIVE_PLAN.md`, raw handover docs commit 금지.
 - 개인 LAN IP가 박힌 Expo script commit 금지.
+- Cloudflare token, credential, `/etc/cloudflared/config.yml`, credential json commit 금지. `start:cf`는 Cloudflare service가 이미 설정되어 있다는 전제로만 사용한다.
 - 사용자 녹음 파일, 학생 개인정보, 학원명/대표자명 등 비공개 정보 commit 금지.
 - EGG 장비명, 데이터 수, 모델 구조, 협력 기관 실명은 확인된 공개 범위가 아니면 단정하지 않는다.
 - 앱 피드백은 발성 교육 보조용이며 임상/의료 진단처럼 표현하지 않는다.

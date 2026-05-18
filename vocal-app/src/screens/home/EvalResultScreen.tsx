@@ -184,15 +184,48 @@ const MODE_BUTTONS: { id: string; label: string; active: boolean; v2Only?: boole
 ];
 
 const CONSERVATIVE_FEEDBACK_BY_ZONE: Partial<Record<EvaluationItemKey, Record<Zone, string>>> = {
+  breathiness: {
+    insufficient: '숨소리가 많이 섞이고 발성 밀도가 약한 경향이 보입니다. 소리가 지나치게 새지 않는지 확인해 볼 수 있습니다.',
+    appropriate:  '호흡감과 발성 밀도가 자연스럽게 섞인 상태로 보입니다. 현재의 균형감을 유지하는 데 도움이 될 수 있습니다.',
+    excessive:    '숨소리가 거의 없거나 소리가 지나치게 눌리고 압축된 경향이 보입니다. 소리가 답답하게 모이지 않는지 확인해 볼 수 있습니다.',
+  },
+  vocal_fold_contact: {
+    insufficient: '성대 접촉이 약해 소리가 가볍거나 힘이 덜 실릴 수 있는 경향이 보입니다. 소리의 중심이 안정적으로 모이는지 확인해 볼 수 있습니다.',
+    appropriate:  '성대 접촉이 비교적 안정적이고 소리가 자연스럽게 유지되는 경향이 보입니다. 현재의 접촉감을 이어가는 데 도움이 될 수 있습니다.',
+    excessive:    '성대 접촉이 강하거나 눌린 느낌이 생길 수 있는 경향이 보입니다. 힘이 과하게 모이지 않는지 확인해 볼 수 있습니다.',
+  },
   soft_palate: {
-    insufficient: '입 안쪽 공간이 좁아져 소리가 답답하게 느껴질 수 있는 경향이 보입니다. 하품하듯 입천장 뒤쪽을 살짝 들어 올리는 느낌으로 발성해 보세요.',
-    appropriate:  '입 안쪽 공간과 연구개 위치가 비교적 안정적인 편입니다. 현재 발성 느낌을 자연스럽게 이어가 보세요.',
-    excessive:    '입천장 뒤쪽이나 목 주변에 긴장이 많아지는 경향이 보입니다. 힘을 조금 풀고 소리가 자연스럽게 지나가도록 발성해 보세요.',
+    insufficient: '입 안쪽 공간이 좁아지거나 소리가 답답하게 느껴질 수 있는 경향이 보입니다. 공간이 자연스럽게 열리는 느낌을 확인해 볼 수 있습니다.',
+    appropriate:  '입 안쪽 공간과 연구개 위치가 비교적 안정적인 경향이 보입니다. 현재의 편안한 공명감을 이어가는 데 도움이 될 수 있습니다.',
+    excessive:    '입천장 뒤쪽이나 목 주변에 힘이 과하게 들어갈 수 있는 경향이 보입니다. 과하게 들어 올리려 하기보다 힘을 덜어내는 방향을 확인해 볼 수 있습니다.',
   },
   tongue_tension: {
-    insufficient: '혀의 움직임이 덜 또렷해 발음이 흐려질 수 있는 경향이 보입니다. 혀를 과하게 누르지 말고 필요한 만큼만 선명하게 사용해 보세요.',
-    appropriate:  '혀와 구강 공간의 긴장도가 비교적 안정적인 편입니다. 현재 발음과 발성 느낌을 자연스럽게 이어가 보세요.',
-    excessive:    '혀, 턱, 입 안쪽에 힘이 많이 들어간 경향이 보입니다. 혀끝과 턱의 힘을 조금 풀고 자연스럽게 발성해 보세요.',
+    insufficient: '발음 지지가 약해 소리가 흐리거나 덜 또렷하게 느껴질 수 있는 경향이 보입니다. 필요한 만큼만 또렷하게 사용하는 느낌을 확인해 볼 수 있습니다.',
+    appropriate:  '혀와 구강 공간의 긴장도가 비교적 자연스럽고 발음이 안정적인 경향이 보입니다. 현재의 유연한 발음감을 이어가는 데 도움이 될 수 있습니다.',
+    excessive:    '혀, 턱, 입 안쪽에 힘이 많이 들어가 소리가 뭉개지거나 경직될 수 있는 경향이 보입니다. 혀끝과 턱 주변의 힘을 덜어내는 방향을 확인해 볼 수 있습니다.',
+  },
+};
+
+const SCORE_DESCRIPTION_BY_ZONE: Partial<Record<EvaluationItemKey, Record<Zone, string>>> = {
+  breathiness: {
+    insufficient: '숨소리가 많이 섞이고 발성 밀도가 약한 경향.',
+    appropriate:  '호흡감과 발성 밀도가 자연스럽게 섞인 경향.',
+    excessive:    '숨소리가 거의 없거나 소리가 지나치게 눌리고 압축된 경향.',
+  },
+  vocal_fold_contact: {
+    insufficient: '성대 접촉이 약해 소리가 가볍거나 힘이 덜 실리는 경향.',
+    appropriate:  '성대 접촉이 비교적 안정적인 경향.',
+    excessive:    '접촉이 강하거나 눌린 느낌이 생길 수 있는 경향.',
+  },
+  soft_palate: {
+    insufficient: '입 안쪽 공간이 좁아지거나 답답하게 느껴질 수 있는 경향.',
+    appropriate:  '입 안쪽 공간과 연구개 위치가 비교적 안정적인 경향.',
+    excessive:    '입천장 뒤쪽이나 목 주변에 힘이 과하게 들어갈 수 있는 경향.',
+  },
+  tongue_tension: {
+    insufficient: '발음 지지가 약하거나 소리가 덜 또렷하게 느껴질 수 있는 경향.',
+    appropriate:  '혀와 구강 공간의 긴장도가 비교적 자연스럽고 안정적인 경향.',
+    excessive:    '혀, 턱, 입 안쪽에 힘이 많이 들어간 경향.',
   },
 };
 
@@ -222,8 +255,13 @@ const ITEM_DESCRIPTIONS: Record<EvaluationItemKey, string> = {
 
 const INACTIVE_REFERENCE_TEXT = '현재는 학습/검증 데이터가 더 필요해 참고용으로 표시됩니다. 지금은 점수보다 항목 의미를 이해하는 용도로 참고해 주세요.';
 const UNAVAILABLE_REFERENCE_TEXT = '현재는 측정 불가 항목입니다. 추가 데이터 수집 후 정식 피드백으로 확장할 예정입니다.';
+const INACTIVE_FEEDBACK_TEXT = '지금은 정식 피드백이 아니라 항목 의미를 이해하기 위한 참고 카드입니다.';
+const UNAVAILABLE_FEEDBACK_TEXT = '현재는 정식 점수와 피드백을 제공하지 않는 항목입니다.';
+const INACTIVE_SCORE_DESCRIPTION_TEXT = '현재는 정식 평가 기준을 앱에서 확정하지 않은 참고 항목입니다.\n추가 데이터 수집과 검증 후 점수 방향과 기준 설명을 확정할 예정입니다.';
+const UNAVAILABLE_SCORE_DESCRIPTION_TEXT = '현재는 측정 불가 항목입니다.\n추가 검증 후 정식 점수와 피드백으로 확장할 예정입니다.';
 
 const HIDE_HIGH_STAR_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
+const APP_COPY_PRIORITY_ITEMS = new Set<EvaluationItemKey>(['breathiness', 'vocal_fold_contact', 'soft_palate', 'tongue_tension']);
 const FALLBACK_FEEDBACK_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
 const INVALID_FEEDBACK_TEXTS = new Set(['ai측정불가', '측정불가', 'ai측정불가입니다']);
 
@@ -240,11 +278,27 @@ function getResultCardFeedbackText(
 ): string {
   const text = serverFeedbackText?.trim();
   const fallback = score === null || !zone ? '' : CONSERVATIVE_FEEDBACK_BY_ZONE[key]?.[zone] ?? '';
+  if (APP_COPY_PRIORITY_ITEMS.has(key) && fallback) {
+    return fallback;
+  }
   if (FALLBACK_FEEDBACK_ITEMS.has(key) && fallback && isInvalidFallbackFeedbackText(text)) {
     return fallback;
   }
   if (text) return text;
   return fallback;
+}
+
+function getScoreDescriptionText(
+  key: EvaluationItemKey,
+  serverScoreDescription: string | undefined,
+): string | undefined {
+  const criteria = SCORE_DESCRIPTION_BY_ZONE[key];
+  if (!criteria) return serverScoreDescription;
+  return [
+    `0~1 미달: ${criteria.insufficient}`,
+    `2~3 적절: ${criteria.appropriate}`,
+    `4~5 과함: ${criteria.excessive}`,
+  ].join('\n');
 }
 
 interface TimelineSectionProps {
@@ -603,11 +657,22 @@ export default function EvalResultScreen({ route, navigation }: Props) {
     const confidence: ConfidenceLevel = HIDE_HIGH_STAR_ITEMS.has(key) && isShown && hasV2Score && rawConfidence === 'unavailable'
       ? 'high'
       : rawConfidence;
-    const feedbackText = getResultCardFeedbackText(key, fb?.feedback_text, zone, score);
     const isInactiveCard = !isShown || isAcademicOnly || isDeferred;
+    const isUnavailableInactiveCard = isInactiveCard && (isUnavailable || confidence === 'unavailable');
+    const feedbackText = isInactiveCard
+      ? (isUnavailableInactiveCard ? UNAVAILABLE_FEEDBACK_TEXT : INACTIVE_FEEDBACK_TEXT)
+      : getResultCardFeedbackText(key, fb?.feedback_text, zone, score);
     const statusText = isInactiveCard
       ? (isUnavailable || confidence === 'unavailable' ? UNAVAILABLE_REFERENCE_TEXT : INACTIVE_REFERENCE_TEXT)
       : undefined;
+    const cardScore = isInactiveCard ? null : score;
+    const cardZone = isInactiveCard ? null : zone;
+    const scoreUnavailableLabel = isInactiveCard
+      ? (isUnavailableInactiveCard ? '현재 측정 불가' : '참고용 항목')
+      : undefined;
+    const scoreDescription = isInactiveCard
+      ? (isUnavailableInactiveCard ? UNAVAILABLE_SCORE_DESCRIPTION_TEXT : INACTIVE_SCORE_DESCRIPTION_TEXT)
+      : getScoreDescriptionText(key, fb?.score_description);
     const displayTier = HIDE_HIGH_STAR_ITEMS.has(key) && scoreMeta?.tier === 'high_star'
       ? 'high'
       : scoreMeta?.tier;
@@ -654,15 +719,16 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         key={key}
         itemKey={key}
         nameKo={ITEM_DISPLAY_NAMES[key] ?? nameKo}
-        score={score}
-        zone={zone}
+        score={cardScore}
+        zone={cardZone}
         confidence={confidence}
         feedbackText={feedbackText}
         itemDescription={ITEM_DESCRIPTIONS[key]}
         statusText={statusText}
-        scoreDescription={fb?.score_description}
+        scoreDescription={scoreDescription}
+        scoreUnavailableLabel={scoreUnavailableLabel}
         isFocus={FOCUS_ITEMS_FROM_USER.includes(key)}
-        onTrainPress={onTrainPress}
+        onTrainPress={trainDisabled ? undefined : onTrainPress}
         trainDisabled={trainDisabled}
         tier={displayTier}
         tooltip={scoreMeta?.tooltip}

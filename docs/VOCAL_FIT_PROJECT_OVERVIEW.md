@@ -1,6 +1,6 @@
 # Vocal Fit Project Overview
 
-작성 기준: 2026-05-18
+작성 기준: 2026-05-19
 범위: `graduation-project` monorepo 안의 `vocal-app`, `vocal-server`, `dml-server`
 
 ## 목차
@@ -33,16 +33,16 @@ Vocal Fit은 보컬 연습 녹음, 서버 기반 발성 분석, 피치 비교, �
 
 ### 문서 기준과 출처
 
-이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화 반영 상태를 기준으로 작성했다.
+이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화, 2026-05-19 Batch #4 피드백/Cloudflare dev 실행 정리 반영 상태를 기준으로 작성했다.
 
 | 기준 | 값 |
 |---|---|
 | GitHub repo | `kim-jeongwoo/graduation-project` |
-| 작업 branch | `codex/vocal-app-batch3-2026-05-18` |
+| 작업 branch | `codex/vocal-app-batch4-2026-05-19` |
 | base branch | `main` |
-| base commit | `8407809 Merge pull request #4 from kim-jeongwoo/codex/vocal-app-batch2-2026-05-17` |
+| base commit | `12c2e66 Merge pull request #5 from kim-jeongwoo/codex/vocal-app-batch3-2026-05-18` |
 | 앱 원본 작업 경로 | `/Users/kimjeongwoo/vocal-app` |
-| 포함 범위 | Batch #1 + Batch #2 + Batch #3 검증 완료 앱 source/docs snapshot |
+| 포함 범위 | Batch #1 + Batch #2 + Batch #3 + Batch #4 검증 완료 앱 source/docs snapshot |
 | 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak`, raw handover docs, `.codex/ACTIVE_PLAN.md` |
 
 ## 졸업작품 목표
@@ -310,6 +310,7 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 | 2026-05-14 | Batch #1 5/5 완료: async polling, 구간훈련 window/chunk_meta, production upload UX, song004 pitch-guide closeout, 결과 카드 신뢰도 UI |
 | 2026-05-18 | Batch #2 5/5 완료: navigation typing, 진단 로그 정책, SDK warning triage, 연구개/혀경직도 문구, V2 graph 색상 매핑 |
 | 2026-05-18 | Batch #3 5/5 완료: History/Favorites/Record UX, Karaoke MR cleanup/no_voice retry, 401 재로그인 UX, 9항목 설명 문구, 빈 상태/오류 UX |
+| 2026-05-19 | Batch #4 5/5 완료: 평가표 기반 피드백 문구, 구간훈련 피드백 동기화, 평가 기준 보기, 비활성 5항목 UX, Cloudflare dev tunnel 실행 script |
 
 ## 현재 남은 검증 항목
 
@@ -322,7 +323,7 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 | 노래별 key 자동 조절 및 원키 선택 | 앱/asset | 사용자 음역대와 곡 key 매칭 |
 | 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
 | dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
-| 4/6~5/10 평가표 기준 추가 피드백 정교화 | 앱 UX/평가표 | 실제 평가표 기준 문구 보강 |
+| 대표님 피드백 반영 후 문구 수정 | 앱 UX/평가표 | 최종 피드백 기준 copy 재검토 |
 | expo-av -> expo-audio migration | 앱 코드 정리 | Expo SDK 변화에 맞춰 대체 API 검토 |
 | NativeEventEmitter root cause library replacement or native patch | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
@@ -348,9 +349,11 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 
 2026-05-18 Batch #3 검증에서는 Favorites 목록/빈 상태와 4항목 재진입, History/SongHistory/RecordScreen 목록과 빈 상태, History -> SongHistory -> EvalResult, Favorites -> Training, SectionList -> TrainingScreen, `no_voice` 다시 녹음 retry, 로그인/로그아웃/재로그인, 9항목 결과 카드 설명/상태 문구, 빨간 LogBox 없음이 확인되었다.
 
+2026-05-19 Batch #4 검증에서는 활성 4항목 결과 카드 문구, SectionList / TrainingScreen 구간별 피드백 문구, 사후측정 기능, 평가 기준 보기 문구, 비활성 5항목 참고용/측정 불가 UX, `npm run start:cf`와 `expo-dev.vocal-fit.com` dev tunnel 실행, 빨간 LogBox 없음이 확인되었다.
+
 현재 한계:
 
-- Batch #3 기준 source repo에서 `node_modules/.bin/tsc --noEmit`이 통과한다.
+- Batch #4 기준 source repo에서 `node_modules/.bin/tsc --noEmit`이 통과한다.
 - 이 문서는 서버/DML 최신 runtime을 직접 고정하지 않는다. server contract가 바뀌면 `vocal-server`와 `dml-server` 문서를 함께 확인해야 한다.
 - pitch-guide asset 정렬은 현 단계에서 종료했으며, 여러 곡 수동 정렬 완료 후 재개한다.
 
