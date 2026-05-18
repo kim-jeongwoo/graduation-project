@@ -49,14 +49,12 @@ export class VocalRecorder {
       this.initialized = true;
     }
     AudioRecord.start();
-    if (__DEV__) console.log('[VocalRecorder] recording started');
   }
 
   async stop(): Promise<RecordingResult> {
     this.chunkCallback = null;
     const filePath = await AudioRecord.stop();
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-    if (__DEV__) console.log('[VocalRecorder] stopped, uri:', filePath);
     const uri = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
     return {
       uri,
@@ -75,7 +73,6 @@ export class VocalRecorder {
     try { await AudioRecord.stop(); } catch {}
     this.initialized = false;
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-    if (__DEV__) console.log('[VocalRecorder] cancelled');
   }
 
   get active(): boolean {

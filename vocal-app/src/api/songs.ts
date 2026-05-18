@@ -89,11 +89,6 @@ export async function getSongKaraokeData(
     pitchGuide = await getSongPitchGuide(songId);
   } catch (e) {
     pitchGuideLoadFailed = true;
-    console.warn('[songs] pitch-guide unavailable; continuing with lyrics only', {
-      songId,
-      phase: 'optional-guide',
-      message: e instanceof Error ? e.message : String(e),
-    });
   }
   const baseLyrics = adaptLrc(rawLrc, pitchGuide?.lrcOffsetSec ?? 0);
   const lyrics = applyClientLrcOffset(songId, baseLyrics);
@@ -128,20 +123,7 @@ export async function getSongMidiSegmentsOptional(
 ): Promise<{ segments: Array<{ start: number; end: number; midi: number }>; lrcOffsetSec: number } | null> {
   try {
     return await getSongMidiSegmentsRaw(songId);
-  } catch (e: unknown) {
-    const meta = e as Error & {
-      code?: string;
-      status?: number;
-      apiMeta?: { hasResponse?: boolean; status?: number; code?: string; message?: string };
-    };
-    console.warn('[pitch-guide] optional failed', {
-      screen,
-      songId,
-      code: meta.code ?? meta.apiMeta?.code,
-      hasResponse: meta.apiMeta?.hasResponse,
-      status: meta.status ?? meta.apiMeta?.status,
-      message: meta.message,
-    });
+  } catch {
     return null;
   }
 }

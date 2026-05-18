@@ -20,6 +20,7 @@ import { EVALUATION_ITEMS } from '../../domain/evaluationItems';
 import type { AnalyzeResult, TimelineChunkScore, Zone, ScoreMetaEntry } from '../../types/analyze';
 import type { EvaluationItemKey, ConfidenceLevel } from '../../domain/evaluationItems';
 import { extractWeakSections, type IndicatorAppKey } from '../../domain/weakSections';
+import type { ResultStackParamList } from '../../navigation/types';
 
 type Tab = 'basic' | 'advanced';
 
@@ -27,10 +28,7 @@ type Tab = 'basic' | 'advanced';
 const FOCUS_ITEMS_FROM_USER: EvaluationItemKey[] = [];
 const BASE_ITEMS: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact'];
 
-type Props = NativeStackScreenProps<
-  { EvalResult: { runId?: string; songId?: string } },
-  'EvalResult'
->;
+type Props = NativeStackScreenProps<ResultStackParamList, 'EvalResult'>;
 
 // ─── Timeline constants ───
 const PX_PER_SEC = 60;
@@ -59,6 +57,7 @@ type UserF0 = { frameHz: number; values: (number | null)[] };
 const COLOR_APPROPRIATE = '#59dda5';
 const COLOR_WARNING = '#ffb4ab';
 const COLOR_DATA_MISSING = '#7ecfff';
+const COLOR_EVALUATION_MISSING = '#6b7280';
 const COLOR_LOW_CONFIDENCE = '#9ca3af';
 
 const TIMELINE_MODE_CONFIG = {
@@ -129,6 +128,26 @@ function getTimelineModeForAppKey(key: EvaluationItemKey): TimelineIndicatorMode
   return null;
 }
 
+function getEvaluationColorForTime(
+  tMaster: number,
+  timelineScores: TimelineChunkScore[],
+  config: TimelineModeConfig,
+): string {
+  const chunk = timelineScores.find(c => tMaster >= c.startSec && tMaster <= c.endSec);
+  if (!chunk) return COLOR_EVALUATION_MISSING;
+  if (hasLowConfidence(chunk.lowConfidenceItems, config)) {
+    return COLOR_LOW_CONFIDENCE;
+  }
+
+  const roundedScore = chunk.scores[config.scoreField]?.roundedScore;
+  if (typeof roundedScore !== 'number' || !Number.isInteger(roundedScore) || roundedScore < 0 || roundedScore > 5) {
+    return COLOR_EVALUATION_MISSING;
+  }
+
+  const zone = deriveZoneFromRoundedScore(roundedScore);
+  return zone === 'appropriate' ? COLOR_APPROPRIATE : COLOR_WARNING;
+}
+
 function getMappedScoreMeta(
   record: Partial<Record<EvaluationItemKey, ScoreMetaEntry>> | undefined,
   key: EvaluationItemKey,
@@ -166,18 +185,25 @@ const MODE_BUTTONS: { id: string; label: string; active: boolean; v2Only?: boole
 
 const CONSERVATIVE_FEEDBACK_BY_ZONE: Partial<Record<EvaluationItemKey, Record<Zone, string>>> = {
   soft_palate: {
-    insufficient: '이 구간에서는 입 안쪽 공간이 충분히 열리지 않은 경향이 보입니다. 하품하듯 입천장 뒤쪽을 살짝 들어 올리는 느낌으로 발성해 보세요.',
-    appropriate:  '입 안쪽 공간과 연구개 위치가 안정적인 편입니다. 현재 발성 느낌을 유지해 보세요.',
-    excessive:    '이 구간에서는 입 안쪽 공간에 긴장이 많아 보일 수 있습니다. 목과 입천장 뒤쪽의 힘을 조금 풀고 자연스럽게 발성해 보세요.',
+    insufficient: '입 안쪽 공간이 좁아져 소리가 답답하게 느껴질 수 있는 경향이 보입니다. 하품하듯 입천장 뒤쪽을 살짝 들어 올리는 느낌으로 발성해 보세요.',
+    appropriate:  '입 안쪽 공간과 연구개 위치가 비교적 안정적인 편입니다. 현재 발성 느낌을 자연스럽게 이어가 보세요.',
+    excessive:    '입천장 뒤쪽이나 목 주변에 긴장이 많아지는 경향이 보입니다. 힘을 조금 풀고 소리가 자연스럽게 지나가도록 발성해 보세요.',
   },
   tongue_tension: {
-    insufficient: '이 구간에서는 발음이 흐려질 수 있는 경향이 보입니다. 혀를 과하게 누르지 말고 발음에 필요한 만큼만 또렷하게 사용해 보세요.',
-    appropriate:  '혀와 구강 공간의 긴장도가 안정적인 편입니다. 현재 발음과 발성 느낌을 유지해 보세요.',
-    excessive:    '이 구간에서는 혀나 입 안쪽에 힘이 많이 들어간 경향이 보일 수 있습니다. 혀끝과 턱의 힘을 조금 풀고 자연스럽게 발성해 보세요.',
+    insufficient: '혀의 움직임이 덜 또렷해 발음이 흐려질 수 있는 경향이 보입니다. 혀를 과하게 누르지 말고 필요한 만큼만 선명하게 사용해 보세요.',
+    appropriate:  '혀와 구강 공간의 긴장도가 비교적 안정적인 편입니다. 현재 발음과 발성 느낌을 자연스럽게 이어가 보세요.',
+    excessive:    '혀, 턱, 입 안쪽에 힘이 많이 들어간 경향이 보입니다. 혀끝과 턱의 힘을 조금 풀고 자연스럽게 발성해 보세요.',
   },
 };
 
 const HIDE_HIGH_STAR_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
+const FALLBACK_FEEDBACK_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
+const INVALID_FEEDBACK_TEXTS = new Set(['ai측정불가', '측정불가', 'ai측정불가입니다']);
+
+function isInvalidFallbackFeedbackText(text: string | undefined): boolean {
+  const normalized = text?.trim().toLowerCase().replace(/\s+/g, '').replace(/[.。]+$/g, '');
+  return !normalized || INVALID_FEEDBACK_TEXTS.has(normalized);
+}
 
 function getResultCardFeedbackText(
   key: EvaluationItemKey,
@@ -186,9 +212,12 @@ function getResultCardFeedbackText(
   score: number | null,
 ): string {
   const text = serverFeedbackText?.trim();
+  const fallback = score === null || !zone ? '' : CONSERVATIVE_FEEDBACK_BY_ZONE[key]?.[zone] ?? '';
+  if (FALLBACK_FEEDBACK_ITEMS.has(key) && fallback && isInvalidFallbackFeedbackText(text)) {
+    return fallback;
+  }
   if (text) return text;
-  if (score === null || !zone) return '';
-  return CONSERVATIVE_FEEDBACK_BY_ZONE[key]?.[zone] ?? '';
+  return fallback;
 }
 
 interface TimelineSectionProps {
@@ -203,58 +232,12 @@ interface TimelineSectionProps {
 
 function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrcOffsetSec, guideOffset, guideUnavailable = false }: TimelineSectionProps) {
   const scrollRef = useRef<ScrollView>(null);
-  const auditedModesRef = useRef<Set<VisualizationMode>>(new Set());
 
   useEffect(() => {
     if (!midiSegments.length) return;
     const x = Math.max(0, midiSegments[0].start * PX_PER_SEC - 20);
     scrollRef.current?.scrollTo({ x, animated: false });
   }, [midiSegments]);
-
-  useEffect(() => {
-    if (!__DEV__ || !isTimelineIndicatorMode(activeMode) || auditedModesRef.current.has(activeMode)) return;
-    auditedModesRef.current.add(activeMode);
-    const config = TIMELINE_MODE_CONFIG[activeMode];
-    const distribution = {
-      insufficient: 0,
-      appropriate: 0,
-      excessive: 0,
-      lowConfidence: 0,
-      dataNone: 0,
-    };
-    const sampleScores: Array<{ startSec: number; roundedScore?: number; zone?: Zone; lowConfidence: boolean }> = [];
-    for (const chunk of timelineScores) {
-      const lowConfidence = hasLowConfidence(chunk.lowConfidenceItems, config);
-      if (lowConfidence) distribution.lowConfidence += 1;
-      const entry = chunk.scores[config.scoreField];
-      if (!entry) {
-        distribution.dataNone += 1;
-        continue;
-      }
-      const zone = typeof entry.roundedScore === 'number'
-        ? deriveZoneFromRoundedScore(entry.roundedScore)
-        : entry.zone;
-      if (zone === 'insufficient') distribution.insufficient += 1;
-      else if (zone === 'appropriate') distribution.appropriate += 1;
-      else if (zone === 'excessive') distribution.excessive += 1;
-      else distribution.dataNone += 1;
-      if (sampleScores.length < 5) {
-        sampleScores.push({
-          startSec: chunk.startSec,
-          roundedScore: entry.roundedScore,
-          zone,
-          lowConfidence,
-        });
-      }
-    }
-    console.log('[V2 graph audit]', {
-      mode: activeMode,
-      serverKey: config.serverKey,
-      scoreField: config.scoreField,
-      distribution,
-      sampleScores,
-    });
-  }, [activeMode, timelineScores]);
 
   const midiLastSec   = midiSegments.length ? midiSegments[midiSegments.length - 1].end : 0;
   const f0DurationSec = userF0 ? (userF0.values.length / userF0.frameHz) + lrcOffsetSec : 0;
@@ -285,18 +268,9 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
         return diff < 0.5 ? COLOR_APPROPRIATE : diff < 1.0 ? '#ffb780' : COLOR_WARNING;
       }
       // dml-server v2 timeline_scores 기준: rounded_score가 source of truth, low_confidence 우선.
-      if (!isTimelineIndicatorMode(activeMode)) return COLOR_DATA_MISSING;
+      if (!isTimelineIndicatorMode(activeMode)) return COLOR_EVALUATION_MISSING;
       const config = TIMELINE_MODE_CONFIG[activeMode];
-      const chunk = timelineScores.find(c => tMaster >= c.startSec && tMaster <= c.endSec);
-      if (!chunk) return COLOR_DATA_MISSING;
-      if (hasLowConfidence(chunk.lowConfidenceItems, config)) return COLOR_LOW_CONFIDENCE;
-      const entry = chunk.scores[config.scoreField];
-      if (!entry) return COLOR_DATA_MISSING;
-      const zone = typeof entry.roundedScore === 'number'
-        ? deriveZoneFromRoundedScore(entry.roundedScore)
-        : entry.zone;
-      if (!zone) return COLOR_DATA_MISSING;
-      return zone === 'appropriate' ? COLOR_APPROPRIATE : COLOR_WARNING;
+      return getEvaluationColorForTime(tMaster, timelineScores, config);
     };
 
     const nodes: React.ReactNode[] = [];
@@ -304,7 +278,7 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
 
     const flush = () => {
       if (!d) return;
-      nodes.push(<Path key={key++} d={d} stroke={curColor} strokeWidth={2.5}
+      nodes.push(<Path key={`${activeMode}-${curColor}-${key++}`} d={d} stroke={curColor} strokeWidth={2.5}
         fill="none" strokeLinecap="round" strokeLinejoin="round" />);
       d = '';
     };
@@ -315,7 +289,10 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
       const midi = 12 * Math.log2(freq / 440) + 69;
       if (midi < MIDI_MIN || midi > MIDI_MAX) { flush(); continue; }
 
-      const color = getColor(i, freq);
+      const evaluationColor = isTimelineIndicatorMode(activeMode)
+        ? getEvaluationColorForTime(i / frameHz + lrcOffsetSec, timelineScores, TIMELINE_MODE_CONFIG[activeMode])
+        : null;
+      const color = evaluationColor ?? getColor(i, freq);
       if (color !== curColor && d) flush();
       curColor = color;
 
@@ -408,7 +385,7 @@ const ZONE_LEGEND = [
   { color: COLOR_APPROPRIATE, label: '적절 (2~3)' },
   { color: COLOR_WARNING, label: '미달/과함 (0~1, 4~5)' },
   { color: COLOR_LOW_CONFIDENCE, label: '신뢰도 낮음' },
-  { color: COLOR_DATA_MISSING, label: '데이터 없음' },
+  { color: COLOR_EVALUATION_MISSING, label: '데이터 없음' },
 ];
 const LEGEND_ITEMS: Record<VisualizationMode, Array<{ color: string; label: string }>> = {
   pitch: [
@@ -628,14 +605,14 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         Alert.alert('연습 구간 없음', '이 항목에서 바로 연습할 약점 구간이 없습니다.');
         return;
       }
-      navigation.navigate('SectionList' as never, {
+      navigation.navigate('SectionList', {
         indicatorKey,
         weakSections,
         feedbackText,
         runId,
         songId,
         sessionId: result.session_id,
-      } as never);
+      });
     };
 
     return (

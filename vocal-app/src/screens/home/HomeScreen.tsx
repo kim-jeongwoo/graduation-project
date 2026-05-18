@@ -30,7 +30,6 @@ export default function HomeScreen({ navigation }: Props) {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '곡 목록을 불러올 수 없습니다.';
       setError(msg);
-      console.log('[HomeScreen] getSongs error:', msg);
     } finally {
       setLoading(false);
     }

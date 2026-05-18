@@ -24,41 +24,6 @@ const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 export const API_BASE_MARKER_KEY = 'auth_api_base_url';
 
-if (__DEV__) {
-  console.log('[api boot]', {
-    baseURL: BASE_URL,
-    currentServer: CURRENT_SERVER,
-    hasEnvApiUrl: Boolean(process.env.EXPO_PUBLIC_API_URL),
-  });
-}
-
-function isExpectedTrainingAnalyzeValidationError(error: unknown): boolean {
-  if (!axios.isAxiosError(error)) return false;
-  const detail = error.response?.data?.detail;
-  const detailRecord = detail && typeof detail === 'object'
-    ? detail as Record<string, unknown>
-    : null;
-  const detailError = detailRecord?.error;
-  return error.config?.url?.includes('/training-analyze') === true
-    && error.response?.status === 400
-    && (
-      detailError === 'chunk_too_short'
-      || detailError === 'no_voice'
-      || detailError === 'invalid'
-      || detailError === 'failed'
-      || (typeof detail === 'string' && (detail.includes('최소 3초') || detail.includes('음성')))
-    );
-}
-
-function isExpectedTrainingAnalyzeRecoverableError(error: unknown): boolean {
-  if (!axios.isAxiosError(error)) return false;
-  return isExpectedTrainingAnalyzeValidationError(error)
-    || (
-      error.config?.url?.includes('/training-analyze') === true
-      && (error.response?.status === 504 || error.code === 'ECONNABORTED')
-    );
-}
-
 function apiErrorMeta(error: AxiosError) {
   return {
     method: error.config?.method?.toUpperCase(),
@@ -104,24 +69,13 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor: 저장된 토큰을 Authorization 헤더에 자동 추가 + 디버깅 로그
+// Request interceptor: 저장된 토큰을 Authorization 헤더에 자동 추가
 apiClient.interceptors.request.use(async (config) => {
   const token = await SecureStore.getItemAsync(TOKEN_KEY);
   const path = config.url ?? '';
   const isAuthRequest = path.startsWith('/auth/');
   if (token && !isAuthRequest) {
     config.headers.Authorization = `Bearer ${token}`;
-  }
-  if (__DEV__) {
-    console.log('[api diag]', {
-      method: config.method?.toUpperCase(),
-      path,
-      baseURL: config.baseURL ?? BASE_URL,
-      hasToken: Boolean(token),
-      tokenLength: token?.length ?? 0,
-      hasAuthHeader: Boolean((config.headers as Record<string, unknown>)?.Authorization),
-      timeout: config.timeout,
-    });
   }
   return config;
 });
@@ -130,16 +84,6 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (__DEV__ && axios.isAxiosError(error)) {
-      const payload = apiErrorMeta(error);
-      if (isExpectedTrainingAnalyzeRecoverableError(error)) {
-        console.warn('[API] expected training-analyze error', payload);
-      } else if (error.config?.url?.includes('/pitch-guide')) {
-        console.warn('[api error diag]', payload);
-      } else {
-        console.error('[api error diag]', payload);
-      }
-    }
     if (error.response?.status === 401) {
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       await SecureStore.deleteItemAsync(USER_KEY);

@@ -11,20 +11,9 @@ import {
   zoneColor,
 } from '../../domain/weakSections';
 import { useFavorites } from '../../context/FavoritesContext';
+import type { ResultStackParamList } from '../../navigation/types';
 
-type Props = NativeStackScreenProps<
-  {
-    SectionList: {
-      indicatorKey:   IndicatorAppKey;
-      weakSections:   WeakSection[];
-      feedbackText:   string;
-      runId?:         string;
-      songId?:        string;
-      sessionId?:     string;
-    };
-  },
-  'SectionList'
->;
+type Props = NativeStackScreenProps<ResultStackParamList, 'SectionList'>;
 
 export default function SectionListScreen({ route, navigation }: Props) {
   const { indicatorKey, weakSections, feedbackText, runId, songId, sessionId } = route.params;
@@ -48,7 +37,7 @@ export default function SectionListScreen({ route, navigation }: Props) {
   };
 
   const onSelectSection = (sec: WeakSection) => {
-    navigation.navigate('Training' as never, {
+    navigation.navigate('Training', {
       indicatorKey,
       runId,
       songId,
@@ -60,7 +49,7 @@ export default function SectionListScreen({ route, navigation }: Props) {
       scoreInfo:       { aiScore: sec.aiScore, zone: sec.zone },
       lowConfidenceItems: sec.lowConfidenceItems,
       feedbackText,
-    } as never);
+    });
   };
 
   if (weakSections.length === 0) {

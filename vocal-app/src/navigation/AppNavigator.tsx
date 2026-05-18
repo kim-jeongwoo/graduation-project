@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { useVocalProfile } from '../context/VocalProfileContext';
 import { COLORS } from '../utils/colors';
+import type { HistoryStackParamList, ResultStackParamList } from './types';
 
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
@@ -112,7 +113,7 @@ function HomeStackNavigator() {
 }
 
 // ─── History Stack (히스토리 탭 내부) ───
-const HistoryStack = createNativeStackNavigator();
+const HistoryStack = createNativeStackNavigator<HistoryStackParamList>();
 
 function HistoryStackNavigator() {
   return (
@@ -169,7 +170,7 @@ function HistoryStackNavigator() {
 
 // ─── Result Stack (분석 결과 탭 내부) ───
 // LatestAnalysisScreen이 마운트 시 GET /sessions → 최신 completed run_id 추출 → reset to EvalResult
-const ResultStack = createNativeStackNavigator();
+const ResultStack = createNativeStackNavigator<ResultStackParamList>();
 
 function ResultStackNavigator() {
   return (

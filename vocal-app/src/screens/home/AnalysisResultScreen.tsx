@@ -127,9 +127,7 @@ export default function AnalysisResultScreen({ route }: Props) {
           }
           setFeedback(fbData);
           if (pitchComp) setPitchData(pitchComp);
-        } catch (e: unknown) {
-          console.log('[AnalysisResult] load error:', e);
-        } finally {
+        } catch {} finally {
           if (!cancelled) setLoading(false);
         }
       };

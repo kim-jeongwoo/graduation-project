@@ -2,6 +2,35 @@
 
 이 파일은 `graduation-project` monorepo의 주요 변경 이력을 기록한다.
 
+## 2026-05-18
+
+### Vocal App Stability Batch #2
+
+- navigation typing baseline을 정리하고 source repo 기준 `node_modules/.bin/tsc --noEmit` 통과 상태를 확인했다.
+- API/auth/upload/timing/training/V2 graph 임시 진단 로그를 정리하고 개발 로그 정책을 문서화했다.
+- SDK warning을 triage하고 NativeEventEmitter LogBox 방해를 최소화했다. `expo-av` deprecated warning은 migration backlog로 유지한다.
+- 연구개위치 / 혀경직도 fallback 피드백 문구를 보수적인 발성 교육 보조 톤으로 정교화했다.
+- V2 score distribution과 result graph color mapping을 검증했다. Missing score는 적절로 보정하지 않고, low confidence는 zone 색상보다 우선한다.
+- Settings microphone input test UX는 calibration 완성이 아니라 supporting input test로 정리했다.
+
+### Validation
+
+- production API 기준 앱 진입, 로그인, 곡 목록 로드 확인.
+- song004 KaraokeScreen 진입, MR 재생, 가사 표시, 녹음 확인.
+- full analyze와 결과 화면 이동 정상 확인.
+- 구간훈련 진입과 사후측정 정상 확인.
+- Settings 마이크 입력 테스트 정상 확인.
+- 연구개위치 / 혀경직도 카드 피드백, 노란 별 없음, 측정 불가 뱃지 없음 유지 확인.
+- V2 graph missing/low-confidence 색상 표시 보정 후 임시 audit 로그 제거 완료.
+- source repo 기준 `git diff --check`와 `node_modules/.bin/tsc --noEmit` 통과.
+
+### Notes
+
+- 이 PR은 Batch #2 반영용이며 main merge는 포함하지 않는다.
+- dml-server/vocal-server 변경은 포함하지 않는다.
+- 개인 LAN IP scripts, raw handover docs, `.codex/ACTIVE_PLAN.md`, 실제 env/secrets는 snapshot에서 제외한다.
+- 개인화 calibration, 성별/음역대 기준, 노래별 key 조절은 마지막 단계 backlog로 유지한다.
+
 ## 2026-05-14
 
 ### Vocal App Stability Batch #1

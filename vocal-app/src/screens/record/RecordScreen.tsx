@@ -4,13 +4,15 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { CommonActions } from '@react-navigation/native';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import { getSessions, getSessionDetail, extractRunId } from '../../api/sessions';
 import type { Session } from '../../types/api';
+import type { MainTabParamList, ResultStackParamList } from '../../navigation/types';
 
-type Props = NativeStackScreenProps<Record<string, object | undefined>, string>;
+type Props = NativeStackScreenProps<ResultStackParamList, 'LatestAnalysis'>;
 
 export default function LatestAnalysisScreen({ navigation }: Props) {
   const [loading, setLoading]   = useState(true);
@@ -48,7 +50,6 @@ export default function LatestAnalysisScreen({ navigation }: Props) {
         }),
       );
     } catch (e: any) {
-      console.error('[LatestAnalysis] error:', e);
       setErrorMsg(e?.message ?? '데이터를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
@@ -90,7 +91,7 @@ export default function LatestAnalysisScreen({ navigation }: Props) {
         <Text style={styles.emptySubtitle}>홈 탭에서 첫 곡을 불러보세요!</Text>
         <TouchableOpacity
           style={styles.homeBtn}
-          onPress={() => navigation.getParent()?.navigate('HomeTab' as never, { screen: 'Home' } as never)}
+          onPress={() => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('HomeTab', { screen: 'Home' })}
         >
           <Text style={styles.homeBtnText}>홈 탭으로 이동</Text>
         </TouchableOpacity>

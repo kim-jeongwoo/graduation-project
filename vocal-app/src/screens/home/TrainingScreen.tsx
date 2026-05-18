@@ -20,14 +20,14 @@ const FEEDBACK_BY_ZONE: Record<IndicatorAppKey, Record<Zone, string>> = {
     excessive:    '성대 접촉 강도 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
   },
   soft_palate: {
-    insufficient: '연구개 위치 지표가 낮게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
-    appropriate:  '연구개 위치 지표가 적절 범위로 측정됐습니다.',
-    excessive:    '연구개 위치 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
+    insufficient: '입 안쪽 공간이 좁아져 소리가 답답하게 느껴질 수 있는 경향이 보입니다. 하품하듯 입천장 뒤쪽을 살짝 들어 올리는 느낌으로 발성해 보세요.',
+    appropriate:  '입 안쪽 공간과 연구개 위치가 비교적 안정적인 편입니다. 현재 발성 느낌을 자연스럽게 이어가 보세요.',
+    excessive:    '입천장 뒤쪽이나 목 주변에 긴장이 많아지는 경향이 보입니다. 힘을 조금 풀고 소리가 자연스럽게 지나가도록 발성해 보세요.',
   },
   tongue_tension: {
-    insufficient: '혀/구강 공간 경직도 지표가 낮게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
-    appropriate:  '혀/구강 공간 경직도 지표가 적절 범위로 측정됐습니다.',
-    excessive:    '혀/구강 공간 경직도 지표가 높게 측정됐습니다. 같은 구간을 다시 부르며 변화를 확인해보세요.',
+    insufficient: '혀의 움직임이 덜 또렷해 발음이 흐려질 수 있는 경향이 보입니다. 혀를 과하게 누르지 말고 필요한 만큼만 선명하게 사용해 보세요.',
+    appropriate:  '혀와 구강 공간의 긴장도가 비교적 안정적인 편입니다. 현재 발음과 발성 느낌을 자연스럽게 이어가 보세요.',
+    excessive:    '혀, 턱, 입 안쪽에 힘이 많이 들어간 경향이 보입니다. 혀끝과 턱의 힘을 조금 풀고 자연스럽게 발성해 보세요.',
   },
 };
 
@@ -53,20 +53,6 @@ interface InputFrame {
   at: number;
   voiced: boolean;
   level: number;
-}
-
-interface RecordingFileInfo {
-  exists: boolean;
-  size: number | null;
-  uri: string | null;
-  error?: string;
-}
-
-interface GuideCoverageInfo {
-  coverageSec: number;
-  durationSec: number;
-  coverageRatio: number;
-  segmentCount: number;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -118,52 +104,6 @@ function getRmsLevel(samples: Float32Array): number {
   return Math.sqrt(sum / samples.length);
 }
 
-function getGuideCoverage(
-  segments: MidiSegment[],
-  startSec: number,
-  endSec: number,
-): GuideCoverageInfo {
-  const durationSec = Math.max(0, endSec - startSec);
-  let coverageSec = 0;
-  let segmentCount = 0;
-  for (const segment of segments) {
-    const overlapSec = Math.max(
-      0,
-      Math.min(segment.end, endSec) - Math.max(segment.start, startSec),
-    );
-    if (overlapSec > 0) {
-      coverageSec += overlapSec;
-      segmentCount += 1;
-    }
-  }
-  return {
-    coverageSec,
-    durationSec,
-    coverageRatio: durationSec > 0 ? coverageSec / durationSec : 0,
-    segmentCount,
-  };
-}
-
-async function getRecordingFileInfo(uri: string | null): Promise<RecordingFileInfo> {
-  if (!uri) return { exists: false, size: null, uri: null };
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    return {
-      exists: true,
-      size: blob.size,
-      uri,
-    };
-  } catch (e) {
-    return {
-      exists: false,
-      size: null,
-      uri,
-      error: e instanceof Error ? e.message : String(e),
-    };
-  }
-}
-
 function formatDuration(sec: number): string {
   return sec.toFixed(1);
 }
@@ -193,13 +133,14 @@ function getInputStatus(
   durationSec: number | null,
   recentVoicedFrames: number,
   level: number,
+  levelThreshold = MIC_ANALYSIS_LEVEL_HINT_THRESHOLD,
 ): VoiceInputStatus {
   if (durationSec === null) return 'waiting';
   if (recentVoicedFrames === 0) return durationSec > VOICE_RECENT_MS / 1000 ? 'noVoice' : 'waiting';
   if (
     durationSec >= MIN_TRAINING_ANALYZE_SEC
     && recentVoicedFrames >= MIN_ANALYSIS_VOICED_FRAMES
-    && level >= MIC_ANALYSIS_LEVEL_HINT_THRESHOLD
+    && level >= levelThreshold
   ) {
     return 'ready';
   }
@@ -328,7 +269,6 @@ export default function TrainingScreen({ route }: Props) {
   const trainingChunkEndSec = Math.max(chunkInfo.startSec, chunkInfo.endSec - SECTION_END_TRIM_SEC);
   const recordingStartSec = Math.max(sectionStartSec, trainingChunkStartSec - RECORDING_PRE_ROLL_SEC);
   const recordingEndSec = trainingChunkEndSec;
-  const expectedRecordingDurationSec = Math.max(0, recordingEndSec - recordingStartSec);
 
   const [loading,      setLoading]      = useState(true);
   const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
@@ -397,70 +337,12 @@ export default function TrainingScreen({ route }: Props) {
     return analysisLevelSumRef.current / analysisFrameCountRef.current;
   }, []);
 
-  const getRecentInputLevel = useCallback((): number => {
-    const frames = recentInputFramesRef.current;
-    if (frames.length === 0) return 0;
-    return frames.reduce((sum, frame) => sum + frame.level, 0) / frames.length;
-  }, []);
-
-  useEffect(() => {
-    if (!__DEV__) return;
-    console.log('[Timing audit]', {
-      screen: 'training',
-      phase: 'screen-enter',
-      songId,
-      guideSource: null,
-      guideFromCache: 'unknown',
-      firstGuideStart: null,
-      firstGuideEnd: null,
-      guideDurationSec: null,
-      lrcOffsetSec,
-      firstLrcStart: null,
-      firstLrcEnd: null,
-      sectionStart: sectionStartSec,
-      sectionEnd: sectionEndSec,
-      effectiveSectionStart: sectionStartSec,
-      effectiveSectionEnd: trainingSectionEndSec,
-      chunkStart: chunkInfo.startSec,
-      chunkEnd: chunkInfo.endSec,
-      trainingSectionEnd: trainingSectionEndSec,
-      trainingChunkStart: trainingChunkStartSec,
-      trainingChunkEnd: trainingChunkEndSec,
-      recordingStart: recordingStartSec,
-      recordingEnd: recordingEndSec,
-      mrStart: null,
-      mrEnd: null,
-      playbackStartPosition: null,
-      currentPlaybackPosition: currentTimeRef.current,
-      guidePointCount: null,
-      guideSegmentCount: null,
-    });
-  }, [
-    songId,
-    sectionStartSec,
-    sectionEndSec,
-    trainingSectionEndSec,
-    chunkInfo,
-    trainingChunkStartSec,
-    trainingChunkEndSec,
-    recordingStartSec,
-    recordingEndSec,
-    lrcOffsetSec,
-  ]);
-
   const disposeSound = useCallback(async (sound?: Audio.Sound | null, phase = 'cleanup') => {
     const s = sound ?? soundRef.current;
     if (!s) return;
     try { s.setOnPlaybackStatusUpdate(null); } catch {}
     try { await s.stopAsync(); } catch {}
-    try { await s.unloadAsync(); } catch (e) {
-      if (__DEV__) {
-        console.warn('[Training MR] playback failed', {
-          phase,
-          reason: e instanceof Error ? e.message : String(e),
-        });
-      }
-    }
+    try { await s.unloadAsync(); } catch {}
     if (soundRef.current === s) soundRef.current = null;
   }, []);
 
@@ -496,59 +378,9 @@ export default function TrainingScreen({ route }: Props) {
           midi:     s.midi,
           noteName: '',
         }));
-        const targetGuideCoverage = getGuideCoverage(adjusted, trainingChunkStartSec, trainingChunkEndSec);
-        if (__DEV__ && targetGuideCoverage.segmentCount === 0) {
-          console.warn('[Training guide] no visible guide segments', {
-            songId,
-            sectionStartSec,
-            sectionEndSec,
-            trainingSectionEndSec,
-            trainingChunkStartSec,
-            trainingChunkEndSec,
-            guideCoverageSec: targetGuideCoverage.coverageSec,
-            guideCoverageRatio: targetGuideCoverage.coverageRatio,
-            chunkInfo,
-            lrcOffsetSec: off,
-            guideOffset,
-            rawSegmentCount: segments.length,
-            adjustedSegmentCount: adjusted.length,
-          });
-        }
         setMidiSegments(adjusted);
         setLrcOffsetSec(off);
         setGuideUnavailable(false);
-        if (__DEV__) {
-          console.log('[Timing audit]', {
-            screen: 'training',
-            phase: 'guide-loaded',
-            songId,
-            guideSource: 'midi',
-            guideFromCache: 'unknown',
-            firstGuideStart: segments[0]?.start ?? null,
-            firstGuideEnd: segments[0]?.end ?? null,
-            guideDurationSec: segments.length ? segments[segments.length - 1].end : null,
-            lrcOffsetSec: off,
-            firstLrcStart: null,
-            firstLrcEnd: null,
-            sectionStart: sectionStartSec,
-            sectionEnd: sectionEndSec,
-            effectiveSectionStart: sectionStartSec,
-            effectiveSectionEnd: trainingSectionEndSec,
-            chunkStart: chunkInfo.startSec,
-            chunkEnd: chunkInfo.endSec,
-            trainingSectionEnd: trainingSectionEndSec,
-            trainingChunkStart: trainingChunkStartSec,
-            trainingChunkEnd: trainingChunkEndSec,
-            recordingStart: recordingStartSec,
-            recordingEnd: recordingEndSec,
-            mrStart: Math.max(0, sectionStartSec - off),
-            mrEnd: Math.max(0, trainingSectionEndSec - off),
-            playbackStartPosition: null,
-            currentPlaybackPosition: currentTimeRef.current,
-            guidePointCount: null,
-            guideSegmentCount: segments.length,
-          });
-        }
         setLoading(false);
       } catch (e) {
         console.error('[TrainingScreen] load error:', e);
@@ -620,7 +452,6 @@ export default function TrainingScreen({ route }: Props) {
         resolve(value);
       };
       timeout = setTimeout(() => {
-        if (__DEV__) console.warn('[Training live] ws timeout');
         wsReadyRef.current = false;
         if (wsRef.current === ws) wsRef.current = null;
         try { ws.close(); } catch {}
@@ -644,9 +475,7 @@ export default function TrainingScreen({ route }: Props) {
             sample_rate: 16000,
             start_timestamp: startTimestampSec,
           }));
-        } catch (e) {
-          console.error('[TrainingScreen] meta send error:', e);
-        }
+        } catch {}
         settle(ws);
       };
       ws.onmessage = (ev) => {
@@ -691,23 +520,17 @@ export default function TrainingScreen({ route }: Props) {
             setBreathZone((msg.zone ?? null) as Zone | null);
             setBreathScore(msg.ai_score ?? null);
           }
-        } catch (e) {
-          console.error('[TrainingScreen] ws message parse error:', e);
-        }
+        } catch {}
       };
-      ws.onerror = (e) => {
-        console.error('[TrainingScreen] ws error:', e);
-      };
+      ws.onerror = () => {};
       ws.onclose = () => {
         wsReadyRef.current = false;
         if (wsRef.current === ws) wsRef.current = null;
         if (!resolved) {
           clearConnectTimeout();
           if (!retried) {
-            console.log('[TrainingScreen] ws first connect failed, retrying...');
             openWs(startTimestampSec, true).then(settle);
           } else {
-            if (__DEV__) console.warn('[Training live] ws unavailable');
             settle(null);
           }
         } else if (!stoppedRef.current) {
@@ -722,7 +545,6 @@ export default function TrainingScreen({ route }: Props) {
     if (!songId) return;
     const granted = await requestMicrophonePermission();
     if (!granted) {
-      if (__DEV__) console.warn('[Training live] mic permission denied');
       Alert.alert('마이크 권한 필요', '마이크 권한이 필요합니다. 설정에서 마이크 권한을 허용해 주세요.');
       setStatus('idle');
       setPitchLiveStatus('idle');
@@ -740,76 +562,6 @@ export default function TrainingScreen({ route }: Props) {
     setPitchLiveStatus('idle');
     setVoiceInputStatus('leadIn');
     setMicLevel(0);
-    if (__DEV__) {
-      console.log('[Training live]', {
-        phase: 'start',
-        wsState: 'connecting',
-        hasRecording: recordingStartedRef.current,
-        hasMicPermission: granted,
-        songId,
-        sectionStartSec,
-        sectionEndSec,
-        trainingSectionEndSec,
-        targetChunkStartSec: trainingChunkStartSec,
-        trainingChunkStartSec,
-        trainingChunkEndSec,
-        recordingStartMaster,
-        recordingEndMaster,
-        preRollSec: RECORDING_PRE_ROLL_SEC,
-        mrStart,
-        mrEnd,
-        lrcOffsetSec,
-      });
-      console.log('[Timing audit]', {
-        screen: 'training',
-        phase: 'section-start',
-        songId,
-        guideSource: midiSegments.length ? 'midi' : null,
-        guideFromCache: 'unknown',
-        firstGuideStart: midiSegments[0] ? midiSegments[0].start + lrcOffsetSec : null,
-        firstGuideEnd: midiSegments[0] ? midiSegments[0].end + lrcOffsetSec : null,
-        guideDurationSec: midiSegments.length ? midiSegments[midiSegments.length - 1].end + lrcOffsetSec : null,
-        lrcOffsetSec,
-        firstLrcStart: null,
-        firstLrcEnd: null,
-        sectionStart: sectionStartSec,
-        sectionEnd: sectionEndSec,
-        effectiveSectionStart: sectionStartSec,
-        effectiveSectionEnd: trainingSectionEndSec,
-        chunkStart: chunkInfo.startSec,
-        chunkEnd: chunkInfo.endSec,
-        trainingSectionEnd: trainingSectionEndSec,
-        trainingChunkStart: trainingChunkStartSec,
-        trainingChunkEnd: trainingChunkEndSec,
-        recordingStart: recordingStartSec,
-        recordingEnd: recordingEndSec,
-        mrStart,
-        mrEnd,
-        playbackStartPosition: mrStart,
-        currentPlaybackPosition: currentTimeRef.current - lrcOffsetSec,
-        guidePointCount: null,
-        guideSegmentCount: midiSegments.length,
-      });
-      console.log('[Render timing audit]', {
-        screen: 'training',
-        mrCurrentTime: currentTimeRef.current,
-        activeLrcStart: null,
-        activeLrcEnd: null,
-        nearestGuideStart: midiSegments.find((s) => s.end >= currentTimeRef.current)?.start ?? null,
-        nearestGuideEnd: midiSegments.find((s) => s.end >= currentTimeRef.current)?.end ?? null,
-        markerStart: chunkInfo.startSec,
-        markerEnd: trainingChunkEndSec,
-        sectionStart: sectionStartSec,
-        sectionEnd: sectionEndSec,
-        chunkStart: chunkInfo.startSec,
-        chunkEnd: chunkInfo.endSec,
-        trainingChunkStart: trainingChunkStartSec,
-        trainingChunkEnd: trainingChunkEndSec,
-        chartWindowStart: sectionStartSec,
-        chartWindowEnd: trainingSectionEndSec,
-        appliedOffsetSec: SONG_GUIDE_OFFSETS[songId] ?? 0,
-      });
-    }
     try {
       await disposeSound(undefined, 'start-replace');
       if (stoppedRef.current || attemptIdRef.current !== attemptId) return;
@@ -834,18 +586,6 @@ export default function TrainingScreen({ route }: Props) {
             setVoiceInputStatus(getInputStatus(durationSec, 0, 0));
             setVoicedFrameCount(voicedFrameCountRef.current);
             setAnalysisInputLevel(analysisLevel);
-            if (__DEV__) {
-              console.log('[Training live]', {
-                phase: 'recording-stop',
-                reason: phase,
-                durationSec,
-                targetChunkStartSec: trainingChunkStartSec,
-                recordingStartSec,
-                recordingEndSec,
-                chunkEndSec: recordingEndSec,
-                preRollSec: RECORDING_PRE_ROLL_SEC,
-              });
-            }
           } else {
             try { await recorderRef.current.cancel(); } catch {}
             recordingStartedRef.current = false;
@@ -936,9 +676,7 @@ export default function TrainingScreen({ route }: Props) {
                   const v = Math.round(chunk[i] * 32768);
                   int16[i] = v < -32768 ? -32768 : v > 32767 ? 32767 : v;
                 }
-                try { wsRef.current.send(int16.buffer); } catch (e) {
-                  console.error('[TrainingScreen] ws send error:', e);
-                }
+                try { wsRef.current.send(int16.buffer); } catch {}
               }
             }
           });
@@ -955,16 +693,6 @@ export default function TrainingScreen({ route }: Props) {
           lastVoiceAtRef.current = null;
           setRecordedDurationSec(0);
           setStatus('recording');
-          if (__DEV__) {
-            console.log('[Training live]', {
-              phase: 'recording-start',
-              targetChunkStartSec: trainingChunkStartSec,
-              recordingStartSec,
-              recordingEndSec,
-              preRollSec: RECORDING_PRE_ROLL_SEC,
-              currentTime: currentTimeRef.current,
-            });
-          }
         } catch (e) {
           recordingStartPendingRef.current = false;
           console.error('[TrainingScreen] recorder.start error:', e);
@@ -1014,12 +742,6 @@ export default function TrainingScreen({ route }: Props) {
       }
     } catch (e) {
       console.error('[TrainingScreen] startMrAndRecord error:', e);
-      if (__DEV__) {
-        console.warn('[Training MR] playback failed', {
-          phase: 'start',
-          reason: e instanceof Error ? e.message : String(e),
-        });
-      }
       Alert.alert('훈련 시작 실패', '반주 또는 녹음을 시작할 수 없습니다. 마이크 상태를 확인해 주세요.');
       stoppedRef.current = true;
       try { await recorderRef.current.cancel(); } catch {}
@@ -1066,119 +788,23 @@ export default function TrainingScreen({ route }: Props) {
       end_sec: recordingEndSec,
       original_run_id: runId,
     };
-    const recordingFileInfo = await getRecordingFileInfo(recordedUri);
-    const recorderDurationSec = recordedDurationSec;
-    const avgInputLevel = getAnalysisInputLevel();
-    const recentInputLevel = getRecentInputLevel();
-    const totalInputFrames = analysisFrameCountRef.current;
-    const localVoicedFrameCount = voicedFrameCountRef.current;
-    const voicedRatio = totalInputFrames > 0 ? localVoicedFrameCount / totalInputFrames : 0;
-    if (__DEV__) {
-      console.log('[Training analyze] request', {
-        songId,
-        indicatorKey,
-        recordedUriPresent: Boolean(recordedUri),
-        recordingFileInfo,
-        localDurationSec: recordedDurationSec,
-        recorderDurationSec,
-        expectedRecordingDurationSec,
-        targetChunkStartSec: trainingChunkStartSec,
-        recordingStartSec,
-        recordingEndSec,
-        preRollSec: RECORDING_PRE_ROLL_SEC,
-        chunkMeta,
-        routeSection: {
-          sectionStartSec,
-          sectionEndSec,
-          chunkStartSec: chunkInfo.startSec,
-          chunkEndSec: chunkInfo.endSec,
-          trainingSectionEndSec,
-          trainingChunkStartSec,
-          trainingChunkEndSec,
-        },
-        inputMetrics: {
-          analysisInputLevel,
-          micLevel,
-          avgInputLevel,
-          maxInputLevel: maxInputLevelRef.current,
-          recentInputLevel,
-          voicedFrameCount: localVoicedFrameCount,
-          voicedRatio,
-          totalInputFrames,
-        },
-        timingBasis: {
-          chunkMetaBasis: 'song_time_seconds',
-          recordingBasis: 'attempt_audio_elapsed_seconds',
-        },
-      });
-    }
     try {
       const res = await trainingAnalyze(sessionId, recordedUri, chunkMeta);
       const bodyStatus = normalizeTrainingAnalyzeStatus(res);
       const responseReason = getTrainingAnalyzeReason(res);
-      if (__DEV__) {
-        console.log('[Training analyze] response', {
-          bodyStatus,
-          httpOk: true,
-          reason: responseReason,
-          detail: res.detail,
-          message: res.message,
-          error: res.error,
-          durationSec: res.duration_sec,
-          localDurationSec: recordedDurationSec,
-          processingTimeMs: res.processing_time_ms,
-          hasScores: !!res.scores,
-          hasScoresV2: !!res.scores_v2,
-          hasScoresMeta: !!res.scores_meta,
-          returnedChunkMeta: res.chunk_meta,
-          lowConfidenceCount: res.low_confidence_items?.length ?? 0,
-        });
-      }
       if (bodyStatus === 'no_voice') {
-        if (__DEV__) {
-          console.warn('[Training analyze] failed without result', {
-            status: bodyStatus,
-            error: 'no_voice',
-            reason: responseReason,
-            hasScores: !!res.scores,
-            hasScoresV2: !!res.scores_v2,
-            durationSec: res.duration_sec,
-            localDurationSec: recordedDurationSec,
-            voicedFrameCount,
-            analysisInputLevel,
-            micLevel,
-          });
-        }
         setVoiceInputStatus('noVoice');
         Alert.alert('음성 미감지', getNoVoiceMessage(responseReason));
         setStatus('stopped');
         return;
       }
       if (bodyStatus === 'invalid') {
-        if (__DEV__) {
-          console.warn('[Training analyze] failed without result', {
-            status: bodyStatus,
-            error: 'invalid',
-            reason: responseReason,
-            hasScores: !!res.scores,
-            hasScoresV2: !!res.scores_v2,
-          });
-        }
         setVoiceInputStatus('weak');
         Alert.alert('입력 확인', getInputFailureMessage(responseReason ?? '분석할 수 없는 입력입니다.'));
         setStatus('stopped');
         return;
       }
       if (bodyStatus !== 'success') {
-        if (__DEV__) {
-          console.warn('[Training analyze] failed without result', {
-            status: bodyStatus,
-            error: bodyStatus,
-            reason: responseReason,
-            hasScores: !!res.scores,
-            hasScoresV2: !!res.scores_v2,
-          });
-        }
         setVoiceInputStatus('weak');
         Alert.alert('분석 실패', getInputFailureMessage(responseReason ?? '분석에 실패했습니다.'));
         setStatus('stopped');
@@ -1186,17 +812,6 @@ export default function TrainingScreen({ route }: Props) {
       }
       const after = getTrainingAnalyzeScore(res, indicatorKey, serverIndicatorKey);
       if (!after) {
-        if (__DEV__) {
-          console.warn('[Training analyze] failed without result', {
-            status: res.status,
-            error: 'scores_missing',
-            reason: responseReason,
-            hasScores: !!res.scores,
-            hasScoresV2: !!res.scores_v2,
-            hasScoresMeta: !!res.scores_meta,
-            bodyStatus,
-          });
-        }
         setVoiceInputStatus('weak');
         Alert.alert('분석 결과 없음', getInputFailureMessage('진입 항목 점수가 응답에 없습니다.'));
         setStatus('stopped');
@@ -1212,12 +827,6 @@ export default function TrainingScreen({ route }: Props) {
       const serverDurationSec = getNumberDetail(detail, 'duration_sec') ?? recordedDurationSec;
       const minRequiredSec = getNumberDetail(detail, 'min_required_sec') ?? MIN_TRAINING_ANALYZE_SEC;
       if (code === 400 && (detailError === 'chunk_too_short' || detailReason?.includes('최소 3초'))) {
-        if (__DEV__) {
-          console.warn('[Training analyze] chunk too short', {
-            durationSec: serverDurationSec,
-            minRequiredSec,
-          });
-        }
         setVoiceInputStatus('weak');
         Alert.alert('녹음 너무 짧음', detailReason ?? getTooShortMessage(serverDurationSec, minRequiredSec));
       } else if (code === 401) {
@@ -1228,24 +837,12 @@ export default function TrainingScreen({ route }: Props) {
         Alert.alert('세션 없음', '세션이 만료되었습니다.');
       } else if (code === 504) {
         setVoiceInputStatus('weak');
-        console.warn('[Training analyze] expected timeout', {
-          status: code,
-          reason: detailReason ?? message,
-        });
         Alert.alert('사후 측정 지연', '사후 측정 분석 응답이 지연되었습니다. 잠시 후 다시 시도해주세요.');
       } else if (code) {
         setVoiceInputStatus('weak');
         Alert.alert('분석 실패', getInputFailureMessage(detailReason ?? message ?? '분석에 실패했습니다.'));
-        console.warn('[Training analyze] failed without result', {
-          status: code,
-          error: detailError ?? 'http_error',
-          reason: detailReason ?? message,
-          hasScores: false,
-          hasScoresV2: false,
-        });
       } else {
         Alert.alert('네트워크 오류', '네트워크를 확인하고 다시 시도해주세요.');
-        console.error('[TrainingScreen] trainingAnalyze error:', e);
       }
       setStatus('stopped');
     }
@@ -1253,16 +850,12 @@ export default function TrainingScreen({ route }: Props) {
     sessionId,
     recordedUri,
     recordedDurationSec,
-    voicedFrameCount,
-    analysisInputLevel,
-    micLevel,
     chunkIndex,
     chunkInfo,
     trainingChunkEndSec,
     trainingSectionEndSec,
     recordingStartSec,
     recordingEndSec,
-    expectedRecordingDurationSec,
     runId,
     songId,
     indicatorKey,
@@ -1270,8 +863,6 @@ export default function TrainingScreen({ route }: Props) {
     sectionStartSec,
     sectionEndSec,
     trainingChunkStartSec,
-    getAnalysisInputLevel,
-    getRecentInputLevel,
     status,
   ]);
 
@@ -1282,12 +873,6 @@ export default function TrainingScreen({ route }: Props) {
       return;
     }
     if (recordedDurationSec !== null && recordedDurationSec < MIN_TRAINING_ANALYZE_SEC) {
-      if (__DEV__) {
-        console.warn('[Training analyze] chunk too short', {
-          durationSec: recordedDurationSec,
-          minRequiredSec: MIN_TRAINING_ANALYZE_SEC,
-        });
-      }
       setVoiceInputStatus('weak');
       Alert.alert('녹음 너무 짧음', getTooShortMessage(recordedDurationSec));
       return;
@@ -1297,16 +882,6 @@ export default function TrainingScreen({ route }: Props) {
       && voicedFrameCount >= MIN_ANALYSIS_VOICED_FRAMES
       && analysisInputLevel >= MIC_ANALYSIS_LEVEL_HINT_THRESHOLD;
     if (!analysisReady) {
-      if (__DEV__) {
-        console.log('[Training input]', {
-          voiceDetected: voicedFrameCount > 0,
-          analysisReady,
-          durationSec: recordedDurationSec,
-          pitch: pitchMatchScore,
-          matchScore: pitchMatchScore,
-          liveInputLevel: analysisInputLevel,
-        });
-      }
       if (voicedFrameCount === 0) {
         setVoiceInputStatus('noVoice');
         Alert.alert(
@@ -1422,7 +997,6 @@ export default function TrainingScreen({ route }: Props) {
     try {
       const granted = await requestMicrophonePermission();
       if (!granted) {
-        if (__DEV__) console.warn('[Training live] mic permission denied');
         Alert.alert('마이크 권한 필요', '마이크 권한이 필요합니다. 설정에서 마이크 권한을 허용해 주세요.');
         setPitchLiveStatus('idle');
         startingRef.current = false;
@@ -1461,7 +1035,11 @@ export default function TrainingScreen({ route }: Props) {
         setRecordedDurationSec(durationSec);
         setRecordedUri(result.uri);
         const analysisLevel = getAnalysisInputLevel();
-        setVoiceInputStatus(getInputStatus(durationSec, 0, 0));
+        setVoiceInputStatus(getInputStatus(
+          durationSec,
+          0,
+          0,
+        ));
         setVoicedFrameCount(voicedFrameCountRef.current);
         setAnalysisInputLevel(analysisLevel);
       } catch (e) {
