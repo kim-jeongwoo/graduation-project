@@ -13,8 +13,9 @@ import { getSessions } from '../../api/sessions';
 import { formatDate } from '../../utils/labels';
 import type { Session } from '../../types/api';
 import { COLORS } from '../../utils/colors';
+import type { HistoryStackParamList } from '../../navigation/types';
 
-type Props = NativeStackScreenProps<Record<string, object | undefined>, string>;
+type Props = NativeStackScreenProps<HistoryStackParamList, 'HistoryList'>;
 
 // 곡 제목/아티스트/ID fallback (서버 응답 nested song 우선)
 const getSongTitle  = (s: Session) => s.song?.title  ?? s.song_title ?? null;
@@ -40,9 +41,7 @@ export default function HistoryScreen({ navigation }: Props) {
     try {
       const data = await getSessions();
       setSessions(data);
-    } catch (e: unknown) {
-      console.log('[HistoryScreen] error:', e);
-    } finally {
+    } catch {} finally {
       setLoading(false);
       setRefreshing(false);
     }
@@ -87,12 +86,12 @@ export default function HistoryScreen({ navigation }: Props) {
   }, [sessions]);
 
   const handleFolderPress = (folder: SongFolder) => {
-    navigation.navigate('SongHistory' as never, {
+    navigation.navigate('SongHistory', {
       songId:     folder.songId,
       songTitle:  folder.songTitle,
       songArtist: folder.songArtist,
       sessions:   folder.sessions,
-    } as never);
+    });
   };
 
   const renderItem = ({ item }: { item: SongFolder }) => {
@@ -126,7 +125,7 @@ export default function HistoryScreen({ navigation }: Props) {
         <Text style={styles.headerTitle}>📊 히스토리</Text>
         <TouchableOpacity
           style={styles.favBtn}
-          onPress={() => navigation.navigate('Favorites' as never)}
+          onPress={() => navigation.navigate('Favorites')}
         >
           <Text style={styles.favBtnText}>⭐ 즐겨찾기</Text>
         </TouchableOpacity>

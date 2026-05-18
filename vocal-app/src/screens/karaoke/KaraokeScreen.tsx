@@ -16,7 +16,6 @@ import { useAuth } from '../../context/AuthContext';
 import { getSongKaraokeData, getSongKaraokeLyricsOnly, getSongMrUrl } from '../../api/songs';
 import {
   AnalyzeStatusError,
-  SESSION_FILE_UPLOAD_TIMEOUT_MS,
   createSession,
   uploadSessionFile,
   startAnalysis,
@@ -64,52 +63,6 @@ type Props = NativeStackScreenProps<AppRootParams, 'Karaoke'>;
 
 // ─── Analyze step labels ───
 const ANALYZE_STEPS = ['녹음 업로드 중...', '분석 요청 접수 중...', 'AI 분석 중...', '결과 정리 중...'];
-
-interface UploadFileInfo {
-  exists: boolean;
-  size: number | null;
-  uri: string | null;
-  error?: string;
-}
-
-async function getUploadFileInfo(uri: string | null): Promise<UploadFileInfo> {
-  if (!uri) return { exists: false, size: null, uri: null };
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    return { exists: true, size: blob.size, uri };
-  } catch (e) {
-    return {
-      exists: false,
-      size: null,
-      uri,
-      error: e instanceof Error ? e.message : String(e),
-    };
-  }
-}
-
-function getUploadErrorMeta(error: unknown) {
-  const err = error as Error & {
-    code?: string;
-    status?: number;
-    apiMeta?: {
-      code?: string;
-      status?: number;
-      hasResponse?: boolean;
-      hasRequest?: boolean;
-      message?: string;
-      timeout?: number;
-    };
-  };
-  return {
-    code: err.code ?? err.apiMeta?.code,
-    hasResponse: err.apiMeta?.hasResponse,
-    hasRequest: err.apiMeta?.hasRequest,
-    status: err.status ?? err.apiMeta?.status,
-    timeout: err.apiMeta?.timeout,
-    message: error instanceof Error ? error.message : String(error),
-  };
-}
 
 // ─── Pitch graph component ───
 interface PitchGraphProps {
@@ -273,7 +226,6 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   const soundRef       = useRef<Audio.Sound | null>(null);
   const recorderRef    = useRef(new VocalRecorder());
   const currentTimeRef = useRef(0);
-  const timingAlignLoggedRef = useRef(false);
 
   // ─── Permission check + data load ───
   useEffect(() => {
@@ -294,37 +246,6 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       try {
         const lrc = await getSongKaraokeLyricsOnly(songId);
         if (cancelled) return;
-        if (__DEV__) {
-          console.log('[Timing audit]', {
-            screen: 'karaoke',
-            phase: 'lyrics-loaded',
-            songId,
-            guideSource: null,
-            guideFromCache: 'unknown',
-            firstGuideStart: null,
-            firstGuideEnd: null,
-            guideDurationSec: null,
-            lrcOffsetSec: null,
-            lyricCount: lrc.length,
-            firstLrcStart: lrc[0]?.timeStart ?? null,
-            firstLrcEnd: lrc[0]?.timeEnd ?? null,
-            sectionStart: null,
-            sectionEnd: null,
-            effectiveSectionStart: null,
-            effectiveSectionEnd: null,
-            chunkStart: null,
-            chunkEnd: null,
-            trainingSectionEnd: null,
-            trainingChunkEnd: null,
-            mrStart: 0,
-            mrEnd: mrDurationSec ?? null,
-            playbackStartPosition: null,
-            currentPlaybackPosition: currentTimeRef.current,
-            guidePointCount: null,
-            guideSegmentCount: null,
-            mrDurationSec,
-          });
-        }
         setLyrics(lrc);
         setPitchGuide(null);
         setPitchGuideStatus('loading');
@@ -336,38 +257,6 @@ export default function KaraokeScreen({ navigation, route }: Props) {
           .then(({ lyrics: guideAdjustedLrc, pitchGuide: guide, pitchGuideLoadFailed }) => {
             if (cancelled) return;
             if (guide) {
-              console.log('[KaraokeScreen] pitchGuide.points:', guide.points.length, 'voiced:', guide.points.filter(p => p.voiced).length);
-              if (__DEV__) {
-                const firstMidiSegment = guide.midiSegments[0] ?? null;
-                console.log('[Timing audit]', {
-                  screen: 'karaoke',
-                  phase: 'guide-loaded',
-                  songId,
-                  lrcOffsetSec: guide.lrcOffsetSec,
-                  guideSource: guide.guideSource,
-                  guideFromCache: 'unknown',
-                  firstGuideStart: firstMidiSegment ? firstMidiSegment.start + guide.lrcOffsetSec : null,
-                  firstGuideEnd: firstMidiSegment ? firstMidiSegment.end + guide.lrcOffsetSec : null,
-                  guideDurationSec: guide.durationSec,
-                  firstLrcStart: guideAdjustedLrc[0]?.timeStart ?? null,
-                  firstLrcEnd: guideAdjustedLrc[0]?.timeEnd ?? null,
-                  sectionStart: null,
-                  sectionEnd: null,
-                  effectiveSectionStart: null,
-                  effectiveSectionEnd: null,
-                  chunkStart: null,
-                  chunkEnd: null,
-                  trainingSectionEnd: null,
-                  trainingChunkEnd: null,
-                  mrStart: 0,
-                  mrEnd: mrDurationSec ?? guide.durationSec,
-                  playbackStartPosition: null,
-                  currentPlaybackPosition: currentTimeRef.current,
-                  guidePointCount: guide.points.length,
-                  guideSegmentCount: guide.midiSegments.length,
-                  mrDurationSec,
-                });
-              }
               setLyrics(guideAdjustedLrc);
               setPitchGuide(guide);
               setPitchGuideStatus('success');
@@ -375,13 +264,11 @@ export default function KaraokeScreen({ navigation, route }: Props) {
               return;
             }
             if (pitchGuideLoadFailed) {
-              console.warn('[KaraokeScreen] pitch-guide unavailable; continuing without realtime guide');
               setPitchGuideStatus('failed');
             }
           })
-          .catch((e) => {
+          .catch(() => {
             if (cancelled) return;
-            console.warn('[KaraokeScreen] pitch-guide background load error:', e);
             setPitchGuideStatus('failed');
           });
       } catch (e) {
@@ -442,40 +329,6 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       );
       // ③ position 0에서 명시적 재생 시작
       await sound.playFromPositionAsync(0);
-      if (__DEV__) {
-        console.log('[Timing audit]', {
-          screen: 'karaoke',
-          phase: 'mr-start',
-          songId,
-          guideSource: pitchGuide?.guideSource ?? null,
-          guideFromCache: 'unknown',
-          firstGuideStart: pitchGuide?.midiSegments[0]
-            ? pitchGuide.midiSegments[0].start + pitchGuide.lrcOffsetSec
-            : null,
-          firstGuideEnd: pitchGuide?.midiSegments[0]
-            ? pitchGuide.midiSegments[0].end + pitchGuide.lrcOffsetSec
-            : null,
-          guideDurationSec: pitchGuide?.durationSec ?? null,
-          lrcOffsetSec: pitchGuide?.lrcOffsetSec ?? null,
-          firstLrcStart: lyrics[0]?.timeStart ?? null,
-          firstLrcEnd: lyrics[0]?.timeEnd ?? null,
-          sectionStart: null,
-          sectionEnd: null,
-          effectiveSectionStart: null,
-          effectiveSectionEnd: null,
-          chunkStart: null,
-          chunkEnd: null,
-          trainingSectionEnd: null,
-          trainingChunkEnd: null,
-          mrStart: 0,
-          mrEnd: mrDurationSec ?? pitchGuide?.durationSec ?? null,
-          playbackStartPosition: 0,
-          currentPlaybackPosition: currentTimeRef.current,
-          guidePointCount: pitchGuide?.points.length ?? null,
-          guideSegmentCount: pitchGuide?.midiSegments.length ?? null,
-          mrDurationSec,
-        });
-      }
       soundRef.current = sound;
     } catch (e) {
       console.error('[KaraokeScreen] startMrAndRecord error:', e);
@@ -538,44 +391,14 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     try {
       // Stop recording
       const { uri, fileName, mimeType } = await recorderRef.current.stop();
-      console.log('[KaraokeScreen] recording uri:', uri, 'type:', mimeType);
 
       // Step 0: upload
       setAnalyzeStep(0);
-      if (__DEV__) console.log('[handleStop] createSession...');
       const session = await createSession({ song_id: songId });
-      if (__DEV__) console.log('[handleStop] session:', session.session_id);
 
-      const uploadFileInfo = await getUploadFileInfo(uri);
-      const uploadStartedAt = Date.now();
-      if (__DEV__) {
-        console.log('[Upload diag] request', {
-          sessionId: session.session_id,
-          uri,
-          fileName,
-          mimeType,
-          fileInfo: uploadFileInfo,
-          timeout: SESSION_FILE_UPLOAD_TIMEOUT_MS,
-          startedAt: new Date(uploadStartedAt).toISOString(),
-        });
-      }
       try {
         await uploadSessionFile(session.session_id, uri, fileName, mimeType);
-        if (__DEV__) {
-          console.log('[Upload diag] success', {
-            sessionId: session.session_id,
-            elapsedMs: Date.now() - uploadStartedAt,
-            fileSize: uploadFileInfo.size,
-          });
-        }
-      } catch (uploadError) {
-        const meta = getUploadErrorMeta(uploadError);
-        console.warn('[Upload diag] failed', {
-          sessionId: session.session_id,
-          elapsedMs: Date.now() - uploadStartedAt,
-          fileSize: uploadFileInfo.size,
-          ...meta,
-        });
+      } catch {
         Alert.alert(
           '녹음 파일 업로드 실패',
           '녹음 파일 업로드에 실패했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
@@ -585,9 +408,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
 
       // Step 1: request server-side async analysis
       setAnalyzeStep(1);
-      if (__DEV__) console.log('[handleStop] startAnalysis...');
       const { run_id, status, reason } = await startAnalysis(session.session_id);
-      if (__DEV__) console.log('[handleStop] analyze result:', { run_id, status, reason });
 
       if (status === 'no_voice') {
         Alert.alert(
@@ -658,13 +479,6 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         );
         return;
       }
-      if (err instanceof AnalyzeStatusError && __DEV__) {
-        console.warn('[KaraokeScreen] analyze status failure:', {
-          status: err.status,
-          reason: err.reason,
-          detail: err.detail,
-        });
-      }
       const msg = err instanceof Error ? err.message : '다시 시도해주세요.';
       Alert.alert('분석 실패', msg, [
         { text: '다시 시도', onPress: handleStop },
@@ -715,47 +529,6 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         })),
     [pitchGuide, guideOffset],
   );
-
-  useEffect(() => {
-    if (!__DEV__ || !pitchGuide || timingAlignLoggedRef.current || currentTime < 1) return;
-    timingAlignLoggedRef.current = true;
-    const activeLrc = lyrics.find((l) => l.timeStart <= currentTime && currentTime < l.timeEnd) ?? null;
-    const nearestGuide = adjustedMidiSegments.find((s) => s.end >= currentTime) ?? null;
-    const rawGuide = pitchGuide.midiSegments.find((s) => s.end + guideOffset >= currentTime) ?? null;
-    console.log('[Render timing audit]', {
-      screen: 'karaoke',
-      songId,
-      mrCurrentTime: currentTime,
-      activeLrcStart: activeLrc?.timeStart ?? null,
-      activeLrcEnd: activeLrc?.timeEnd ?? null,
-      nearestGuideStart: nearestGuide?.start ?? null,
-      nearestGuideEnd: nearestGuide?.end ?? null,
-      nearestGuideMidi: nearestGuide?.midi ?? null,
-      guideTimeRaw: rawGuide?.start ?? null,
-      guideTimeRendered: nearestGuide?.start ?? null,
-      markerStart: null,
-      markerEnd: null,
-      sectionStart: null,
-      sectionEnd: null,
-      chunkStart: null,
-      chunkEnd: null,
-      trainingChunkStart: null,
-      trainingChunkEnd: null,
-      appliedOffsetSec: guideOffset,
-      appliedGuideOffsetSec: guideOffset,
-      firstGuideStart: pitchGuide.midiSegments[0]?.start ?? null,
-      firstLrcStart: lyrics[0]?.timeStart ?? null,
-      chartWindowStart: currentTime - WINDOW_BEFORE_SEC,
-      chartWindowEnd: currentTime + WINDOW_AFTER_SEC,
-    });
-  }, [
-    pitchGuide,
-    lyrics,
-    adjustedMidiSegments,
-    guideOffset,
-    currentTime,
-    songId,
-  ]);
 
   // ─── Progress ───
   const totalSec = mrDurationSec > 0

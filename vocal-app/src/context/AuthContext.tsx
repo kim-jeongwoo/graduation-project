@@ -37,17 +37,6 @@ async function clearStoredAuth() {
   await SecureStore.deleteItemAsync(API_BASE_MARKER_KEY);
 }
 
-function logAuthDiag(phase: string, token: string | null, extra: Record<string, unknown> = {}) {
-  if (!__DEV__) return;
-  console.log('[auth diag]', {
-    phase,
-    apiUrl: BASE_URL,
-    hasToken: Boolean(token),
-    tokenLength: token?.length ?? 0,
-    ...extra,
-  });
-}
-
 export function AuthProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<AuthState>({
     token: null,
@@ -65,22 +54,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (storedToken) {
           if (storedApiBase !== BASE_URL) {
             await clearStoredAuth();
-            logAuthDiag('load-token-cleared-api-base-mismatch', storedToken, {
-              storedApiBase,
-            });
             setState({ token: null, user: null, isLoading: false });
             return;
           }
           const user = storedUser ? JSON.parse(storedUser) : null;
-          logAuthDiag('load-token', storedToken);
           setState({ token: storedToken, user, isLoading: false });
         } else {
-          logAuthDiag('load-token', null);
           setState({ token: null, user: null, isLoading: false });
         }
       } catch {
         await clearStoredAuth();
-        logAuthDiag('load-token-error', null);
         setState({ token: null, user: null, isLoading: false });
       }
     })();
@@ -92,7 +75,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await SecureStore.setItemAsync(TOKEN_KEY, data.token);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userInfo));
     await SecureStore.setItemAsync(API_BASE_MARKER_KEY, BASE_URL);
-    logAuthDiag('after-login', data.token);
     setState({ token: data.token, user: userInfo, isLoading: false });
   }, []);
 
@@ -103,7 +85,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
       await SecureStore.setItemAsync(TOKEN_KEY, data.token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userInfo));
       await SecureStore.setItemAsync(API_BASE_MARKER_KEY, BASE_URL);
-      logAuthDiag('after-signup', data.token);
       setState({ token: data.token, user: userInfo, isLoading: false });
     },
     [],
@@ -111,7 +92,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const logout = useCallback(async () => {
     await clearStoredAuth();
-    logAuthDiag('logout', null);
     setState({ token: null, user: null, isLoading: false });
   }, []);
 

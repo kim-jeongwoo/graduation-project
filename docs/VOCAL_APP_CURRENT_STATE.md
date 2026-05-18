@@ -1,6 +1,6 @@
 # Vocal App Current State
 
-작성 기준: 2026-05-14
+작성 기준: 2026-05-18
 앱 경로: `vocal-app/`
 원본 작업 경로: `/Users/kimjeongwoo/vocal-app`
 
@@ -20,6 +20,12 @@
 - 혀경직도 “측정 불가” 뱃지 제거 확인
 - 연구개위치 / 혀경직도 노란 별 제거 확인
 - 호흡소리식별 / 성대접촉강도 기존 흐름 유지 확인
+- navigation typing baseline 정리 후 TypeScript noEmit 통과 확인
+- 진단 로그 정리 후 Metro 로그 과다 출력 없음
+- NativeEventEmitter warning은 화면 LogBox 방해 최소화, expo-av deprecated warning은 migration backlog 유지
+- 연구개위치 / 혀경직도 카드 피드백 문구 표시 정상
+- V2 그래프 missing/low-confidence 색상 표시 보정 후 임시 audit 로그 제거 확인
+- Settings 마이크 입력 테스트 정상 확인
 - 곡 004 녹음 전 pitch guide 로드 확인
 - 완곡 4분 녹음/분석 성공
 - 분석 결과 화면 회색 가이드라인 표시 정상
@@ -60,11 +66,18 @@
 이번 monorepo snapshot에는 현재 local `vocal-app` working tree 상태를 반영했다. 포함 성격:
 
 - Batch #1 5/5 안정화 변경
+- Batch #2 5/5 안정화 변경
 - full analyze async polling UX
 - 구간훈련 녹음 window와 `chunk_meta` 정렬
 - production 완곡 업로드 timeout/UX 안정화
 - song004 pitch-guide 현 단계 종료 및 앱 임의 offset 제거
 - 결과 카드 피드백/신뢰도 UI 정리
+- navigation typing baseline cleanup
+- diagnostic log cleanup and development logging policy
+- SDK warning triage and limited NativeEventEmitter LogBox filtering
+- 연구개위치 / 혀경직도 피드백 문구 정교화
+- V2 score distribution / graph color mapping 검증 및 보정
+- Settings 마이크 입력 테스트 supporting cleanup
 - Step 3G 4항목 훈련 지원 관련 변경
 - full analyze status UX hardening
 - pitch-guide fix
@@ -118,7 +131,7 @@ npm run start:tunnel
 | pitch guide 로드/재진입 유지 | 검증 완료 |
 | no_voice 결과 화면 이동 차단 | 검증 완료 |
 | Step 3G 4항목 버튼 기존 동작 | 검증 완료 |
-| `npx tsc --noEmit` | 기존 navigation typing baseline 오류로 실패 가능 |
+| `node_modules/.bin/tsc --noEmit` | source repo 기준 통과 |
 
 ### 2026-05-13 Galaxy 검증 조건
 
@@ -140,9 +153,9 @@ npm run start:tunnel
 
 ### 알려진 검증 한계
 
-- `npx tsc --noEmit`은 기존 navigation typing 오류가 있어 현재 snapshot 품질을 단독으로 판단하는 기준으로 쓰기 어렵다.
-- `혀, 구강 공간의 경직도` 훈련 화면 내용과 재시작 버튼 문제는 아직 해결되지 않은 backlog다.
 - 외부 공유 전에는 API URL과 서버 상태를 production 기준으로 다시 확인해야 한다.
+- 연구개/혀경직도 미달/과함 분포는 의도 녹음과 dml-server score_mapper 검증이 추가로 필요하다.
+- 개인화 calibration, 성별/음역대 기준, 노래별 key 조절은 아직 본기능이 아니다.
 
 ## 남은 backlog
 
@@ -158,9 +171,9 @@ npm run start:tunnel
 | NativeEventEmitter warning | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
 
-## 보존 문서
+## 문서 보존/제외 정책
 
-- `vocal-app/docs/CURRENT_STATE_v1.md`: 2026-05-10 v1 baseline
-- `vocal-app/docs/HANDOVER.md`: GPT 이관/진행 상태 문서
-- `vocal-app/docs/dev-flow.md`: Galaxy dev-client 개발 흐름
-- `vocal-app/docs/android-install.md`: Android 설치 가이드
+GitHub snapshot에는 안전한 개발 문서만 포함한다. Raw handover/current-state scratch 문서는 source checkout에는 남을 수 있지만 PR snapshot에서는 제외한다.
+
+- 포함: `vocal-app/docs/dev-flow.md`, `vocal-app/docs/android-install.md`, `vocal-app/docs/V2_CLOSEOUT_CHECKLIST.md`
+- 제외: `vocal-app/docs/CURRENT_STATE_v1.md`, `vocal-app/docs/HANDOVER.md`, `.codex/ACTIVE_PLAN.md`

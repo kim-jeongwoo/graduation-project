@@ -1,4 +1,3 @@
-import { BASE_URL } from './client';
 import { pollAnalysisStatus, getAnalysisResults } from './analysis';
 import { AnalyzeStatusError, isAnalyzeFailureStatus } from './sessions';
 import { MOCK_FIXED_RESULT } from './mock';
@@ -6,9 +5,6 @@ import type { AnalyzeResult, ServerAnalyzeResult, ServerAnalyzeResultsResponse, 
 import type { EvaluationItemKey } from '../domain/evaluationItems';
 
 const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
-
-// 부팅 시 환경 확인용 로그
-console.log('[boot] USE_MOCK=', USE_MOCK, 'API_URL=', BASE_URL);
 
 // ─── prefix 어댑터 ───
 // 서버 키 "1_nasal_oral_ratio" → 도메인 키 "nasal_oral_ratio"

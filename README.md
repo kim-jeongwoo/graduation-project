@@ -17,12 +17,13 @@
 9. [API / Schema 핵심 예시](#api--schema-핵심-예시)
 10. [현재 개발 단계](#현재-개발-단계)
 11. [Batch #1 완료 내용](#batch-1-완료-내용)
-12. [검증된 내용](#검증된-내용)
-13. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
-14. [Repository 구조](#repository-구조)
-15. [실행 방법](#실행-방법)
-16. [주의 사항](#주의-사항)
-17. [추가 문서](#추가-문서)
+12. [Batch #2 완료 내용](#batch-2-완료-내용)
+13. [검증된 내용](#검증된-내용)
+14. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
+15. [Repository 구조](#repository-구조)
+16. [실행 방법](#실행-방법)
+17. [주의 사항](#주의-사항)
+18. [추가 문서](#추가-문서)
 
 ## 프로젝트 한 줄 요약
 
@@ -81,7 +82,7 @@ EGG는 성대 접촉과 관련된 정보를 제공할 수 있는 신호지만, �
 
 현재 README에는 개인정보, 학생명, 계정명, 정확한 학원명, 대표자명은 포함하지 않는다. 확인되지 않은 정보는 문서에 쓰지 않고, 필요한 경우 추후 승인된 공개 범위 안에서 보강한다.
 
-2026년 5월 14일 이후에는 학원 통제 실험과 production API 기반 Galaxy 검증을 염두에 두고 앱 안정화 Batch #1을 마무리했다.
+2026년 5월 14일 이후에는 학원 통제 실험과 production API 기반 Galaxy 검증을 염두에 두고 앱 안정화 Batch #1을 마무리했다. 2026년 5월 18일에는 navigation typing, 진단 로그, SDK warning, 연구개/혀경직도 문구, V2 그래프 색상 매핑을 묶은 Batch #2를 5/5로 완료했다.
 
 ## 전체 시스템 구조
 
@@ -224,7 +225,7 @@ sequenceDiagram
 
 ## 현재 개발 단계
 
-현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #1 완료” 단계다.
+현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #2 완료” 단계다.
 
 - production API 기준 앱 진입과 로그인 가능
 - 곡 목록 로드 가능
@@ -234,6 +235,10 @@ sequenceDiagram
 - 결과 화면 이동과 히스토리 저장 가능
 - 구간훈련 사후 측정 가능
 - 결과 카드 4개 v2 항목 표시 가능
+- navigation typing baseline 정리 후 `node_modules/.bin/tsc --noEmit` 통과
+- 진단 로그 정리 후 Metro 과다 출력 없음
+- 연구개위치/혀경직도 카드 문구와 V2 그래프 색상 매핑 검증 완료
+- Settings 마이크 입력 테스트는 calibration 본기능이 아니라 supporting input test로 정리
 - pitch-guide 작업은 현 단계에서 종료, 팀원들이 여러 곡 수동 정렬 중
 
 ## Batch #1 완료 내용
@@ -253,6 +258,28 @@ Batch #1은 검증 완료 기능 5개 단위로 GitHub에 반영하는 첫 묶�
    - 연구개위치/혀경직도 노란 별 제거.
    - v2 표시 항목의 “점수 있음 + 측정 불가” 모순 제거.
    - 호흡소리식별/성대접촉강도 기존 흐름 유지.
+
+## Batch #2 완료 내용
+
+Batch #2는 검증 완료 기능 5개 단위로 GitHub에 반영하는 두 번째 묶음이다.
+
+1. navigation typing baseline 정리
+   - Result stack/navigation param 타입을 정리해 source repo 기준 `node_modules/.bin/tsc --noEmit` 통과 상태로 복구.
+2. 진단 로그 정리 및 개발 로그 정책
+   - API/auth/upload/timing/training/V2 graph 등 임시 진단 로그를 정리하고, 검증용 로그는 명시적으로 임시/제거 대상으로 관리.
+3. SDK warning 정리 및 앱 실행 경고 최소화
+   - NativeEventEmitter warning은 dev LogBox 방해를 최소화하고, `expo-av` deprecated warning은 SDK migration backlog로 유지.
+4. 연구개위치/혀경직도 피드백 문구 정교화
+   - 점수/threshold 변경 없이 서버 점수와 zone을 보존하고, 앱 fallback 문구만 보수적인 발성 교육 보조 톤으로 정리.
+5. V2 점수 분포/그래프 색상 매핑 검증 및 보정
+   - `scores_v2`, `scores_meta`, `timeline_scores`, `low_confidence_items` key mapping을 확인.
+   - missing score를 적절로 보정하지 않고, low confidence를 zone 색상보다 우선하도록 결과 그래프 표시 경로를 검증/보정.
+   - 검증용 V2 audit 로그는 Batch #2 종료 시 제거.
+
+Supporting cleanup:
+
+- 14번 Settings 마이크 입력 테스트 UX는 개인화 calibration 완성이 아니라 입력 테스트/보류 전환으로 정리했다.
+- 개인화 캘리브레이션, 성별/음역대 기준, 노래별 key 조절은 마지막 단계 backlog로 남긴다.
 
 ## 검증된 내용
 
@@ -275,11 +302,16 @@ Batch #1은 검증 완료 기능 5개 단위로 GitHub에 반영하는 첫 묶�
 - 혀경직도 “측정 불가” 뱃지 제거 확인
 - 연구개/혀경직도 노란 별 제거 확인
 - 호흡소리식별 / 성대접촉강도 기존 흐름 유지 확인
+- 구간훈련 진입과 사후측정 정상 확인
+- Settings 마이크 입력 테스트 정상 확인
+- V2 그래프 missing/low-confidence 색상 표시 보정 후 임시 audit 로그 제거 확인
+- NativeEventEmitter warning은 화면 LogBox 방해 최소화, expo-av deprecated warning은 migration backlog로 유지
 
 개발 검증:
 
 - `git diff --check` 통과
-- `npx tsc --noEmit`은 기존 navigation typing baseline 오류가 남아 있어 별도 backlog로 관리
+- source repo 기준 `node_modules/.bin/tsc --noEmit` 통과
+- `git diff --check` 통과
 
 ## 남은 Backlog / Roadmap
 
@@ -287,11 +319,14 @@ Batch #1은 검증 완료 기능 5개 단위로 GitHub에 반영하는 첫 묶�
 |---|---|---|
 | song004 및 다른 곡 pitch-guide 수동 정렬 완료 후 재반영 | 앱/asset | 팀원 수동 정렬 완료 후 재개 |
 | MR/LRC/pitch-guide 정합성 최종 검증 | 앱/asset | 여러 곡에서 청감/화면 timing 검증 |
-| 구간훈련 입력 calibration 기능 | 앱 UX | 기기/환경별 입력 레벨 편차 완화 |
-| 연구개/혀경직도 문구 정교화 | 앱 UX/평가표 | 4/6~5/10 전체 평가표 기준으로 보강 |
-| navigation typing baseline error | 앱 코드 정리 | 기존 baseline과 신규 오류 분리 |
-| expo-av deprecated warning | 앱 코드 정리 | Expo SDK 변화에 맞춰 대체 API 검토 |
-| NativeEventEmitter warning | 앱 코드 정리 | 원인 모듈 확인 후 정리 |
+| 공개 데이터/성별/음역대 기반 개인화 캘리브레이션 | 앱/DML | 입력 테스트와 분리해 마지막 단계에서 설계 |
+| 회원가입/설정 음역대 입력 | 앱 UX | 사용자 range 기반 설정 저장 |
+| 노래별 key 자동 조절 및 원키 선택 | 앱/asset | 사용자 음역대와 곡 key 매칭 |
+| 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
+| dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
+| 4/6~5/10 평가표 기준 추가 피드백 정교화 | 앱 UX/평가표 | 실제 평가표 기준 문구 보강 |
+| expo-av deprecated warning | 앱 코드 정리 | Expo SDK 변화에 맞춰 expo-audio migration 검토 |
+| NativeEventEmitter warning | 앱 코드 정리 | 원인 라이브러리 교체 또는 native patch 검토 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
 | EGG 장비/데이터 수/모델 구조 공개 범위 확정 | 문서 | 확인 필요. 확인 전 README에 단정 기재 금지 |
 

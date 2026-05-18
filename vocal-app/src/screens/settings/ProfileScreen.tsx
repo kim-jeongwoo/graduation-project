@@ -25,7 +25,7 @@ export default function ProfileScreen() {
   // 실시간 활동 통계 — GET /sessions 응답 기반 (mock 의존 제거)
   const [sessions, setSessions] = useState<Session[]>([]);
   useEffect(() => {
-    getSessions().then(setSessions).catch((e) => console.log('[ProfileScreen] getSessions error:', e));
+    getSessions().then(setSessions).catch(() => {});
   }, []);
   const totalSessions     = sessions.length;
   const completedSessions = sessions.filter((s) => s.analysis_status === 'completed').length;
@@ -46,8 +46,7 @@ export default function ProfileScreen() {
       }
       setEditing(false);
       Alert.alert('완료', '닉네임이 변경되었습니다.');
-    } catch (e: unknown) {
-      console.log('[Profile] save error:', e);
+    } catch {
       Alert.alert('오류', '저장에 실패했습니다.');
     } finally {
       setSaving(false);

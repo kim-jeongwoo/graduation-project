@@ -84,9 +84,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
           .map(fromServer)
           .filter((x): x is FavoriteSection => x !== null);
         setFavorites(items);
-      } catch (e) {
-        console.error('[FavoritesContext] initial load error:', e);
-      }
+      } catch {}
     })();
     return () => { cancelled = true; };
   }, [token]);
@@ -129,7 +127,6 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       } else {
         // rollback
         setFavorites(prev => prev.filter(f => f.id !== tempId));
-        console.error('[FavoritesContext] addFavorite error:', e);
       }
     }
   }, []);
@@ -144,11 +141,10 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     if (id.startsWith('tmp-') || id.startsWith('local-')) return;
     try {
       await deleteFavorite(id);
-    } catch (e) {
+    } catch {
       // rollback
       const saved = target;
       setFavorites(prev => saved ? [...prev, saved] : prev);
-      console.error('[FavoritesContext] deleteFavorite error:', e);
     }
   }, []);
 

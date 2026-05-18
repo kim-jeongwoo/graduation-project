@@ -6,8 +6,10 @@ import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import { useFavorites, type FavoriteSection } from '../../context/FavoritesContext';
 import { INDICATOR_LABELS, ZONE_LABELS, zoneColor, extractWeakSections } from '../../domain/weakSections';
 import { getResultsByRunId } from '../../api/analyze';
+import type { HistoryStackParamList } from '../../navigation/types';
+import type { Zone } from '../../types/analyze';
 
-type Props = NativeStackScreenProps<Record<string, object | undefined>, string>;
+type Props = NativeStackScreenProps<HistoryStackParamList, 'Favorites'>;
 
 export default function FavoritesScreen({ navigation }: Props) {
   const { favorites, removeFavoriteById } = useFavorites();
@@ -41,7 +43,7 @@ export default function FavoritesScreen({ navigation }: Props) {
       const fullSection = weakSections.find(s => s.chunkIndex === fav.weakSection.chunkIndex);
       const sectionStart = fullSection?.paddedStartSec ?? Math.max(0, chunk.startSec - 4);
       const sectionEnd   = fullSection?.paddedEndSec   ?? chunk.endSec + 3;
-      navigation.navigate('Training' as never, {
+      navigation.navigate('Training', {
         indicatorKey:    fav.indicatorKey,
         runId:           fav.runId,
         songId:          fav.songId,
@@ -50,11 +52,10 @@ export default function FavoritesScreen({ navigation }: Props) {
         sectionStartSec: sectionStart,
         sectionEndSec:   sectionEnd,
         chunkInfo:       { startSec: chunk.startSec, endSec: chunk.endSec, lrcText: chunk.lrcText },
-        scoreInfo:       { aiScore: score.aiScore, zone: score.zone },
+        scoreInfo:       { aiScore: score.aiScore, zone: score.zone as Zone },
         feedbackText:    result.feedback[fav.indicatorKey]?.feedback_text ?? '',
-      } as never);
-    } catch (e) {
-      console.error('[FavoritesScreen] re-fetch error:', e);
+      });
+    } catch {
       Alert.alert('오류', '원본 데이터를 불러오지 못했습니다.');
     } finally {
       setLoading(false);

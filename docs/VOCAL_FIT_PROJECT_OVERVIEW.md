@@ -1,6 +1,6 @@
 # Vocal Fit Project Overview
 
-작성 기준: 2026-05-13
+작성 기준: 2026-05-18
 범위: `graduation-project` monorepo 안의 `vocal-app`, `vocal-server`, `dml-server`
 
 ## 목차
@@ -33,16 +33,16 @@ Vocal Fit은 보컬 연습 녹음, 서버 기반 발성 분석, 피치 비교, �
 
 ### 문서 기준과 출처
 
-이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot과 2026-05-14 Batch #1 안정화 반영 상태를 기준으로 작성했다.
+이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2 안정화 반영 상태를 기준으로 작성했다.
 
 | 기준 | 값 |
 |---|---|
 | GitHub repo | `kim-jeongwoo/graduation-project` |
-| 작업 branch | `codex/vocal-app-batch1-2026-05-14` |
+| 작업 branch | `codex/vocal-app-batch2-2026-05-17` |
 | base branch | `main` |
-| base commit | `1606663 Merge pull request #2 from kim-jeongwoo/codex/v2-closeout-2026-05-13` |
+| base commit | `359c7b9 Merge pull request #3 from kim-jeongwoo/codex/vocal-app-batch1-2026-05-14` |
 | 앱 원본 작업 경로 | `/Users/kimjeongwoo/vocal-app` |
-| 포함 범위 | Batch #1 검증 완료 앱 source/docs snapshot |
+| 포함 범위 | Batch #1 + Batch #2 검증 완료 앱 source/docs snapshot |
 | 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak`, raw handover docs, `.codex/ACTIVE_PLAN.md` |
 
 ## 졸업작품 목표
@@ -158,6 +158,7 @@ Batch #1 결과 카드 표시 정책:
 - 연구개 위치 / 혀 경직도는 `high_star` 노란 별을 표시하지 않는다.
 - `shown_v2`에 포함되고 v2 점수가 있는 연구개/혀 항목은 legacy `unavailable` 때문에 “측정 불가” 뱃지가 뜨지 않도록 보정한다.
 - low confidence 표시는 별도 hint로 유지하며 점수 계산이나 timeline threshold는 앱에서 바꾸지 않는다.
+- V2 graph는 timeline chunk의 해당 indicator `rounded_score`가 있을 때만 zone 색을 쓰고, missing score를 적절로 보정하지 않는다.
 
 ## API schema 요약
 
@@ -286,6 +287,12 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 - production 완곡 업로드 timeout/UX 안정화
 - song004 pitch-guide 현 단계 종료 및 앱 임의 offset 제거
 - 결과 카드 피드백/신뢰도 UI 정리
+- navigation typing baseline cleanup
+- diagnostic log cleanup and development logging policy
+- SDK warning triage and limited NativeEventEmitter LogBox filtering
+- 연구개위치 / 혀경직도 피드백 문구 정교화
+- V2 score distribution / graph color mapping 검증 및 보정
+- Settings microphone input test supporting cleanup
 
 ## 5/10~5/14 진행 로그
 
@@ -296,19 +303,22 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 | 2026-05-12 | full analyze status UX hardening, no_voice/failed/invalid/error 처리 |
 | 2026-05-13 | pitch-guide 재진입/중복 요청 문제 수정 검증, monorepo에 `vocal-app/` snapshot 추가 |
 | 2026-05-14 | Batch #1 5/5 완료: async polling, 구간훈련 window/chunk_meta, production upload UX, song004 pitch-guide closeout, 결과 카드 신뢰도 UI |
+| 2026-05-18 | Batch #2 5/5 완료: navigation typing, 진단 로그 정책, SDK warning triage, 연구개/혀경직도 문구, V2 graph 색상 매핑 |
 
 ## 현재 남은 검증 항목
 
 | 항목 | 분류 | 완료 기준 |
 |---|---|---|
-| `npx tsc --noEmit` baseline navigation typing 오류 분리 | 앱 코드 정리 | 기존 navigation typing 오류와 신규 regression을 구분해 보고 |
 | song004 및 다른 곡 pitch-guide 수동 정렬 완료 후 재반영 | 앱/asset | 수동 정렬된 guide asset 기준 재검증 |
 | MR/LRC/pitch-guide 정합성 최종 검증 | 앱/asset | 여러 곡에서 청감/화면 timing 검증 |
-| 구간훈련 입력 calibration 기능 | 앱 UX | 기기/환경별 입력 레벨 보정 |
-| 연구개/혀경직도 문구 정교화 | 앱 UX/평가표 | 4/6~5/10 전체 평가표 기준으로 문구 확정 |
-| 진단 로그 유지/제거 시점 결정 | 운영/개발 정책 | Galaxy/server 검증 완료 후 제거 또는 유지 범위 확정 |
-| expo-av deprecated warning | 앱 코드 정리 | 대체 API 검토 |
-| NativeEventEmitter warning | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
+| 공개 데이터/성별/음역대 기반 개인화 캘리브레이션 | 앱/DML | 입력 테스트와 분리해 마지막 단계에서 설계 |
+| 회원가입/설정 음역대 입력 | 앱 UX | 사용자 range 기반 설정 저장 |
+| 노래별 key 자동 조절 및 원키 선택 | 앱/asset | 사용자 음역대와 곡 key 매칭 |
+| 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
+| dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
+| 4/6~5/10 평가표 기준 추가 피드백 정교화 | 앱 UX/평가표 | 실제 평가표 기준 문구 보강 |
+| expo-av -> expo-audio migration | 앱 코드 정리 | Expo SDK 변화에 맞춰 대체 API 검토 |
+| NativeEventEmitter root cause library replacement or native patch | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
 
 ## 미해결 백로그
@@ -328,9 +338,11 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 
 2026-05-14 Batch #1 검증에서는 production API 기준 앱 진입, 로그인, 곡 목록 로드, song004 Karaoke 진입, MR/가사/녹음, 완곡 업로드, full analyze async polling, 결과 화면 이동, 히스토리 저장, 구간훈련 한 소절 success, 연구개/혀경직도 결과 카드 feedback과 badge 보정이 확인되었다.
 
+2026-05-18 Batch #2 검증에서는 navigation typing 정리 후 TypeScript noEmit 통과, 진단 로그 정리, NativeEventEmitter warning LogBox 방해 최소화, 연구개/혀경직도 문구 표시, V2 graph missing/low-confidence 색상 경로, 구간훈련 사후측정, Settings 마이크 입력 테스트가 확인되었다.
+
 현재 한계:
 
-- `npx tsc --noEmit`은 기존 navigation typing baseline 오류 때문에 실패 가능성이 있다.
+- Batch #2 기준 source repo에서 `node_modules/.bin/tsc --noEmit`이 통과한다.
 - 이 문서는 서버/DML 최신 runtime을 직접 고정하지 않는다. server contract가 바뀌면 `vocal-server`와 `dml-server` 문서를 함께 확인해야 한다.
 - pitch-guide asset 정렬은 현 단계에서 종료했으며, 여러 곡 수동 정렬 완료 후 재개한다.
 

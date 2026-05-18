@@ -6,18 +6,9 @@ import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import { getSessionDetail, extractRunId } from '../../api/sessions';
 import { formatDate } from '../../utils/labels';
 import type { Session } from '../../types/api';
+import type { HistoryStackParamList } from '../../navigation/types';
 
-type Props = NativeStackScreenProps<
-  {
-    SongHistory: {
-      songId:     string;
-      songTitle:  string;
-      songArtist: string | null;
-      sessions:   Session[];
-    };
-  },
-  'SongHistory'
->;
+type Props = NativeStackScreenProps<HistoryStackParamList, 'SongHistory'>;
 
 export default function SongHistoryScreen({ route, navigation }: Props) {
   const { songId, songTitle, songArtist, sessions } = route.params;
@@ -31,9 +22,8 @@ export default function SongHistoryScreen({ route, navigation }: Props) {
         Alert.alert('분석 결과 없음', '이 세션은 분석이 완료되지 않았습니다.');
         return;
       }
-      navigation.navigate('EvalResult' as never, { runId, songId } as never);
-    } catch (e) {
-      console.error('[SongHistory] session detail error:', e);
+      navigation.navigate('EvalResult', { runId, songId });
+    } catch {
       Alert.alert('오류', '세션 정보를 불러오지 못했습니다.');
     }
   }, [navigation, songId]);

@@ -27,14 +27,10 @@
 
 ## Backlog, not for task 11
 
-- Reapply pitch-guide work after manual alignment is completed for song004 and additional songs.
-- Complete final MR/LRC/pitch-guide timing verification across representative songs.
-- Add input calibration for segment training.
-- Refine soft palate and tongue tension copy against the 4/6~5/10 full evaluation table.
-- Resolve navigation typing baseline errors.
-- Review expo-av deprecated warning.
-- Review NativeEventEmitter warning.
-- Clarify production server auto-start/systemd operations.
+- Add better feedback copy for soft palate and tongue tension cards.
+- Revisit whether the yellow high-star mark should appear only on trusted cards.
+- Investigate realtime pitch gauge / voice recognition behavior in section training.
+- Improve per-item training method and feedback copy after Jungwoo review.
 
 ## Production API switch checklist
 
@@ -48,3 +44,19 @@
 - Confirm production accepts current shared request headers, including `ngrok-skip-browser-warning`.
 - Confirm Android permissions and cleartext settings before representative / academy validation.
 - Keep local/tunnel dev-client scripts as development-only tools; do not treat them as production API switch steps.
+
+## Batch #2 follow-up
+
+- Navigation typing baseline cleanup completed; source repo TypeScript noEmit passes.
+- Temporary V2 score distribution and rendered color audit logs were removed after Galaxy verification.
+- V2 graph color policy keeps missing score neutral, low confidence first, and rounded_score-only zone coloring.
+- Soft palate and tongue tension feedback wording is refined without changing score thresholds.
+- Settings microphone input test is a supporting input test, not completed personalized calibration.
+
+## Remaining backlog after Batch #2
+
+- Intentional recordings for soft palate / tongue tension insufficient and excessive cases.
+- dml-server score_mapper distribution validation.
+- Additional feedback wording based on the 4/6~5/10 evaluation sheets.
+- expo-av to expo-audio migration.
+- NativeEventEmitter root cause library replacement or native patch.

@@ -8,13 +8,9 @@ import type { PitchDetectionResult, FamousSinger } from '../types/api';
 export async function detectPitch(
   audioUri: string,
 ): Promise<PitchDetectionResult> {
-  // DEBUG: 디버깅 후 원복 — FormData 확인
   const fileUri = audioUri.startsWith('file://') ? audioUri : `file://${audioUri}`;
   const fileName = 'recording.m4a';
   const fileType = 'audio/m4a';
-  console.log('[피치감지] FormData uri:', fileUri);
-  console.log('[피치감지] FormData name:', fileName, '| type:', fileType);
-  console.log('[피치감지] uri starts with file://:', fileUri.startsWith('file://'));
 
   const formData = new FormData();
   formData.append('file', {
@@ -32,21 +28,8 @@ export async function detectPitch(
         timeout: 30000,
       },
     );
-    console.log('[피치감지] 응답:', JSON.stringify(response.data));
-    // DEBUG: rms, f0_info, wav_info 상세 출력
-    const d = response.data as unknown as Record<string, unknown>;
-    if (d.rms !== undefined) console.log('[피치감지] rms:', d.rms);
-    if (d.f0_info) console.log('[피치감지] f0_info:', JSON.stringify(d.f0_info));
-    if (d.wav_info) console.log('[피치감지] wav_info:', JSON.stringify(d.wav_info));
     return response.data;
   } catch (error: unknown) {
-    // DEBUG: 디버깅 후 원복 — 에러 상세 출력
-    if (error && typeof error === 'object' && 'response' in error) {
-      const axErr = error as { response?: { status?: number; data?: unknown } };
-      console.log('[피치감지] 에러:', axErr.response?.status, JSON.stringify(axErr.response?.data));
-    } else {
-      console.log('[피치감지] 에러(기타):', error);
-    }
     throw error;
   }
 }
