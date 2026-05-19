@@ -78,3 +78,19 @@ npm run start:tunnel
 - 성대접촉 미달 구간에서 추천 영상 버튼/modal/재생 정상 확인.
 - 하압 영상은 `pressure_balance` 비활성 항목이라 노출 보류.
 - `target_chunks`는 현재 vocal-app 미사용이며, 구간추천은 `timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze` 흐름을 유지한다.
+
+## Android release 전 확인
+
+- build-time env는 `EXPO_PUBLIC_API_URL=https://api.vocal-fit.com`, `EXPO_PUBLIC_USE_MOCK=false` 기준으로 확인합니다.
+- `eas.json` build profile은 EAS environment를 명시합니다: development=`development`, preview=`preview`, production=`production`.
+- release build 전 Expo dashboard의 project Environment Variables 또는 EAS CLI로 production environment 값을 확인합니다.
+  - `eas env:list --environment production`
+  - `eas env:create --name EXPO_PUBLIC_API_URL --value https://api.vocal-fit.com --environment production --visibility plaintext`
+  - `eas env:create --name EXPO_PUBLIC_USE_MOCK --value false --environment production --visibility plaintext`
+- local `.env`는 로컬 개발용입니다. EAS remote build에 자동 포함된다고 가정하지 않습니다.
+- 실제 `.env` 파일과 backup 파일은 GitHub/EAS upload에 포함하지 않습니다.
+- `npm run start:cf`는 개발용 dev-client tunnel이며 production build script가 아닙니다.
+- Cloudflare token, credential, `config.yml` 내용은 repo/EAS에 포함하지 않습니다.
+- release source는 dirty checkout이 아니라 GitHub main clean snapshot 기준을 권장합니다.
+- `version` / Android `versionCode` bump는 실제 release 직전에 별도 결정합니다.
+- `submit` profile은 Play Store 제출을 `eas submit`으로 진행하기로 정한 뒤 추가합니다.

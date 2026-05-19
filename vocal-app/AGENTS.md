@@ -26,7 +26,7 @@ npx expo start --android      # Android 에뮬레이터
 ```
 
 ### 서버 연결 (`src/api/client.ts`)
-- `CURRENT_SERVER = "local"` : 동일 네트워크, `192.168.0.16:8000`
+- `CURRENT_SERVER = "local"` : 동일 네트워크, `http://<local-server-ip>:8000`
 - `CURRENT_SERVER = "tunnel"` : ngrok URL (재시작 시 갱신 필요)
 
 ---

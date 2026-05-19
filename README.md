@@ -228,7 +228,7 @@ sequenceDiagram
 
 ## 현재 개발 단계
 
-현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #5 완료” 단계다.
+현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #5 완료 + release-prep 설정 정리 완료” 단계다.
 
 - production API 기준 앱 진입과 로그인 가능
 - 곡 목록 로드 가능
@@ -252,6 +252,10 @@ sequenceDiagram
 - 구간훈련 초록 target 끝 잘림 보완, MR/pitch-guide/target 정합성 확인
 - 구간훈련 피드백 영상 3개 압축 asset 연결. 하압 영상은 `pressure_balance` 비활성 항목이라 노출 보류
 - `target_chunks`는 현재 vocal-app에서 미사용이며, `timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze` 흐름 유지
+- Android release 설정은 `usesCleartextTraffic=false`, scheme=`vocal-app`, EAS profile environment 명시 상태
+- API client fallback은 production API 기준이며, local/ngrok concrete fallback URL은 포함하지 않음
+- `.easignore`와 production-safe `.env.example` 반영 완료
+- EAS build/submit은 아직 실행하지 않음
 
 ## Batch #1 완료 내용
 
@@ -393,6 +397,8 @@ Batch #5는 5곡 production song asset 앱 검증 이후 발표/통제 실험용
 
 - `git diff --check` 통과
 - source repo 기준 `node_modules/.bin/tsc --noEmit` 통과
+- release-prep 기준 `app.json` / `package.json` / `eas.json` JSON parse 통과
+- secret/local IP/ngrok scan에서 실제 token, credential, concrete local IP, concrete ngrok URL 없음 확인
 
 ## 남은 Backlog / Roadmap
 
@@ -481,6 +487,9 @@ npm run start:cf
 - `node_modules`, `.expo`, `.claude`, `.codex/ACTIVE_PLAN.md`, raw handover docs commit 금지.
 - 개인 LAN IP가 박힌 Expo script commit 금지.
 - Cloudflare token, credential, `/etc/cloudflared/config.yml`, credential json commit 금지. `start:cf`는 Cloudflare service가 이미 설정되어 있다는 전제로만 사용한다.
+- EAS build 전 production environment에 `EXPO_PUBLIC_API_URL=https://api.vocal-fit.com`, `EXPO_PUBLIC_USE_MOCK=false`가 설정되어 있는지 확인한다.
+- release build source는 dirty local checkout이 아니라 GitHub main clean snapshot 기준을 권장한다.
+- `version` / Android `versionCode` bump와 EAS submit profile은 실제 release 직전에 결정한다.
 - 사용자 녹음 파일, 학생 개인정보, 학원명/대표자명 등 비공개 정보 commit 금지.
 - EGG 장비명, 데이터 수, 모델 구조, 협력 기관 실명은 확인된 공개 범위가 아니면 단정하지 않는다.
 - 앱 피드백은 발성 교육 보조용이며 임상/의료 진단처럼 표현하지 않는다.
