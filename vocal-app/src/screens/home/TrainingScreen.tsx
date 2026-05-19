@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Audio } from 'expo-av';
+import { Audio, ResizeMode, Video } from 'expo-av';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import { isAuthExpiredError } from '../../api/client';
@@ -11,6 +11,7 @@ import {
   SECTION_FEEDBACK_BY_ZONE as FEEDBACK_BY_ZONE,
   ZONE_LABELS,
 } from '../../domain/weakSections';
+import { getFeedbackVideoForTraining } from '../../domain/feedbackVideos';
 import type { Zone } from '../../types/analyze';
 
 const SERVER_INDICATOR_KEY: Record<IndicatorAppKey, string> = {
@@ -30,6 +31,7 @@ const MIN_ANALYSIS_VOICED_FRAMES = 3;
 const INPUT_GUIDANCE = '최소 3초 이상, 조금 더 크게 불러 주세요.';
 const SECTION_END_TRIM_SEC = 1;
 const RECORDING_PRE_ROLL_SEC = 1;
+const RECORDING_POST_ROLL_SEC = 0.35;
 
 interface InputFrame {
   at: number;
@@ -248,9 +250,9 @@ export default function TrainingScreen({ route }: Props) {
   const { token } = useAuth();
   const trainingSectionEndSec = Math.max(sectionStartSec, sectionEndSec - SECTION_END_TRIM_SEC);
   const trainingChunkStartSec = chunkInfo.startSec;
-  const trainingChunkEndSec = Math.max(chunkInfo.startSec, chunkInfo.endSec - SECTION_END_TRIM_SEC);
+  const trainingChunkEndSec = Math.max(trainingChunkStartSec, chunkInfo.endSec);
   const recordingStartSec = Math.max(sectionStartSec, trainingChunkStartSec - RECORDING_PRE_ROLL_SEC);
-  const recordingEndSec = trainingChunkEndSec;
+  const recordingEndSec = Math.min(trainingSectionEndSec, trainingChunkEndSec + RECORDING_POST_ROLL_SEC);
 
   const [loading,      setLoading]      = useState(true);
   const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
@@ -280,12 +282,23 @@ export default function TrainingScreen({ route }: Props) {
   const [recordedDurationSec, setRecordedDurationSec] = useState<number | null>(null);
   const [afterScore,     setAfterScore]    = useState<BeforeAfterScore | null>(null);
   const [afterLowConfidence, setAfterLowConfidence] = useState(false);
+  const [feedbackVideoVisible, setFeedbackVideoVisible] = useState(false);
+  const [feedbackVideoError, setFeedbackVideoError] = useState<string | null>(null);
 
   const serverIndicatorKey = SERVER_INDICATOR_KEY[indicatorKey];
   const beforeLowConfidence = lowConfidenceItems?.includes(serverIndicatorKey) ?? false;
   const canAnalyze = !!sessionId && !!recordedUri;
+  const currentFeedbackZone = status === 'result' && afterScore ? afterScore.zone : scoreInfo.zone;
+  const feedbackVideo = getFeedbackVideoForTraining(indicatorKey, currentFeedbackZone);
+  const blocksFeedbackVideo =
+    countdown !== null
+    || status === 'countdown'
+    || status === 'preparing'
+    || status === 'recording'
+    || status === 'analyzing';
 
   const soundRef       = useRef<Audio.Sound | null>(null);
+  const feedbackVideoRef = useRef<Video | null>(null);
   const recorderRef    = useRef(new VocalRecorder());
   const currentTimeRef = useRef(sectionStartSec);  // master time
   const stoppedRef     = useRef(false);
@@ -410,6 +423,28 @@ export default function TrainingScreen({ route }: Props) {
     startingRef.current = false;
     recordingStartPendingRef.current = false;
   }, [closeWs, disposeSound]);
+
+  const closeFeedbackVideo = useCallback(async () => {
+    setFeedbackVideoVisible(false);
+    setFeedbackVideoError(null);
+    const video = feedbackVideoRef.current;
+    feedbackVideoRef.current = null;
+    if (!video) return;
+    try { await video.stopAsync(); } catch {}
+    try { await video.unloadAsync(); } catch {}
+  }, []);
+
+  const openFeedbackVideo = useCallback(() => {
+    if (!feedbackVideo || blocksFeedbackVideo) return;
+    setFeedbackVideoError(null);
+    setFeedbackVideoVisible(true);
+  }, [blocksFeedbackVideo, feedbackVideo]);
+
+  useEffect(() => {
+    if (feedbackVideoVisible && blocksFeedbackVideo) {
+      closeFeedbackVideo();
+    }
+  }, [blocksFeedbackVideo, closeFeedbackVideo, feedbackVideoVisible]);
 
   // ─── WebSocket 연결 (1회 재시도) ───
   const openWs = useCallback((startTimestampSec: number, retried = false): Promise<WebSocket | null> => {
@@ -1095,7 +1130,7 @@ export default function TrainingScreen({ route }: Props) {
 
           <Text style={styles.label}>MR 재생 범위</Text>
           <Text style={styles.value}>
-            {sectionStartSec.toFixed(1)}초 ~ {trainingSectionEndSec.toFixed(1)}초
+            {sectionStartSec.toFixed(1)}초 ~ {recordingEndSec.toFixed(1)}초
           </Text>
 
           <Text style={styles.label}>가사</Text>
@@ -1110,7 +1145,7 @@ export default function TrainingScreen({ route }: Props) {
         <SectionPitchGraph
           midiSegments={midiSegments}
           startSec={sectionStartSec}
-          endSec={trainingSectionEndSec}
+          endSec={recordingEndSec}
           originalStartSec={chunkInfo.startSec}
           originalEndSec={trainingChunkEndSec}
           currentTimeSec={currentTime}
@@ -1139,6 +1174,12 @@ export default function TrainingScreen({ route }: Props) {
               : (feedbackText || '(피드백 없음)')}
           </Text>
         </View>
+
+        {feedbackVideo && !blocksFeedbackVideo && (
+          <TouchableOpacity style={styles.feedbackVideoButton} onPress={openFeedbackVideo}>
+            <Text style={styles.feedbackVideoButtonText}>추천 영상 보기</Text>
+          </TouchableOpacity>
+        )}
 
         {/* 사후 측정 결과 카드 */}
         {showResult && afterScore && (
@@ -1188,6 +1229,36 @@ export default function TrainingScreen({ route }: Props) {
           <Text style={styles.countdownNum}>{countdown}</Text>
         </View>
       )}
+
+      <Modal
+        visible={feedbackVideoVisible && !!feedbackVideo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { closeFeedbackVideo(); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{feedbackVideo?.label}</Text>
+            {feedbackVideo && (
+              <Video
+                ref={feedbackVideoRef}
+                source={feedbackVideo.source}
+                style={styles.feedbackVideo}
+                resizeMode={ResizeMode.CONTAIN}
+                useNativeControls
+                shouldPlay
+                onError={(error) => setFeedbackVideoError(error)}
+              />
+            )}
+            {feedbackVideoError && (
+              <Text style={styles.videoErrorText}>영상을 불러오지 못했습니다.</Text>
+            )}
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={closeFeedbackVideo}>
+              <Text style={styles.modalCloseText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1203,6 +1274,8 @@ const styles = StyleSheet.create({
   value:            { ...TYPOGRAPHY.body, color: COLORS.textPrimary },
   feedbackBox:      { backgroundColor: COLORS.surface, borderRadius: 10, padding: SPACING.base, marginHorizontal: SPACING.base, marginTop: SPACING.base, marginBottom: SPACING.base },
   feedbackText:     { ...TYPOGRAPHY.body, color: COLORS.textSecondary, lineHeight: 22 },
+  feedbackVideoButton: { backgroundColor: COLORS.primary, borderRadius: 10, padding: SPACING.base, alignItems: 'center', marginHorizontal: SPACING.base, marginBottom: SPACING.base },
+  feedbackVideoButtonText: { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700' },
   guideNotice:      { backgroundColor: COLORS.surface, borderRadius: 10, padding: SPACING.sm, marginHorizontal: SPACING.base, marginTop: SPACING.sm },
   guideNoticeText:  { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, textAlign: 'center' },
   btnArea:          { paddingHorizontal: SPACING.base, marginTop: SPACING.sm },
@@ -1214,4 +1287,11 @@ const styles = StyleSheet.create({
   bigBtnText:       { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700', fontSize: 16 },
   overlay:          { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', alignItems: 'center' },
   countdownNum:     { fontSize: 96, fontWeight: '800', color: '#ffffff' },
+  modalOverlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.64)', justifyContent: 'center', padding: SPACING.base },
+  modalContent:     { backgroundColor: COLORS.surface, borderRadius: 12, padding: SPACING.base },
+  modalTitle:       { ...TYPOGRAPHY.body, color: COLORS.textPrimary, fontWeight: '700', marginBottom: SPACING.sm, textAlign: 'center' },
+  feedbackVideo:    { width: '100%', aspectRatio: 9 / 16, backgroundColor: '#000000', borderRadius: 8 },
+  videoErrorText:   { ...TYPOGRAPHY.caption, color: COLORS.danger, textAlign: 'center', marginTop: SPACING.sm },
+  modalCloseBtn:    { backgroundColor: COLORS.primary, borderRadius: 10, padding: SPACING.base, alignItems: 'center', marginTop: SPACING.base },
+  modalCloseText:   { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700' },
 });

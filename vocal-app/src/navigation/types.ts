@@ -72,7 +72,6 @@ export type MainTabParamList = {
   HomeTab: NavigatorScreenParams<HomeStackParamList>;
   RecordTab: NavigatorScreenParams<ResultStackParamList>;
   HistoryTab: NavigatorScreenParams<HistoryStackParamList>;
-  GoalsTab: undefined;
 };
 
 export type AppRootStackParamList = {

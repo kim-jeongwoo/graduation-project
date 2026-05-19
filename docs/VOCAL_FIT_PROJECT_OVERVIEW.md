@@ -33,16 +33,16 @@ Vocal Fit은 보컬 연습 녹음, 서버 기반 발성 분석, 피치 비교, �
 
 ### 문서 기준과 출처
 
-이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화, 2026-05-19 Batch #4 피드백/Cloudflare dev 실행 정리 반영 상태를 기준으로 작성했다.
+이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화, 2026-05-19 Batch #4 피드백/Cloudflare dev 실행 정리, Batch #5 구간훈련/pitch-guide/feedback video 정리 반영 상태를 기준으로 작성했다.
 
 | 기준 | 값 |
 |---|---|
 | GitHub repo | `kim-jeongwoo/graduation-project` |
-| 작업 branch | `codex/vocal-app-batch4-2026-05-19` |
+| 작업 branch | `codex/vocal-app-batch5-2026-05-19` |
 | base branch | `main` |
-| base commit | `12c2e66 Merge pull request #5 from kim-jeongwoo/codex/vocal-app-batch3-2026-05-18` |
+| base commit | `315d088 Merge pull request #6 from kim-jeongwoo/codex/vocal-app-batch4-2026-05-19` |
 | 앱 원본 작업 경로 | `/Users/kimjeongwoo/vocal-app` |
-| 포함 범위 | Batch #1 + Batch #2 + Batch #3 + Batch #4 검증 완료 앱 source/docs snapshot |
+| 포함 범위 | Batch #1 + Batch #2 + Batch #3 + Batch #4 + Batch #5 검증 완료 앱 source/docs snapshot |
 | 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak`, raw handover docs, `.codex/ACTIVE_PLAN.md` |
 
 ## 졸업작품 목표
@@ -298,8 +298,14 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 - 401 인증 만료 재로그인 UX
 - 9항목 평가표 텍스트 매핑 1차
 - Favorites/History/SongHistory/Record 빈 상태와 오류 UX 정리
+- song004 pitch-guide cache/parser/rendering 회귀 hotfix와 GO_BACK safe navigation
+- 목표관리 탭 제거 또는 숨김 처리
+- 5곡 production song asset 앱 검증 완료
+- 구간훈련 타이밍 보완
+- 구간훈련 피드백 영상 연결
+- `target_chunks` 미사용 확인 및 weakSections 기반 구간추천 구조 문서화
 
-## 5/10~5/18 진행 로그
+## 5/10~5/19 진행 로그
 
 | 날짜 | 진행 |
 |---|---|
@@ -311,19 +317,20 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 | 2026-05-18 | Batch #2 5/5 완료: navigation typing, 진단 로그 정책, SDK warning triage, 연구개/혀경직도 문구, V2 graph 색상 매핑 |
 | 2026-05-18 | Batch #3 5/5 완료: History/Favorites/Record UX, Karaoke MR cleanup/no_voice retry, 401 재로그인 UX, 9항목 설명 문구, 빈 상태/오류 UX |
 | 2026-05-19 | Batch #4 5/5 완료: 평가표 기반 피드백 문구, 구간훈련 피드백 동기화, 평가 기준 보기, 비활성 5항목 UX, Cloudflare dev tunnel 실행 script |
+| 2026-05-19 | Batch #5 5/5 완료: 004 pitch-guide 회귀 hotfix, 목표관리 탭 제거, 구간훈련 timing 보완, feedback video 연결, target_chunks 사용 여부 정리 |
 
 ## 현재 남은 검증 항목
 
 | 항목 | 분류 | 완료 기준 |
 |---|---|---|
-| song004 및 다른 곡 pitch-guide 수동 정렬 완료 후 재반영 | 앱/asset | 수동 정렬된 guide asset 기준 재검증 |
-| MR/LRC/pitch-guide 정합성 최종 검증 | 앱/asset | 여러 곡에서 청감/화면 timing 검증 |
+| 대표님 피드백 후 문구 수정 | 앱 UX/평가표 | 최종 피드백 기준 copy 재검토 |
+| 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
+| dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
+| target_chunks 서버 schema/endpoint/app 전환 여부 검토 | 앱/서버 계약 | 서버 production 반영과 앱 전환 기준 확정 |
+| pressure_balance 활성화 여부와 하압 영상 노출 여부 결정 | 앱/DML/UX | 비활성 항목 활성화 결정 후 노출 |
 | 공개 데이터/성별/음역대 기반 개인화 캘리브레이션 | 앱/DML | 입력 테스트와 분리해 마지막 단계에서 설계 |
 | 회원가입/설정 음역대 입력 | 앱 UX | 사용자 range 기반 설정 저장 |
 | 노래별 key 자동 조절 및 원키 선택 | 앱/asset | 사용자 음역대와 곡 key 매칭 |
-| 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
-| dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
-| 대표님 피드백 반영 후 문구 수정 | 앱 UX/평가표 | 최종 피드백 기준 copy 재검토 |
 | expo-av -> expo-audio migration | 앱 코드 정리 | Expo SDK 변화에 맞춰 대체 API 검토 |
 | NativeEventEmitter root cause library replacement or native patch | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
@@ -351,9 +358,11 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 
 2026-05-19 Batch #4 검증에서는 활성 4항목 결과 카드 문구, SectionList / TrainingScreen 구간별 피드백 문구, 사후측정 기능, 평가 기준 보기 문구, 비활성 5항목 참고용/측정 불가 UX, `npm run start:cf`와 `expo-dev.vocal-fit.com` dev tunnel 실행, 빨간 LogBox 없음이 확인되었다.
 
+2026-05-19 Batch #5 검증에서는 004 LRC/MR/회색 pitch-guide/user pitch/full analyze/result/구간훈련, no_voice/무음 Alert safe navigation, 목표관리 탭 제거, 004/006 구간훈련 target 끝 잘림 해결, 사후측정 성공, 성대접촉 미달 추천 영상 재생, `target_chunks` 미사용과 weakSections 기반 추천 구조가 확인되었다.
+
 현재 한계:
 
-- Batch #4 기준 source repo에서 `node_modules/.bin/tsc --noEmit`이 통과한다.
+- Batch #5 기준 source repo에서 `node_modules/.bin/tsc --noEmit`이 통과한다.
 - 이 문서는 서버/DML 최신 runtime을 직접 고정하지 않는다. server contract가 바뀌면 `vocal-server`와 `dml-server` 문서를 함께 확인해야 한다.
 - pitch-guide asset 정렬은 현 단계에서 종료했으며, 여러 곡 수동 정렬 완료 후 재개한다.
 

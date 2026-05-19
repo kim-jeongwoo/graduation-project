@@ -1,6 +1,13 @@
 import apiClient, { BASE_URL } from './client';
 import type { Song, LyricsData, PitchData } from '../types/api';
-import type { LyricLine, PitchGuide, ServerLrcLine, ServerPitchGuide } from '../types/karaoke';
+import type {
+  LyricLine,
+  PitchGuide,
+  ServerLrcLine,
+  ServerMidiSegment,
+  ServerPitchGuide,
+  ServerPitchPoint,
+} from '../types/karaoke';
 import { adaptLrc, adaptPitchGuide } from '../types/karaoke';
 import { SONG_LRC_OFFSETS } from '../constants/songLrcOffsets';
 
@@ -17,6 +24,79 @@ interface ServerSong {
 const PITCH_GUIDE_TIMEOUT_MS = 45000;
 const pitchGuideCache = new Map<string, ServerPitchGuide>();
 const pitchGuideRequests = new Map<string, Promise<ServerPitchGuide>>();
+const pitchGuideCacheVersions = new Map<string, number>();
+
+function finiteOr(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function optionalFinite(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeServerPitchGuide(payload: unknown): ServerPitchGuide {
+  const raw = payload as Record<string, unknown>;
+  const pointsRaw = Array.isArray(raw.points) ? raw.points : [];
+  const segmentsRaw =
+    Array.isArray(raw.midi_segments) ? raw.midi_segments
+      : Array.isArray(raw.midiSegments) ? raw.midiSegments
+        : [];
+
+  return {
+    song_id: String(raw.song_id ?? raw.songId ?? ''),
+    duration_sec: finiteOr(raw.duration_sec ?? raw.durationSec, 0),
+    frame_hz: finiteOr(raw.frame_hz ?? raw.frameHz, 100),
+    alignment_status: String(raw.alignment_status ?? raw.alignmentStatus ?? ''),
+    guide_source: typeof (raw.guide_source ?? raw.guideSource) === 'string'
+      ? String(raw.guide_source ?? raw.guideSource)
+      : undefined,
+    lrc_offset_sec: finiteOr(raw.lrc_offset_sec ?? raw.lrcOffsetSec, 0),
+    review_segments: Array.isArray(raw.review_segments) ? raw.review_segments
+      : Array.isArray(raw.reviewSegments) ? raw.reviewSegments
+        : [],
+    points: pointsRaw
+      .map((item) => {
+        const p = item as Record<string, unknown>;
+        const time = optionalFinite(p.time ?? p.time_sec ?? p.t);
+        if (time === null) return null;
+        const midi = optionalFinite(p.midi);
+        const freqHz = optionalFinite(p.freq_hz ?? p.freqHz ?? p.freq);
+        return {
+          time,
+          midi,
+          freq_hz: freqHz,
+          voiced: typeof p.voiced === 'boolean' ? p.voiced : midi !== null,
+          confidence: finiteOr(p.confidence ?? p.conf, 1),
+        };
+      })
+      .filter((p): p is ServerPitchPoint => p !== null),
+    midi_segments: segmentsRaw
+      .map((item) => {
+        const s = item as Record<string, unknown>;
+        const start = optionalFinite(s.start ?? s.start_sec);
+        const end = optionalFinite(s.end ?? s.end_sec);
+        const midi = optionalFinite(s.midi);
+        if (start === null || end === null || midi === null) return null;
+        return {
+          start,
+          end,
+          midi,
+          note_name: String(s.note_name ?? s.noteName ?? s.note ?? ''),
+        };
+      })
+      .filter((s): s is ServerMidiSegment => s !== null),
+  };
+}
+
+export function clearSongPitchGuideCache(songId: string): void {
+  const key = String(songId);
+  pitchGuideCache.delete(key);
+  pitchGuideRequests.delete(key);
+  pitchGuideCacheVersions.set(key, (pitchGuideCacheVersions.get(key) ?? 0) + 1);
+}
 
 async function getServerPitchGuide(songId: string): Promise<ServerPitchGuide> {
   const key = String(songId);
@@ -26,15 +106,21 @@ async function getServerPitchGuide(songId: string): Promise<ServerPitchGuide> {
   const inFlight = pitchGuideRequests.get(key);
   if (inFlight) return inFlight;
 
+  const requestVersion = pitchGuideCacheVersions.get(key) ?? 0;
   const request = apiClient.get<ServerPitchGuide>(`/songs/${key}/pitch-guide`, {
     timeout: PITCH_GUIDE_TIMEOUT_MS,
   })
     .then((res) => {
-      pitchGuideCache.set(key, res.data);
-      return res.data;
+      const guide = normalizeServerPitchGuide(res.data);
+      if ((pitchGuideCacheVersions.get(key) ?? 0) === requestVersion) {
+        pitchGuideCache.set(key, guide);
+      }
+      return guide;
     })
     .finally(() => {
-      pitchGuideRequests.delete(key);
+      if (pitchGuideRequests.get(key) === request) {
+        pitchGuideRequests.delete(key);
+      }
     });
   pitchGuideRequests.set(key, request);
   return request;

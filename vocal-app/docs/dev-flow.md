@@ -68,3 +68,13 @@ npm run start:tunnel
 | `npm run start:tunnel` | 다른 네트워크 (느림) |
 | `npm run start` | 기본 dev-client (IP 자동 감지) |
 | `npm run start:go` | Expo Go 모드 |
+
+## Batch #5 검증 메모
+
+- 5곡 production song asset 앱 검증 완료: 004, 006, 002, 014, 007.
+- 004 pitch-guide cache/parser/rendering 회귀 hotfix와 GO_BACK safe navigation 확인.
+- 목표관리 탭 제거 확인.
+- 004/006 구간훈련 초록 target 끝 잘림 해결, MR/pitch-guide/초록 target 정합성 확인.
+- 성대접촉 미달 구간에서 추천 영상 버튼/modal/재생 정상 확인.
+- 하압 영상은 `pressure_balance` 비활성 항목이라 노출 보류.
+- `target_chunks`는 현재 vocal-app 미사용이며, 구간추천은 `timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze` 흐름을 유지한다.

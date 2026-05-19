@@ -14,7 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
 import { useAuth } from '../../context/AuthContext';
 import { isAuthExpiredError } from '../../api/client';
-import { getSongKaraokeData, getSongKaraokeLyricsOnly, getSongMrUrl } from '../../api/songs';
+import { clearSongPitchGuideCache, getSongKaraokeData, getSongKaraokeLyricsOnly, getSongMrUrl } from '../../api/songs';
 import {
   AnalyzeStatusError,
   createSession,
@@ -147,9 +147,9 @@ function PitchGraph({ currentTime, guideSource, midiSegments, guidePoints, userP
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visibleGuide, currentTime],
   );
+  const shouldRenderMidiGuide = guideSource === 'midi' && visibleMidi.length > 0;
 
   const userPaths = useMemo(() => {
-    if (!visibleGuide.length) return [];
     return buildPaths(visibleUser, (p) => {
       const nearby = visibleGuide.reduce<PitchPoint | null>((best, g) => {
         if (!g.voiced || g.midi === null) return best;
@@ -183,7 +183,7 @@ function PitchGraph({ currentTime, guideSource, midiSegments, guidePoints, userP
     <View style={graphStyles.container}>
       <Svg width={GRAPH_W} height={GRAPH_H}>
         {/* 가이드라인: MIDI 직선 or CREPE 곡선 */}
-        {guideSource === 'midi' ? midiLines : guidePaths}
+        {shouldRenderMidiGuide ? midiLines : guidePaths}
         {userPaths}
         <Line x1={CURSOR_X} y1={0} x2={CURSOR_X} y2={GRAPH_H}
           stroke={COLORS.primary} strokeWidth={1.5} strokeDasharray="4,3" />
@@ -229,6 +229,12 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   const currentTimeRef = useRef(0);
   const startMrAndRecordRef = useRef<(() => void) | null>(null);
 
+  const safeGoBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }, [navigation]);
+
   const cleanupStartFailure = useCallback(async (sound?: Audio.Sound | null, recorderStarted = false) => {
     const s = sound ?? soundRef.current;
     if (s) {
@@ -258,13 +264,16 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         Alert.alert(
           '마이크 권한 필요',
           '녹음하려면 마이크 권한이 필요합니다.\n설정 > 앱 > 마이크 권한을 허용해주세요.',
-          [{ text: '확인', onPress: () => navigation.goBack() }],
+          [{ text: '확인', onPress: safeGoBack }],
         );
         return;
       }
 
       // 2. Required karaoke data: lyrics first, pitch-guide in background.
       try {
+        if (songId === '004') {
+          clearSongPitchGuideCache(songId);
+        }
         const lrc = await getSongKaraokeLyricsOnly(songId);
         if (cancelled) return;
         setLyrics(lrc);
@@ -296,7 +305,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         if (isAuthExpiredError(e)) return;
         console.error('[KaraokeScreen] load error:', e);
         Alert.alert('오류', '곡 데이터를 불러오지 못했습니다.', [
-          { text: '닫기', onPress: () => navigation.goBack() },
+          { text: '닫기', onPress: safeGoBack },
         ]);
       }
     })();
@@ -358,11 +367,11 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       console.error('[KaraokeScreen] startMrAndRecord error:', e);
       await cleanupStartFailure(sound, recorderStarted);
       Alert.alert('재생 시작 실패', 'MR 재생을 시작하지 못했습니다. 다시 시도해 주세요.', [
-        { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
+        { text: '닫기', style: 'cancel', onPress: safeGoBack },
         { text: '다시 시도', onPress: startCountdown },
       ]);
     }
-  }, [cleanupStartFailure, navigation, songId, startCountdown, token]);
+  }, [cleanupStartFailure, safeGoBack, songId, startCountdown, token]);
 
   useEffect(() => {
     startMrAndRecordRef.current = startMrAndRecord;
@@ -402,8 +411,8 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     const s = soundRef.current;
     if (s) await s.stopAsync();
     await recorderRef.current.cancel();
-    navigation.goBack();
-  }, [navigation]);
+    safeGoBack();
+  }, [safeGoBack]);
 
   const handleRetryRecording = useCallback(async () => {
     const snd = soundRef.current;
@@ -433,9 +442,9 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         text: '다시 녹음',
         onPress: () => { void handleRetryRecording(); },
       },
-      { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
+      { text: '닫기', style: 'cancel', onPress: safeGoBack },
     ]);
-  }, [handleRetryRecording, navigation]);
+  }, [handleRetryRecording, safeGoBack]);
 
   // ─── STOP → analyze → EvalResult ───
   const handleStop = useCallback(async () => {
@@ -511,20 +520,20 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         Alert.alert(
           '분석 진행 중',
           '분석이 계속 진행 중입니다. 잠시 후 히스토리에서 결과를 확인해주세요.',
-          [{ text: '확인', onPress: () => navigation.goBack() }],
+          [{ text: '확인', onPress: safeGoBack }],
         );
         return;
       }
       const msg = err instanceof Error ? err.message : '다시 시도해주세요.';
       Alert.alert('분석 실패', msg, [
         { text: '다시 시도', onPress: handleStop },
-        { text: '닫기', onPress: () => navigation.goBack() },
+        { text: '닫기', onPress: safeGoBack },
       ]);
     } finally {
       setIsAnalyzing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songId, navigation, showRetryRecordingAlert]);
+  }, [songId, navigation, safeGoBack, showRetryRecordingAlert]);
 
   // Navigate to EvalResult (KaraokeScreen is in AppRootStack, EvalResult is in HomeStack)
   const goToEvalResult = useCallback((runId: string) => {

@@ -20,12 +20,13 @@
 12. [Batch #2 완료 내용](#batch-2-완료-내용)
 13. [Batch #3 완료 내용](#batch-3-완료-내용)
 14. [Batch #4 완료 내용](#batch-4-완료-내용)
-15. [검증된 내용](#검증된-내용)
-16. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
-17. [Repository 구조](#repository-구조)
-18. [실행 방법](#실행-방법)
-19. [주의 사항](#주의-사항)
-20. [추가 문서](#추가-문서)
+15. [Batch #5 완료 내용](#batch-5-완료-내용)
+16. [검증된 내용](#검증된-내용)
+17. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
+18. [Repository 구조](#repository-구조)
+19. [실행 방법](#실행-방법)
+20. [주의 사항](#주의-사항)
+21. [추가 문서](#추가-문서)
 
 ## 프로젝트 한 줄 요약
 
@@ -84,7 +85,7 @@ EGG는 성대 접촉과 관련된 정보를 제공할 수 있는 신호지만, �
 
 현재 README에는 개인정보, 학생명, 계정명, 정확한 학원명, 대표자명은 포함하지 않는다. 확인되지 않은 정보는 문서에 쓰지 않고, 필요한 경우 추후 승인된 공개 범위 안에서 보강한다.
 
-2026년 5월 14일 이후에는 학원 통제 실험과 production API 기반 Galaxy 검증을 염두에 두고 앱 안정화 Batch #1을 마무리했다. 2026년 5월 18일에는 navigation typing, 진단 로그, SDK warning, 연구개/혀경직도 문구, V2 그래프 색상 매핑을 묶은 Batch #2를 5/5로 완료했고, 이어 History/Favorites/Record UX, Karaoke 실패 cleanup, 401 재로그인 UX, 9항목 설명 문구를 묶은 Batch #3도 5/5로 완료했다. 2026년 5월 19일에는 평가표 기반 피드백 문구, 구간훈련 피드백 동기화, 평가 기준 보기, 비활성 5항목 UX, Cloudflare dev tunnel 실행 스크립트를 묶은 Batch #4를 5/5로 완료했다.
+2026년 5월 14일 이후에는 학원 통제 실험과 production API 기반 Galaxy 검증을 염두에 두고 앱 안정화 Batch #1을 마무리했다. 2026년 5월 18일에는 navigation typing, 진단 로그, SDK warning, 연구개/혀경직도 문구, V2 그래프 색상 매핑을 묶은 Batch #2를 5/5로 완료했고, 이어 History/Favorites/Record UX, Karaoke 실패 cleanup, 401 재로그인 UX, 9항목 설명 문구를 묶은 Batch #3도 5/5로 완료했다. 2026년 5월 19일에는 평가표 기반 피드백 문구, 구간훈련 피드백 동기화, 평가 기준 보기, 비활성 5항목 UX, Cloudflare dev tunnel 실행 스크립트를 묶은 Batch #4를 5/5로 완료했다. 같은 날 Batch #5에서는 song004 pitch-guide 회귀 hotfix, 목표관리 탭 제거, 구간훈련 타이밍 보완, 구간훈련 피드백 영상 연결, `target_chunks` 미사용/weakSections 구조 정리를 5/5로 완료했다.
 
 ## 전체 시스템 구조
 
@@ -227,7 +228,7 @@ sequenceDiagram
 
 ## 현재 개발 단계
 
-현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #4 완료” 단계다.
+현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #5 완료” 단계다.
 
 - production API 기준 앱 진입과 로그인 가능
 - 곡 목록 로드 가능
@@ -245,7 +246,12 @@ sequenceDiagram
 - 401 인증 만료 시 재로그인 UX 반영
 - 9항목 결과 카드 설명/상태 문구 1차 반영
 - Settings 마이크 입력 테스트는 calibration 본기능이 아니라 supporting input test로 정리
-- pitch-guide 작업은 현 단계에서 종료, 팀원들이 여러 곡 수동 정렬 중
+- 5곡 production song asset 앱 검증 완료: 004, 006, 002, 014, 007
+- song004 pitch-guide cache/parser/rendering 회귀 hotfix와 GO_BACK safe navigation 확인
+- 목표관리 탭 제거 또는 숨김 처리 완료
+- 구간훈련 초록 target 끝 잘림 보완, MR/pitch-guide/target 정합성 확인
+- 구간훈련 피드백 영상 3개 압축 asset 연결. 하압 영상은 `pressure_balance` 비활성 항목이라 노출 보류
+- `target_chunks`는 현재 vocal-app에서 미사용이며, `timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze` 흐름 유지
 
 ## Batch #1 완료 내용
 
@@ -317,6 +323,24 @@ Batch #4는 평가표 기반 문구와 구간훈련 피드백 흐름을 맞추�
 5. Cloudflare dev tunnel 실행 스크립트 정리
    - `npm run start:cf`가 `expo-dev.vocal-fit.com` 기반 Expo dev-client를 8081 포트로 실행하도록 문서와 script를 정리.
 
+## Batch #5 완료 내용
+
+Batch #5는 5곡 production song asset 앱 검증 이후 발표/통제 실험용 앱 흐름을 안정화한 다섯 번째 묶음이다.
+
+1. 004 pitch-guide cache/parser/rendering 회귀 hotfix + GO_BACK safe navigation
+   - song004 회색 pitch-guide, user pitch, full analyze, result, 구간훈련 흐름을 복구하고, 무음 Alert 닫기에서 unhandled GO_BACK LogBox가 뜨지 않도록 정리.
+2. 목표관리 탭 제거 또는 숨김 처리
+   - 실험 앱 목적과 맞지 않는 목표관리 bottom tab을 제거하고 기존 기능 파일은 보존.
+3. 구간훈련 타이밍 보완
+   - 초록 target 구간이 한 소절 끝을 자르던 문제를 보완하고, 녹음 시작/끝 window와 `chunk_meta`를 선택 구간 기준으로 정렬.
+4. 구간훈련 피드백 영상 연결
+   - 성대접촉 미달/과함, 혀경직도 과함에 대한 압축 피드백 영상 3개 asset을 포함하고 TrainingScreen에서 indicator + zone 기준으로 노출.
+   - 하압 영상은 `pressure_balance` 비활성 항목이라 노출 보류.
+5. `target_chunks` 사용 여부 정리
+   - 현재 vocal-app은 `target_chunks`를 사용하지 않고 `timeline_scores` 기반 `weakSections`로 구간추천을 만든다.
+   - 현재 흐름은 `full analyze result -> timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze`다.
+   - `target_chunks`는 서버 schema/endpoint/app 전환 여부가 확정되면 별도 작업으로 검토한다.
+
 ## 검증된 내용
 
 정우 Galaxy 검증 기준:
@@ -355,6 +379,15 @@ Batch #4는 평가표 기반 문구와 구간훈련 피드백 흐름을 맞추�
 - 비활성 5항목 참고용/측정 불가 UX 확인
 - 비활성 5항목에서 `이 부분 연습하기` 버튼 없음 확인
 - `npm run start:cf` 실행, `expo-dev.vocal-fit.com` Metro URL, `/status` 응답 확인
+- 004 LRC/MR/회색 pitch-guide/user pitch/full analyze/result/구간훈련 정상 확인
+- 004 no_voice/무음 Alert 닫기에서 GO_BACK LogBox 없음 확인
+- 목표관리 탭 제거 확인
+- 004/006 구간훈련 초록 target 끝 잘림 해결 확인
+- MR/pitch-guide/초록 target 정합성 확인
+- 구간훈련 사후측정 성공 확인
+- 성대접촉 미달 구간에서 추천 영상 버튼/modal/재생 정상 확인
+- 하압 영상은 `pressure_balance` 비활성이라 노출 보류
+- `target_chunks`는 현재 vocal-app 미사용, weakSections 기반 구간추천 구조 유지
 
 개발 검증:
 
@@ -365,14 +398,14 @@ Batch #4는 평가표 기반 문구와 구간훈련 피드백 흐름을 맞추�
 
 | 항목 | 분류 | 메모 |
 |---|---|---|
-| song004 및 다른 곡 pitch-guide 수동 정렬 완료 후 재반영 | 앱/asset | 팀원 수동 정렬 완료 후 재개 |
-| MR/LRC/pitch-guide 정합성 최종 검증 | 앱/asset | 여러 곡에서 청감/화면 timing 검증 |
+| 대표님 피드백 후 문구 수정 | 앱 UX/평가표 | 최종 피드백 기준 copy 재검토 |
+| 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
+| dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
+| target_chunks 서버 schema/endpoint/app 전환 여부 검토 | 앱/서버 계약 | 서버 production 반영과 앱 전환 기준 확정 |
+| pressure_balance 활성화 여부와 하압 영상 노출 여부 결정 | 앱/DML/UX | 비활성 항목 활성화 결정 후 노출 |
 | 공개 데이터/성별/음역대 기반 개인화 캘리브레이션 | 앱/DML | 입력 테스트와 분리해 마지막 단계에서 설계 |
 | 회원가입/설정 음역대 입력 | 앱 UX | 사용자 range 기반 설정 저장 |
 | 노래별 key 자동 조절 및 원키 선택 | 앱/asset | 사용자 음역대와 곡 key 매칭 |
-| 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
-| dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |
-| 4/6~5/10 평가표 기준 추가 피드백 정교화 | 앱 UX/평가표 | 실제 평가표 기준 문구 보강 |
 | expo-av deprecated warning | 앱 코드 정리 | Expo SDK 변화에 맞춰 expo-audio migration 검토 |
 | NativeEventEmitter warning | 앱 코드 정리 | 원인 라이브러리 교체 또는 native patch 검토 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
