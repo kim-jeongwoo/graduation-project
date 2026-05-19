@@ -4,6 +4,22 @@
 
 ## 2026-05-19
 
+### Vocal App Release Prep
+
+- Android release 안전성을 위해 cleartext traffic을 `false`로 명시하고 app scheme을 `vocal-app`으로 추가했다.
+- EAS build profile에 `development` / `preview` / `production` environment를 명시했다.
+- `.easignore`를 추가해 실제 `.env*`, scratch docs, local/generated artifacts가 EAS upload에 섞이지 않도록 정리했다.
+- `.env.example`을 production-safe 예시로 정리하고, EAS production env 확인 절차를 문서화했다.
+- API client fallback에서 local IP / concrete ngrok URL을 제거하고 production API fallback만 남겼다.
+- EAS build와 submit은 실행하지 않았으며, version/versionCode bump와 submit profile은 release 직전 결정사항으로 남겼다.
+
+### Release Prep Validation
+
+- source repo 기준 `node_modules/.bin/tsc --noEmit` 통과.
+- `app.json`, `package.json`, `eas.json` JSON parse 확인.
+- secret/local IP/ngrok scan에서 실제 token, credential, concrete local IP, concrete ngrok URL이 없음을 확인.
+- 권장 release source는 dirty checkout이 아니라 GitHub main clean snapshot이다.
+
 ### Vocal App Training Batch #5
 
 - song004 pitch-guide cache/parser/rendering 회귀를 복구하고 Alert close 경로에 safe navigation을 적용했다.

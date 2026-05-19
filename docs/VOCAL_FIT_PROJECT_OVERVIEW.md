@@ -33,16 +33,16 @@ Vocal Fit은 보컬 연습 녹음, 서버 기반 발성 분석, 피치 비교, �
 
 ### 문서 기준과 출처
 
-이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화, 2026-05-19 Batch #4 피드백/Cloudflare dev 실행 정리, Batch #5 구간훈련/pitch-guide/feedback video 정리 반영 상태를 기준으로 작성했다.
+이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화, 2026-05-19 Batch #4 피드백/Cloudflare dev 실행 정리, Batch #5 구간훈련/pitch-guide/feedback video 정리, release-prep 설정 정리 반영 상태를 기준으로 작성했다.
 
 | 기준 | 값 |
 |---|---|
 | GitHub repo | `kim-jeongwoo/graduation-project` |
-| 작업 branch | `codex/vocal-app-batch5-2026-05-19` |
+| 작업 branch | `codex/vocal-app-release-prep-2026-05-19` |
 | base branch | `main` |
-| base commit | `315d088 Merge pull request #6 from kim-jeongwoo/codex/vocal-app-batch4-2026-05-19` |
+| base commit | `7cfc851 Merge pull request #7 from kim-jeongwoo/codex/vocal-app-batch5-2026-05-19` |
 | 앱 원본 작업 경로 | `/Users/kimjeongwoo/vocal-app` |
-| 포함 범위 | Batch #1 + Batch #2 + Batch #3 + Batch #4 + Batch #5 검증 완료 앱 source/docs snapshot |
+| 포함 범위 | Batch #1~#5 검증 완료 앱 source/docs snapshot + release-prep 설정 정리 |
 | 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak`, raw handover docs, `.codex/ACTIVE_PLAN.md` |
 
 ## 졸업작품 목표
@@ -318,6 +318,7 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 | 2026-05-18 | Batch #3 5/5 완료: History/Favorites/Record UX, Karaoke MR cleanup/no_voice retry, 401 재로그인 UX, 9항목 설명 문구, 빈 상태/오류 UX |
 | 2026-05-19 | Batch #4 5/5 완료: 평가표 기반 피드백 문구, 구간훈련 피드백 동기화, 평가 기준 보기, 비활성 5항목 UX, Cloudflare dev tunnel 실행 script |
 | 2026-05-19 | Batch #5 5/5 완료: 004 pitch-guide 회귀 hotfix, 목표관리 탭 제거, 구간훈련 timing 보완, feedback video 연결, target_chunks 사용 여부 정리 |
+| 2026-05-19 | Release prep 완료: Android cleartext false, app scheme, EAS environment profile, `.easignore`, production-safe `.env.example`, production API fallback only |
 
 ## 현재 남은 검증 항목
 
@@ -363,6 +364,7 @@ v2 필드가 없거나 null이어도 앱은 기존 v1 흐름을 깨지 않도록
 현재 한계:
 
 - Batch #5 기준 source repo에서 `node_modules/.bin/tsc --noEmit`이 통과한다.
+- Release prep 기준 EAS build/submit은 아직 실행하지 않았고, production env 확인과 version/versionCode 결정은 release 직전 checklist로 남아 있다.
 - 이 문서는 서버/DML 최신 runtime을 직접 고정하지 않는다. server contract가 바뀌면 `vocal-server`와 `dml-server` 문서를 함께 확인해야 한다.
 - pitch-guide asset 정렬은 현 단계에서 종료했으며, 여러 곡 수동 정렬 완료 후 재개한다.
 

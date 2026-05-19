@@ -30,7 +30,10 @@
 
 ## Production API switch checklist
 
-- Confirm the intended runtime API base before external validation. `EXPO_PUBLIC_API_URL`, if set, overrides `CURRENT_SERVER`.
+- Confirm the intended runtime API base before external validation. `EXPO_PUBLIC_API_URL`, if set to a non-empty value, overrides the production fallback.
+- Confirm EAS production environment before release build:
+  - `EXPO_PUBLIC_API_URL=https://api.vocal-fit.com`
+  - `EXPO_PUBLIC_USE_MOCK=false`
 - Confirm `https://api.vocal-fit.com` auth, sessions, songs, analysis results, and pitch-guide flows on Galaxy.
 - Confirm dml production integration separately: realtime WebSocket and vocal-server proxied analysis must point to the matching production stack.
 - Confirm timeout expectations separately:
@@ -39,4 +42,6 @@
   - `/analysis/{runId}` polling: result lookup path after full analysis starts.
 - Confirm production accepts current shared request headers, including `ngrok-skip-browser-warning`.
 - Confirm Android permissions and cleartext settings before representative / academy validation.
+- Confirm Android cleartext is disabled and app scheme is `vocal-app`.
 - Keep local/tunnel dev-client scripts as development-only tools; do not treat them as production API switch steps.
+- Run EAS build only after explicit approval from a clean GitHub main snapshot.

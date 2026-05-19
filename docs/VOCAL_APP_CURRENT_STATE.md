@@ -59,6 +59,8 @@
 - 성대접촉 미달 구간에서 추천 영상 버튼/modal/재생 정상 확인
 - 하압 영상은 `pressure_balance` 비활성이라 노출 보류
 - `target_chunks`는 현재 vocal-app 미사용, weakSections 기반 구간추천 구조 유지
+- release-prep 설정 정리 완료: Android cleartext false, scheme `vocal-app`, EAS profile environment 명시, `.easignore`, production-safe `.env.example`, production API fallback only
+- EAS build/submit은 아직 실행하지 않음
 
 ## 기술 스택
 
@@ -95,6 +97,7 @@
 - Batch #3 5/5 안정화 변경
 - Batch #4 5/5 피드백/평가 기준/비활성 카드/Cloudflare dev tunnel 실행 정리
 - Batch #5 5/5 pitch-guide 회귀 hotfix/목표관리 탭 제거/구간훈련 timing/feedback video/target_chunks 정리
+- Release prep 40~42: Android release 설정, EAS env policy, API fallback, upload exclude/checklist 정리
 - full analyze async polling UX
 - 구간훈련 녹음 window와 `chunk_meta` 정렬
 - production 완곡 업로드 timeout/UX 안정화
@@ -177,6 +180,8 @@ npm run start:cf
 | Batch #5 pitch-guide/timing/feedback video/target_chunks 정리 | 검증 완료 |
 | 5곡 production song asset 앱 검증 | 검증 완료 |
 | `node_modules/.bin/tsc --noEmit` | source repo 기준 통과 |
+| release-prep JSON parse | `app.json` / `package.json` / `eas.json` 통과 |
+| release-prep security scan | 실제 secret/local IP/concrete ngrok URL 없음 |
 
 ### 2026-05-13 Galaxy 검증 조건
 
@@ -217,6 +222,9 @@ npm run start:cf
 | expo-av -> expo-audio migration | 앱 코드 정리 | Expo SDK 변화에 맞춰 대체 API 검토 |
 | NativeEventEmitter root cause library replacement or native patch | 앱 코드 정리 | 원인 모듈 확인 후 warning 제거 |
 | production server auto-start/systemd 운영 정리 | 운영 | 서버 재시작/부팅 자동화 확인 |
+| EAS production env 확인 | release | `EXPO_PUBLIC_API_URL=https://api.vocal-fit.com`, `EXPO_PUBLIC_USE_MOCK=false` 확인 |
+| version/versionCode bump 여부 결정 | release | Play Store 업로드 이력 기준으로 release 직전 결정 |
+| EAS submit profile 필요 여부 결정 | release | `eas submit` 사용 여부 확정 후 추가 |
 
 ## 문서 보존/제외 정책
 
