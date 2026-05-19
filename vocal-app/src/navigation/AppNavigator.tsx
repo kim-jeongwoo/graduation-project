@@ -19,7 +19,6 @@ import HistoryScreen from '../screens/history/HistoryScreen';
 import HistoryDetailScreen from '../screens/history/HistoryDetailScreen';
 import FavoritesScreen from '../screens/history/FavoritesScreen';
 import SongHistoryScreen from '../screens/history/SongHistoryScreen';
-import GoalsScreen from '../screens/goals/GoalsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ProfileScreen from '../screens/settings/ProfileScreen';
 import VocalRangeTestScreen from '../screens/onboarding/VocalRangeTestScreen';
@@ -274,14 +273,6 @@ function MainTabNavigator() {
         options={{
           tabBarLabel: '히스토리',
           tabBarIcon: () => <TabIcon label="📊" />,
-        }}
-      />
-      <Tab.Screen
-        name="GoalsTab"
-        component={GoalsScreen}
-        options={{
-          tabBarLabel: '목표관리',
-          tabBarIcon: () => <TabIcon label="🎯" />,
         }}
       />
     </Tab.Navigator>

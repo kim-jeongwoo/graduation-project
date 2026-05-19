@@ -4,6 +4,32 @@
 
 ## 2026-05-19
 
+### Vocal App Training Batch #5
+
+- song004 pitch-guide cache/parser/rendering 회귀를 복구하고 Alert close 경로에 safe navigation을 적용했다.
+- 발표/통제 실험 목적에 맞게 목표관리 bottom tab을 제거 또는 숨김 처리했다.
+- 구간훈련 target timing을 보완해 초록 target 구간이 한 소절 끝을 자르던 문제를 정리했다.
+- 구간훈련 피드백 영상 3개 압축 asset을 포함하고, `indicatorKey + zone` 기준 추천 영상 modal을 연결했다.
+- `target_chunks`는 현재 vocal-app에서 미사용이며, 구간추천은 `timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze` 흐름을 유지한다고 문서화했다.
+
+### Batch #5 Validation
+
+- 004 LRC/MR/회색 pitch-guide/user pitch/full analyze/result/구간훈련 정상 확인.
+- 004 no_voice/무음 Alert 닫기에서 GO_BACK LogBox 없음 확인.
+- 목표관리 탭 제거 확인.
+- 004/006 구간훈련 초록 target 끝 잘림 해결, MR/pitch-guide/초록 target 정합성 확인.
+- 녹음 앞부분 씹힘 없음, 끝부분 과대기 없음, 구간훈련 사후측정 성공 확인.
+- 성대접촉 미달 구간에서 추천 영상 버튼/modal/재생 정상 확인.
+- 하압 영상은 `pressure_balance` 비활성이라 노출 보류.
+- source repo 기준 `node_modules/.bin/tsc --noEmit` 통과, 빨간 LogBox 없음 확인.
+
+### Batch #5 Notes
+
+- 이 PR은 Batch #5 반영용이며 main merge는 포함하지 않는다.
+- 원본 300MB+ 피드백 영상은 포함하지 않고, 압축된 3개 app asset만 포함한다.
+- `target_chunks` 앱 전환은 서버 schema/endpoint/production 반영 확인 후 별도 작업으로 분리한다.
+- 대표님 피드백 후 문구 수정, 연구개/혀경직도 의도 녹음 검증, score_mapper 분포 검증, pressure_balance 활성화 여부, 개인화 calibration, expo-av migration은 후속 backlog로 유지한다.
+
 ### Vocal App Feedback Batch #4
 
 - 활성 4항목 결과 카드에 평가표 기반 피드백 문구 1차를 반영했다.
