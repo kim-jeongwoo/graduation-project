@@ -2,6 +2,22 @@
 
 이 파일은 `graduation-project` monorepo의 주요 변경 이력을 기록한다.
 
+## 2026-05-21
+
+### Vocal App APK Feedback Hotfix
+
+- APK 피드백 기준으로 분석 중 이탈 후 이전 분석 완료가 새 녹음 화면을 강제 결과 화면으로 보내는 stale navigation race를 차단했다.
+- 분석 중 Android back/이탈에는 확인 Alert를 띄우고, 나가기를 선택하면 현재 analysis attempt만 무효화한다.
+- Android 하단 navigation bar와 겹치던 bottom tab을 숨기고, Home greeting 아래 top tab row로 Home / 분석 결과 / 히스토리 이동을 유지했다.
+- 녹음 중 실제 pause/resume UX를 추가하고, resume 시 어두운 배경 없는 3-2-1 countdown 후 MR/가사/피치가이드/currentTime/녹음을 이어가도록 정리했다.
+- pause segment PCM을 합친 WAV를 `file://` cache 파일로 저장해 기존 multipart upload 경로로 전달한다. React Native에서 실패하던 ArrayBuffer/Uint8Array 기반 Blob upload 경로는 제거했다.
+- cached WAV 파일 저장을 위해 `expo-file-system`을 추가했다.
+
+### Hotfix Validation
+
+- Galaxy dev-client에서 top tab 이동, pause/resume, pause 없음/1회/여러 회 후 종료 후 분석 성공, 결과 화면 이동, `no_voice` 다시 녹음, 분석 중 뒤로가기 guard, stale result navigation 미재현, 빨간 LogBox 없음 확인.
+- 이 PR 단계에서는 main merge와 EAS build/submit을 실행하지 않는다. merge 후 새 preview APK build와 재공유가 필요하다.
+
 ## 2026-05-19
 
 ### Vocal App Release Prep

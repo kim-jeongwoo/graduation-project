@@ -21,12 +21,13 @@
 13. [Batch #3 완료 내용](#batch-3-완료-내용)
 14. [Batch #4 완료 내용](#batch-4-완료-내용)
 15. [Batch #5 완료 내용](#batch-5-완료-내용)
-16. [검증된 내용](#검증된-내용)
-17. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
-18. [Repository 구조](#repository-구조)
-19. [실행 방법](#실행-방법)
-20. [주의 사항](#주의-사항)
-21. [추가 문서](#추가-문서)
+16. [APK 피드백 hotfix 45](#apk-피드백-hotfix-45)
+17. [검증된 내용](#검증된-내용)
+18. [남은 Backlog / Roadmap](#남은-backlog--roadmap)
+19. [Repository 구조](#repository-구조)
+20. [실행 방법](#실행-방법)
+21. [주의 사항](#주의-사항)
+22. [추가 문서](#추가-문서)
 
 ## 프로젝트 한 줄 요약
 
@@ -226,9 +227,15 @@ sequenceDiagram
 
 구간훈련에서는 사용자가 실제로 다시 부르는 target chunk와 녹음 window를 분리한다. Batch #1에서 이 정렬을 보강해 첫 음절이 씹히는 문제를 줄이고, 한 소절 정상 발성 success를 확인했다.
 
+## APK 피드백 hotfix 45
+
+Preview APK 공유 후 Galaxy 검증에서 확인된 UX와 upload 문제를 앱 hotfix로 반영했다. 하단 bottom tab은 Android navigation bar와 겹치지 않도록 top tab row로 이동했고, 분석 중 이탈/이전 polling 완료가 새 녹음 화면을 강제 결과 화면으로 보내는 race를 analysis attempt guard로 차단했다. 녹음 중 pause/resume은 MR, 가사, 피치가이드, currentTime, 녹음 segment를 함께 멈추고 재개하며, resume 시 어두운 배경 없는 3-2-1 countdown을 사용한다.
+
+paused recording segment는 최종 분석 전 cached WAV `file://` 파일로 저장해 기존 multipart upload 경로로 전달한다. React Native에서 실패하던 ArrayBuffer/Uint8Array 기반 Blob upload는 사용하지 않으며, 이를 위해 `expo-file-system`을 추가했다. Galaxy dev-client에서 pause 없음/1회/여러 회 후 분석 성공, 결과 화면 이동, no_voice retry, stale navigation 미재현, 빨간 LogBox 없음이 확인됐다.
+
 ## 현재 개발 단계
 
-현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #5 완료 + release-prep 설정 정리 완료” 단계다.
+현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #5 완료 + release-prep 설정 정리 완료 + APK 피드백 hotfix Galaxy 검증 완료” 단계다.
 
 - production API 기준 앱 진입과 로그인 가능
 - 곡 목록 로드 가능

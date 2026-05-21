@@ -15,6 +15,7 @@ import { formatDate } from '../../utils/labels';
 import type { Session } from '../../types/api';
 import { COLORS } from '../../utils/colors';
 import type { HistoryStackParamList } from '../../navigation/types';
+import MainTopTabs from '../../components/navigation/MainTopTabs';
 
 type Props = NativeStackScreenProps<HistoryStackParamList, 'HistoryList'>;
 
@@ -117,14 +118,6 @@ export default function HistoryScreen({ navigation }: Props) {
     );
   };
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
-
   const renderHeader = () => (
       <View style={styles.header}>
         <Text style={styles.headerTitle}>📊 히스토리</Text>
@@ -137,10 +130,23 @@ export default function HistoryScreen({ navigation }: Props) {
       </View>
   );
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        {renderHeader()}
+        <MainTopTabs activeTab="HistoryTab" />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </View>
+    );
+  }
+
   if (errorMsg) {
     return (
       <View style={styles.container}>
         {renderHeader()}
+        <MainTopTabs activeTab="HistoryTab" />
         <View style={styles.centered}>
           <Text style={styles.errorText}>{errorMsg}</Text>
           <Text style={styles.errorSubtext}>잠시 후 다시 시도해 주세요.</Text>
@@ -161,6 +167,7 @@ export default function HistoryScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       {renderHeader()}
+      <MainTopTabs activeTab="HistoryTab" />
 
       <FlatList
         data={folders}

@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getSongs } from '../../api/songs';
 import type { Song } from '../../types/api';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import MainTopTabs from '../../components/navigation/MainTopTabs';
 
 type Props = NativeStackScreenProps<Record<string, object | undefined>, string>;
 
@@ -76,6 +77,8 @@ export default function HomeScreen({ navigation }: Props) {
           <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
+
+      <MainTopTabs activeTab="HomeTab" />
 
       {/* ─── 곡 목록 ─── */}
       {loading ? (

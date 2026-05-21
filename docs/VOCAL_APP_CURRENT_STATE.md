@@ -1,6 +1,6 @@
 # Vocal App Current State
 
-작성 기준: 2026-05-19
+작성 기준: 2026-05-21
 앱 경로: `vocal-app/`
 원본 작업 경로: `/Users/kimjeongwoo/vocal-app`
 
@@ -10,6 +10,11 @@
 
 최근 Galaxy 검증 결과:
 
+- APK 피드백 hotfix Galaxy 검증 완료: top tab 이동, pause/resume, pause 없음/1회/여러 회 후 종료 후 분석 성공
+- 분석 중 뒤로가기 확인 Alert와 stale result navigation guard 유지 확인
+- 하단 bottom tab 제거 후 Home greeting 아래 top tab row 배치 확인
+- pause segment WAV를 `file://` cache 파일로 저장해 upload/full analyze/result 이동 확인
+- React Native Blob(ArrayBuffer/Uint8Array) upload 오류 수정 확인
 - production API 기준 앱 진입, 로그인, 곡 목록 로드 확인
 - song004 KaraokeScreen 진입, MR 재생, 가사 표시, 녹음 확인
 - 완곡 업로드와 full analyze async polling 성공
@@ -98,6 +103,7 @@
 - Batch #4 5/5 피드백/평가 기준/비활성 카드/Cloudflare dev tunnel 실행 정리
 - Batch #5 5/5 pitch-guide 회귀 hotfix/목표관리 탭 제거/구간훈련 timing/feedback video/target_chunks 정리
 - Release prep 40~42: Android release 설정, EAS env policy, API fallback, upload exclude/checklist 정리
+- APK feedback hotfix 45: stale analysis navigation guard, top tab row, pause/resume, cached WAV upload
 - full analyze async polling UX
 - 구간훈련 녹음 window와 `chunk_meta` 정렬
 - production 완곡 업로드 timeout/UX 안정화
@@ -179,6 +185,8 @@ npm run start:cf
 | Cloudflare dev tunnel `start:cf` | 검증 완료 |
 | Batch #5 pitch-guide/timing/feedback video/target_chunks 정리 | 검증 완료 |
 | 5곡 production song asset 앱 검증 | 검증 완료 |
+| APK feedback hotfix top tab / pause-resume / stale guard | Galaxy dev-client 검증 완료 |
+| pause segment cached WAV upload | pause 없음/1회/여러 회 분석 성공 확인 |
 | `node_modules/.bin/tsc --noEmit` | source repo 기준 통과 |
 | release-prep JSON parse | `app.json` / `package.json` / `eas.json` 통과 |
 | release-prep security scan | 실제 secret/local IP/concrete ngrok URL 없음 |
@@ -211,6 +219,11 @@ npm run start:cf
 
 | 항목 | 분류 | 완료 기준 |
 |---|---|---|
+| hotfix PR merge 후 새 preview APK build | release | 수정 APK 재공유 전 preview build 생성 |
+| 수정 APK 재공유 및 추가 피드백 반영 | 검증/운영 | 교수님/대표님/테스터 재확인 |
+| Play Store용 production AAB 여부 결정 | release | 제출 방식과 versionCode bump 결정 |
+| expo-av -> expo-audio migration | 앱 기술부채 | Expo audio migration 별도 설계 |
+| NativeEventEmitter root cause | 앱 기술부채 | warning filter가 아닌 원인 library replacement 검토 |
 | 대표님 피드백 반영 후 문구 수정 | 앱 UX/평가표 | 최종 피드백 기준 copy 재검토 |
 | 연구개/혀경직도 미달/과함 의도 녹음 검증 | 앱/DML | 의도 녹음으로 score_mapper 분포 확인 |
 | dml-server score_mapper 분포 검증 | DML | 연구개/혀경직도 2~3 쏠림 여부 검토 |

@@ -79,6 +79,13 @@ npm run start:tunnel
 - 하압 영상은 `pressure_balance` 비활성 항목이라 노출 보류.
 - `target_chunks`는 현재 vocal-app 미사용이며, 구간추천은 `timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze` 흐름을 유지한다.
 
+## APK feedback hotfix 검증 메모
+
+- 45번 hotfix는 Galaxy dev-client에서 top tab 이동, pause/resume, pause 없음/1회/여러 회 후 종료 후 분석 성공을 확인했습니다.
+- 분석 중 뒤로가기 guard와 stale result navigation 방지가 유지됩니다.
+- pause segment upload는 cached WAV `file://` 경로를 사용하며 ArrayBuffer Blob upload를 사용하지 않습니다.
+- PR merge 후에는 새 preview APK build를 생성해 수정 APK를 재공유해야 합니다.
+
 ## Android release 전 확인
 
 - build-time env는 `EXPO_PUBLIC_API_URL=https://api.vocal-fit.com`, `EXPO_PUBLIC_USE_MOCK=false` 기준으로 확인합니다.
