@@ -3,6 +3,7 @@ import { ActivityIndicator, View, Text } from 'react-native';
 import { NavigationContainer, CommonActions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useVocalProfile } from '../context/VocalProfileContext';
 import { COLORS } from '../utils/colors';
@@ -216,12 +217,7 @@ function MainTabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          paddingBottom: 6,
-          height: 60,
-          backgroundColor: COLORS.card,
-          borderTopColor: COLORS.cardBorder,
-        },
+        tabBarStyle: { display: 'none' },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
@@ -313,12 +309,14 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      {!token ? (
-        <AuthNavigator />
-      ) : (
-        <AppRootNavigator />
-      )}
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        {!token ? (
+          <AuthNavigator />
+        ) : (
+          <AppRootNavigator />
+        )}
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

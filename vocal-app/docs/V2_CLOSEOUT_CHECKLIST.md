@@ -14,6 +14,15 @@
 - Kept full-song `/analyze` timeout handling separate from `training-analyze` timeout handling.
 - Added app-side fallback so `training-analyze` can read V2-only `scores_v2` / `scores_meta` when legacy `scores` is absent.
 
+## APK feedback hotfix 45
+
+- Analysis attempt guard prevents stale polling completion from navigating over a newer recording session.
+- Analysis-in-progress back navigation shows a confirmation alert and invalidates only the current attempt when leaving.
+- Main tabs are rendered as a top tab row on top-level screens instead of the Android bottom navigation area.
+- Recording supports pause/resume with MR, lyrics, pitch guide, currentTime, and user pitch frozen during pause.
+- Resume countdown is a no-dim 3-2-1 overlay so the singer can see the current lyrics/guide position.
+- Paused PCM segments are written to a cached WAV `file://` output via `expo-file-system`; ArrayBuffer Blob upload is not used.
+
 ## Backlog, not for task 11
 
 - 대표님 피드백 후 문구 수정.
