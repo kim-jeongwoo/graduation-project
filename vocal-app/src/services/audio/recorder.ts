@@ -1,6 +1,9 @@
 import AudioRecord from 'react-native-audio-record';
-import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
+import {
+  prepareAudioForPlaybackOnly,
+  prepareAudioForRecordAndPlayback,
+} from './audioMode';
 
 // react-native-audio-record uses Android AudioRecord API → true 16-bit PCM WAV
 // (expo-av Android MediaRecorder cannot produce PCM; this library can)
@@ -143,10 +146,7 @@ export class VocalRecorder {
     }
     this.capturePcm = options.capturePcm ?? false;
     this.chunkCallback = onChunk ?? null;
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
+    await prepareAudioForRecordAndPlayback();
     if (!this.initialized) {
       AudioRecord.init({
         ...INIT_OPTIONS,
@@ -184,7 +184,7 @@ export class VocalRecorder {
     }
     this.capturePcm = false;
     this.resetCapturedPcm();
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+    try { await prepareAudioForPlaybackOnly(); } catch {}
     return {
       uri,
       fileName: shouldWriteCapturedWav ? 'recording-paused.wav' : 'recording.wav',
@@ -201,7 +201,7 @@ export class VocalRecorder {
       if (this.capturePcm) {
         this.pausedSegmentCount += 1;
       }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      try { await prepareAudioForPlaybackOnly(); } catch {}
     }
   }
 
@@ -217,7 +217,7 @@ export class VocalRecorder {
     this.initialized = false;
     this.capturePcm = false;
     this.resetCapturedPcm();
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+    try { await prepareAudioForPlaybackOnly(); } catch {}
   }
 
   get active(): boolean {

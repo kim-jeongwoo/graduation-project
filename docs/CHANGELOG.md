@@ -2,6 +2,21 @@
 
 이 파일은 `graduation-project` monorepo의 주요 변경 이력을 기록한다.
 
+## 2026-05-22
+
+### Vocal App Audio Focus Follow-up Hotfix
+
+- 대표님 기기에서 확인된 Karaoke MR start failure를 보강했다. MR remote stream 직접 load에 실패할 수 있는 경로를 줄이기 위해 `expo-file-system` cacheDirectory local cache fallback을 추가하고, MR download / load / play / recorder-start stage를 분리했다.
+- TrainingScreen에서 Galaxy dev-client로 확인된 `AudioFocusNotAcquiredException`에 대응했다. 구간훈련 MR 시작 전 AppState active, screen focus, record+playback audio mode를 확인하고 background 상태에서는 audio start를 시도하지 않는다.
+- 추천 영상 modal playback을 보강했다. `Video`를 modal visible 상태에서만 mount하고, native controls만 의존하지 않도록 custom play/pause 버튼에서 `playAsync()` / `pauseAsync()`를 직접 호출한다.
+- expected TrainingScreen audio focus failure는 빨간 LogBox를 만들지 않고 사용자 Alert로만 안내한다.
+
+### Hotfix Validation
+
+- Galaxy dev-client에서 TrainingScreen MR 시작, 녹음 시작, pause/resume, 구간 종료 후 분석, 추천 영상 열기/재생/닫기, 영상 닫은 뒤 MR 재시작을 확인했다.
+- KaraokeScreen MR 시작, pause/resume, full analyze 유지와 빨간 LogBox 없음도 확인했다.
+- 이 PR 단계에서는 main merge와 EAS build/submit을 실행하지 않는다. merge 후 새 preview APK build와 대표님 수정 APK 링크 재공유가 필요하다.
+
 ## 2026-05-21
 
 ### Vocal App APK Feedback Hotfix

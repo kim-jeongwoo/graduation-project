@@ -135,6 +135,13 @@ import type { MidiSegment, PitchPoint } from '../../types/karaoke';
 import { getSongMidiSegmentsOptional, getSongMrUrl } from '../../api/songs';
 import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
 import { VocalRecorder } from '../../services/audio/recorder';
+import {
+  isAudioFocusNotAcquiredError,
+  isAudioStartBlockedError,
+  prepareAudioForPlaybackOnly,
+  prepareAudioForRecordAndPlayback,
+  waitForAppActive,
+} from '../../services/audio/audioMode';
 import { detectPitch } from '../../services/audio/pitchDetector';
 import { requestMicrophonePermission } from '../../services/audio/microphone';
 import { useAuth } from '../../context/AuthContext';
@@ -240,7 +247,7 @@ type Props = NativeStackScreenProps<
   'Training'
 >;
 
-export default function TrainingScreen({ route }: Props) {
+export default function TrainingScreen({ route, navigation }: Props) {
   const {
     indicatorKey, runId, songId, sessionId, chunkIndex,
     sectionStartSec, sectionEndSec,
@@ -284,6 +291,7 @@ export default function TrainingScreen({ route }: Props) {
   const [afterLowConfidence, setAfterLowConfidence] = useState(false);
   const [feedbackVideoVisible, setFeedbackVideoVisible] = useState(false);
   const [feedbackVideoError, setFeedbackVideoError] = useState<string | null>(null);
+  const [feedbackVideoPlaying, setFeedbackVideoPlaying] = useState(false);
 
   const serverIndicatorKey = SERVER_INDICATOR_KEY[indicatorKey];
   const beforeLowConfidence = lowConfidenceItems?.includes(serverIndicatorKey) ?? false;
@@ -300,6 +308,7 @@ export default function TrainingScreen({ route }: Props) {
   const soundRef       = useRef<Audio.Sound | null>(null);
   const feedbackVideoRef = useRef<Video | null>(null);
   const recorderRef    = useRef(new VocalRecorder());
+  const focusedRef     = useRef(false);
   const currentTimeRef = useRef(sectionStartSec);  // master time
   const stoppedRef     = useRef(false);
   const recordingStartedRef = useRef(false);
@@ -427,18 +436,84 @@ export default function TrainingScreen({ route }: Props) {
   const closeFeedbackVideo = useCallback(async () => {
     setFeedbackVideoVisible(false);
     setFeedbackVideoError(null);
+    setFeedbackVideoPlaying(false);
     const video = feedbackVideoRef.current;
-    feedbackVideoRef.current = null;
     if (!video) return;
     try { await video.stopAsync(); } catch {}
-    try { await video.unloadAsync(); } catch {}
   }, []);
 
-  const openFeedbackVideo = useCallback(() => {
+  useEffect(() => {
+    focusedRef.current = navigation.isFocused();
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      focusedRef.current = true;
+    });
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      focusedRef.current = false;
+      void closeFeedbackVideo();
+    });
+    return () => {
+      focusedRef.current = false;
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [closeFeedbackVideo, navigation]);
+
+  const showAudioInactiveAlert = useCallback(() => {
+    Alert.alert('훈련 시작 실패', '앱이 활성화된 뒤 다시 시도해 주세요.');
+  }, []);
+
+  const isScreenAudioReady = useCallback(async () => {
+    if (!focusedRef.current || !navigation.isFocused()) {
+      showAudioInactiveAlert();
+      return false;
+    }
+    const active = await waitForAppActive();
+    if (!active || !focusedRef.current || !navigation.isFocused()) {
+      showAudioInactiveAlert();
+      return false;
+    }
+    return true;
+  }, [navigation, showAudioInactiveAlert]);
+
+  const openFeedbackVideo = useCallback(async () => {
     if (!feedbackVideo || blocksFeedbackVideo) return;
-    setFeedbackVideoError(null);
-    setFeedbackVideoVisible(true);
-  }, [blocksFeedbackVideo, feedbackVideo]);
+    if (!await isScreenAudioReady()) return;
+    try {
+      await prepareAudioForPlaybackOnly();
+      setFeedbackVideoError(null);
+      setFeedbackVideoPlaying(false);
+      setFeedbackVideoVisible(true);
+    } catch (e) {
+      if (isAudioStartBlockedError(e) || isAudioFocusNotAcquiredError(e)) {
+        showAudioInactiveAlert();
+        return;
+      }
+      Alert.alert('영상 재생 실패', '추천 영상을 재생하지 못했습니다. 다시 열어 주세요.');
+    }
+  }, [blocksFeedbackVideo, feedbackVideo, isScreenAudioReady, showAudioInactiveAlert]);
+
+  const playFeedbackVideo = useCallback(async () => {
+    const video = feedbackVideoRef.current;
+    if (!video) return;
+    if (!await isScreenAudioReady()) return;
+    try {
+      await prepareAudioForPlaybackOnly();
+      await video.playAsync();
+      setFeedbackVideoPlaying(true);
+      setFeedbackVideoError(null);
+    } catch {
+      setFeedbackVideoPlaying(false);
+      setFeedbackVideoError('playback');
+      Alert.alert('영상 재생 실패', '추천 영상을 재생하지 못했습니다. 다시 열어 주세요.');
+    }
+  }, [isScreenAudioReady]);
+
+  const pauseFeedbackVideo = useCallback(async () => {
+    const video = feedbackVideoRef.current;
+    if (!video) return;
+    try { await video.pauseAsync(); } catch {}
+    setFeedbackVideoPlaying(false);
+  }, []);
 
   useEffect(() => {
     if (feedbackVideoVisible && blocksFeedbackVideo) {
@@ -560,9 +635,11 @@ export default function TrainingScreen({ route }: Props) {
   // ─── MR + recorder 시작 ───
   const startMrAndRecord = useCallback(async () => {
     if (!songId) return;
-    const granted = await requestMicrophonePermission();
-    if (!granted) {
-      Alert.alert('마이크 권한 필요', '마이크 권한이 필요합니다. 설정에서 마이크 권한을 허용해 주세요.');
+    if (feedbackVideoVisible) {
+      showAudioInactiveAlert();
+      return;
+    }
+    if (!await isScreenAudioReady()) {
       setStatus('idle');
       setPitchLiveStatus('idle');
       return;
@@ -580,6 +657,20 @@ export default function TrainingScreen({ route }: Props) {
     setVoiceInputStatus('leadIn');
     setMicLevel(0);
     try {
+      const granted = await requestMicrophonePermission();
+      if (!granted) {
+        Alert.alert('마이크 권한 필요', '마이크 권한이 필요합니다. 설정에서 마이크 권한을 허용해 주세요.');
+        setStatus('idle');
+        setPitchLiveStatus('idle');
+        return;
+      }
+      await prepareAudioForRecordAndPlayback();
+      if (!focusedRef.current || !navigation.isFocused()) {
+        showAudioInactiveAlert();
+        setStatus('idle');
+        setPitchLiveStatus('idle');
+        return;
+      }
       await disposeSound(undefined, 'start-replace');
       if (stoppedRef.current || attemptIdRef.current !== attemptId) return;
 
@@ -712,7 +803,6 @@ export default function TrainingScreen({ route }: Props) {
           setStatus('recording');
         } catch (e) {
           recordingStartPendingRef.current = false;
-          console.error('[TrainingScreen] recorder.start error:', e);
           Alert.alert('훈련 시작 실패', '녹음을 시작할 수 없습니다. 마이크 상태를 확인해 주세요.');
           await stopTargetRecording('recording-start-failure');
         }
@@ -758,8 +848,11 @@ export default function TrainingScreen({ route }: Props) {
         return;
       }
     } catch (e) {
-      console.error('[TrainingScreen] startMrAndRecord error:', e);
-      Alert.alert('훈련 시작 실패', '반주 또는 녹음을 시작할 수 없습니다. 마이크 상태를 확인해 주세요.');
+      if (isAudioStartBlockedError(e) || isAudioFocusNotAcquiredError(e)) {
+        showAudioInactiveAlert();
+      } else {
+        Alert.alert('훈련 시작 실패', '반주 또는 녹음을 시작할 수 없습니다. 마이크 상태를 확인해 주세요.');
+      }
       stoppedRef.current = true;
       try { await recorderRef.current.cancel(); } catch {}
       recordingStartedRef.current = false;
@@ -789,6 +882,10 @@ export default function TrainingScreen({ route }: Props) {
     disposeSound,
     midiSegments,
     chunkInfo,
+    feedbackVideoVisible,
+    isScreenAudioReady,
+    navigation,
+    showAudioInactiveAlert,
   ]);
 
   const performTrainingAnalyze = useCallback(async () => {
@@ -1239,19 +1336,33 @@ export default function TrainingScreen({ route }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{feedbackVideo?.label}</Text>
-            {feedbackVideo && (
+            {feedbackVideoVisible && feedbackVideo && (
               <Video
+                key={`${indicatorKey}-${currentFeedbackZone}`}
                 ref={feedbackVideoRef}
                 source={feedbackVideo.source}
                 style={styles.feedbackVideo}
                 resizeMode={ResizeMode.CONTAIN}
                 useNativeControls
-                shouldPlay
-                onError={(error) => setFeedbackVideoError(error)}
+                shouldPlay={false}
+                onPlaybackStatusUpdate={(playbackStatus) => {
+                  if (playbackStatus.isLoaded) {
+                    setFeedbackVideoPlaying(playbackStatus.isPlaying);
+                  }
+                }}
+                onError={() => setFeedbackVideoError('load')}
               />
             )}
             {feedbackVideoError && (
               <Text style={styles.videoErrorText}>영상을 불러오지 못했습니다.</Text>
+            )}
+            {feedbackVideo && (
+              <TouchableOpacity
+                style={styles.videoPlayBtn}
+                onPress={feedbackVideoPlaying ? pauseFeedbackVideo : playFeedbackVideo}
+              >
+                <Text style={styles.videoPlayText}>{feedbackVideoPlaying ? '일시정지' : '재생'}</Text>
+              </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.modalCloseBtn} onPress={closeFeedbackVideo}>
               <Text style={styles.modalCloseText}>닫기</Text>
@@ -1292,6 +1403,8 @@ const styles = StyleSheet.create({
   modalTitle:       { ...TYPOGRAPHY.body, color: COLORS.textPrimary, fontWeight: '700', marginBottom: SPACING.sm, textAlign: 'center' },
   feedbackVideo:    { width: '100%', aspectRatio: 9 / 16, backgroundColor: '#000000', borderRadius: 8 },
   videoErrorText:   { ...TYPOGRAPHY.caption, color: COLORS.danger, textAlign: 'center', marginTop: SPACING.sm },
+  videoPlayBtn:     { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: SPACING.sm, alignItems: 'center', marginTop: SPACING.sm },
+  videoPlayText:    { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700' },
   modalCloseBtn:    { backgroundColor: COLORS.primary, borderRadius: 10, padding: SPACING.base, alignItems: 'center', marginTop: SPACING.base },
   modalCloseText:   { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700' },
 });

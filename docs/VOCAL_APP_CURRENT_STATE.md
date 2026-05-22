@@ -1,6 +1,6 @@
 # Vocal App Current State
 
-작성 기준: 2026-05-21
+작성 기준: 2026-05-22
 앱 경로: `vocal-app/`
 원본 작업 경로: `/Users/kimjeongwoo/vocal-app`
 
@@ -11,6 +11,10 @@
 최근 Galaxy 검증 결과:
 
 - APK 피드백 hotfix Galaxy 검증 완료: top tab 이동, pause/resume, pause 없음/1회/여러 회 후 종료 후 분석 성공
+- APK follow-up hotfix 47/48 Galaxy 검증 완료: Karaoke MR start failure hardening, TrainingScreen audio focus guard, feedback video playback fix
+- 대표님 기기 MR start failure 대응: MR local cache fallback, MR download/load/play/recorder-start stage 분리
+- TrainingScreen `AudioFocusNotAcquiredException` 대응: AppState/focus/audio mode guard, expected audio focus LogBox 제거
+- 추천 영상 modal: visible-only `Video` mount, custom play/pause, 영상 닫은 뒤 구간훈련 MR 재시작 확인
 - 분석 중 뒤로가기 확인 Alert와 stale result navigation guard 유지 확인
 - 하단 bottom tab 제거 후 Home greeting 아래 top tab row 배치 확인
 - pause segment WAV를 `file://` cache 파일로 저장해 upload/full analyze/result 이동 확인
@@ -104,6 +108,8 @@
 - Batch #5 5/5 pitch-guide 회귀 hotfix/목표관리 탭 제거/구간훈련 timing/feedback video/target_chunks 정리
 - Release prep 40~42: Android release 설정, EAS env policy, API fallback, upload exclude/checklist 정리
 - APK feedback hotfix 45: stale analysis navigation guard, top tab row, pause/resume, cached WAV upload
+- APK follow-up hotfix 47: Karaoke MR local cache fallback, start order hardening, stage-specific MR/recorder failure handling
+- APK follow-up hotfix 48: TrainingScreen AppState/focus/audio mode guard, feedback video playback fix, expected audio focus LogBox suppression
 - full analyze async polling UX
 - 구간훈련 녹음 window와 `chunk_meta` 정렬
 - production 완곡 업로드 timeout/UX 안정화
@@ -187,6 +193,9 @@ npm run start:cf
 | 5곡 production song asset 앱 검증 | 검증 완료 |
 | APK feedback hotfix top tab / pause-resume / stale guard | Galaxy dev-client 검증 완료 |
 | pause segment cached WAV upload | pause 없음/1회/여러 회 분석 성공 확인 |
+| Karaoke MR start failure hardening | Galaxy dev-client 검증 완료 |
+| TrainingScreen audio focus guard | Galaxy dev-client 검증 완료 |
+| feedback video modal playback fix | Galaxy dev-client 검증 완료 |
 | `node_modules/.bin/tsc --noEmit` | source repo 기준 통과 |
 | release-prep JSON parse | `app.json` / `package.json` / `eas.json` 통과 |
 | release-prep security scan | 실제 secret/local IP/concrete ngrok URL 없음 |
@@ -221,6 +230,7 @@ npm run start:cf
 |---|---|---|
 | hotfix PR merge 후 새 preview APK build | release | 수정 APK 재공유 전 preview build 생성 |
 | 수정 APK 재공유 및 추가 피드백 반영 | 검증/운영 | 교수님/대표님/테스터 재확인 |
+| PR merge 후 47/48 포함 APK 재공유 | release | 대표님 기기 audio focus 수정본 재검증 |
 | Play Store용 production AAB 여부 결정 | release | 제출 방식과 versionCode bump 결정 |
 | expo-av -> expo-audio migration | 앱 기술부채 | Expo audio migration 별도 설계 |
 | NativeEventEmitter root cause | 앱 기술부채 | warning filter가 아닌 원인 library replacement 검토 |

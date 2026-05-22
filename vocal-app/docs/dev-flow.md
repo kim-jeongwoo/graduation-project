@@ -69,25 +69,9 @@ npm run start:tunnel
 | `npm run start` | 기본 dev-client (IP 자동 감지) |
 | `npm run start:go` | Expo Go 모드 |
 
-## Batch #5 검증 메모
-
-- 5곡 production song asset 앱 검증 완료: 004, 006, 002, 014, 007.
-- 004 pitch-guide cache/parser/rendering 회귀 hotfix와 GO_BACK safe navigation 확인.
-- 목표관리 탭 제거 확인.
-- 004/006 구간훈련 초록 target 끝 잘림 해결, MR/pitch-guide/초록 target 정합성 확인.
-- 성대접촉 미달 구간에서 추천 영상 버튼/modal/재생 정상 확인.
-- 하압 영상은 `pressure_balance` 비활성 항목이라 노출 보류.
-- `target_chunks`는 현재 vocal-app 미사용이며, 구간추천은 `timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze` 흐름을 유지한다.
-
-## APK feedback hotfix 검증 메모
-
-- 45번 hotfix는 Galaxy dev-client에서 top tab 이동, pause/resume, pause 없음/1회/여러 회 후 종료 후 분석 성공을 확인했습니다.
-- 분석 중 뒤로가기 guard와 stale result navigation 방지가 유지됩니다.
-- pause segment upload는 cached WAV `file://` 경로를 사용하며 ArrayBuffer Blob upload를 사용하지 않습니다.
-- PR merge 후에는 새 preview APK build를 생성해 수정 APK를 재공유해야 합니다.
-
 ## Android release 전 확인
 
+- 47/48 audio focus follow-up PR merge 후에는 새 preview APK build가 필요합니다. PR 생성/검토 단계에서는 EAS build/submit을 실행하지 않습니다.
 - build-time env는 `EXPO_PUBLIC_API_URL=https://api.vocal-fit.com`, `EXPO_PUBLIC_USE_MOCK=false` 기준으로 확인합니다.
 - `eas.json` build profile은 EAS environment를 명시합니다: development=`development`, preview=`preview`, production=`production`.
 - release build 전 Expo dashboard의 project Environment Variables 또는 EAS CLI로 production environment 값을 확인합니다.
