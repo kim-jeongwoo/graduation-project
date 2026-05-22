@@ -233,9 +233,20 @@ Preview APK 공유 후 Galaxy 검증에서 확인된 UX와 upload 문제를 앱 
 
 paused recording segment는 최종 분석 전 cached WAV `file://` 파일로 저장해 기존 multipart upload 경로로 전달한다. React Native에서 실패하던 ArrayBuffer/Uint8Array 기반 Blob upload는 사용하지 않으며, 이를 위해 `expo-file-system`을 추가했다. Galaxy dev-client에서 pause 없음/1회/여러 회 후 분석 성공, 결과 화면 이동, no_voice retry, stale navigation 미재현, 빨간 LogBox 없음이 확인됐다.
 
+## APK follow-up hotfix 47/48
+
+PR #9 이후 Galaxy dev-client에서 확인된 audio focus / media playback 문제를 app-only hotfix로 보강했다.
+
+- 47: 대표님 기기 Karaoke MR start failure 대응. MR local cache fallback을 추가하고 MR download/load/play/recorder-start stage를 분리했다.
+- 48: TrainingScreen `AudioFocusNotAcquiredException` 대응. AppState active, screen focus, record+playback audio mode를 구간훈련 시작 전 확인한다.
+- 추천 영상 modal은 visible 상태에서만 `Video`를 mount하고, custom play/pause 버튼으로 `playAsync()` / `pauseAsync()`를 직접 호출한다.
+- expected TrainingScreen audio focus failure는 빨간 LogBox 대신 사용자 Alert로 안내한다.
+
+Galaxy 검증에서 TrainingScreen MR 시작, 녹음 시작, pause/resume, 구간 종료 후 분석, 추천 영상 열기/재생/닫기, 영상 닫은 뒤 MR 재시작, Karaoke MR/pause/resume/full analyze 유지, 빨간 LogBox 없음이 확인됐다. 이 변경은 merge 후 새 preview APK build와 대표님 수정 APK 링크 재공유가 필요하다.
+
 ## 현재 개발 단계
 
-현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #5 완료 + release-prep 설정 정리 완료 + APK 피드백 hotfix Galaxy 검증 완료” 단계다.
+현재 상태는 “발표/통제 실험 전 앱 안정화 Batch #5 완료 + release-prep 설정 정리 완료 + APK 피드백 hotfix 45 및 follow-up 47/48 Galaxy 검증 완료” 단계다.
 
 - production API 기준 앱 진입과 로그인 가능
 - 곡 목록 로드 가능
@@ -262,6 +273,7 @@ paused recording segment는 최종 분석 전 cached WAV `file://` 파일로 저
 - Android release 설정은 `usesCleartextTraffic=false`, scheme=`vocal-app`, EAS profile environment 명시 상태
 - API client fallback은 production API 기준이며, local/ngrok concrete fallback URL은 포함하지 않음
 - `.easignore`와 production-safe `.env.example` 반영 완료
+- Karaoke MR start failure hardening, TrainingScreen audio focus guard, feedback video playback fix Galaxy 검증 완료
 - EAS build/submit은 아직 실행하지 않음
 
 ## Batch #1 완료 내용

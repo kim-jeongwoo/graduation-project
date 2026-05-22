@@ -1,6 +1,6 @@
 # Vocal Fit Project Overview
 
-작성 기준: 2026-05-21
+작성 기준: 2026-05-22
 범위: `graduation-project` monorepo 안의 `vocal-app`, `vocal-server`, `dml-server`
 
 ## 목차
@@ -33,16 +33,16 @@ Vocal Fit은 보컬 연습 녹음, 서버 기반 발성 분석, 피치 비교, �
 
 ### 문서 기준과 출처
 
-이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화, 2026-05-19 Batch #4 피드백/Cloudflare dev 실행 정리, Batch #5 구간훈련/pitch-guide/feedback video 정리, release-prep 설정 정리와 APK feedback hotfix 45 반영 상태를 기준으로 작성했다.
+이 문서는 2026-05-13에 추가된 `vocal-app/` snapshot, 2026-05-14 Batch #1 안정화, 2026-05-18 Batch #2/Batch #3 안정화, 2026-05-19 Batch #4 피드백/Cloudflare dev 실행 정리, Batch #5 구간훈련/pitch-guide/feedback video 정리, release-prep 설정 정리, APK feedback hotfix 45, 그리고 47/48 audio focus follow-up hotfix 반영 상태를 기준으로 작성했다.
 
 | 기준 | 값 |
 |---|---|
 | GitHub repo | `kim-jeongwoo/graduation-project` |
-| 작업 branch | `codex/vocal-app-apk-feedback-hotfix-2026-05-21` |
+| 작업 branch | `codex/vocal-app-audio-focus-hotfix-2026-05-22` |
 | base branch | `main` |
-| base commit | `4aebe54 Merge pull request #8 from kim-jeongwoo/codex/vocal-app-release-prep-2026-05-19` |
+| base commit | `beb0911 Merge pull request #9 from kim-jeongwoo/codex/vocal-app-apk-feedback-hotfix-2026-05-21` |
 | 앱 원본 작업 경로 | `/Users/kimjeongwoo/vocal-app` |
-| 포함 범위 | Batch #1~#5 검증 완료 앱 source/docs snapshot + release-prep 설정 정리 |
+| 포함 범위 | Batch #1~#5 검증 완료 앱 source/docs snapshot + release-prep 설정 정리 + APK feedback hotfix 45/47/48 |
 | 제외 범위 | `.git/`, `node_modules/`, `.expo/`, `.claude/`, 실제 `.env*`, `*.bak`, raw handover docs, `.codex/ACTIVE_PLAN.md` |
 
 ## 졸업작품 목표

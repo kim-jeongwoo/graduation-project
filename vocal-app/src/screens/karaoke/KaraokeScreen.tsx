@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 import Svg, { Path, Line } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
@@ -37,6 +38,15 @@ const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
 const USE_REALTIME_PITCH = true; // false = 가짜 피치 시뮬레이션
 const MOCK_RUN_ID = 'c65d43fa-ef3f-4a46-a70e-c102c61eee6c';
 const GUIDE_FAILURE_NOTICE_DELAY_SEC = 5;
+const MR_CACHE_MIN_BYTES = 1024;
+
+type MrStartStage = 'mr-download' | 'mr-load' | 'mr-play' | 'recorder-start';
+type MrStartFailureKind = 'mr' | 'recorder';
+
+type MrStartFailure = Error & {
+  stage?: MrStartStage;
+  kind?: MrStartFailureKind;
+};
 
 // ─── Pitch graph constants ───
 const SCREEN_W = Dimensions.get('window').width;
@@ -53,6 +63,37 @@ function midiToY(midi: number): number {
 }
 function timeToX(t: number, currentTime: number): number {
   return CURSOR_X + ((t - currentTime) / (WINDOW_BEFORE_SEC + WINDOW_AFTER_SEC)) * GRAPH_W;
+}
+
+function hashForCacheKey(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function getMrCacheUri(songId: string, mrUrl: string): string | null {
+  if (!FileSystem.cacheDirectory) return null;
+  const safeSongId = songId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `${FileSystem.cacheDirectory}mr-${safeSongId}-${hashForCacheKey(mrUrl)}.mp3`;
+}
+
+function createStartFailure(stage: MrStartStage, message: string): MrStartFailure {
+  const error = new Error(message) as MrStartFailure;
+  error.stage = stage;
+  error.kind = stage === 'recorder-start' ? 'recorder' : 'mr';
+  return error;
+}
+
+function normalizeStartFailure(error: unknown): MrStartFailure {
+  if (error instanceof Error) return error as MrStartFailure;
+  return createStartFailure('mr-load', 'MR 재생을 준비하지 못했습니다.');
+}
+
+async function deleteMrCacheFile(uri: string | null): Promise<void> {
+  if (!uri) return;
+  try { await FileSystem.deleteAsync(uri, { idempotent: true }); } catch {}
 }
 
 // ─── Nav types ───
@@ -303,6 +344,7 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     setCurrentTime(0);
     playingRef.current = false;
     pausedRef.current = false;
+    resumeCountingRef.current = false;
     setPlaying(false);
     setPaused(false);
     setCountdown(null);
@@ -480,45 +522,178 @@ export default function KaraokeScreen({ navigation, route }: Props) {
     countdownTimerRef.current = iv;
   }, [clearCountdownTimer, clearResumeCountdownTimer, invalidateAnalyzeAttempt]);
 
+  const deleteCurrentMrCache = useCallback(async () => {
+    const mrUrl = getSongMrUrl(songId);
+    await deleteMrCacheFile(getMrCacheUri(songId, mrUrl));
+  }, [songId]);
+
+  const createMrSound = useCallback(() => {
+    const sound = new Audio.Sound();
+    soundRef.current = sound;
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded) {
+        currentTimeRef.current = status.positionMillis / 1000;
+        if (!mountedRef.current) return;
+        setCurrentTime(status.positionMillis / 1000);
+        playingRef.current = status.isPlaying;
+        setPlaying(status.isPlaying);
+      }
+    });
+    return sound;
+  }, []);
+
+  const loadMrSound = useCallback(async (source: { uri: string; headers?: Record<string, string> }) => {
+    const sound = createMrSound();
+    try {
+      await sound.loadAsync(
+        source.headers ? { uri: source.uri, headers: source.headers } : { uri: source.uri },
+        { shouldPlay: false, progressUpdateIntervalMillis: 16 },
+      );
+      return sound;
+    } catch {
+      try { sound.setOnPlaybackStatusUpdate(null); } catch {}
+      try { await sound.unloadAsync(); } catch {}
+      if (soundRef.current === sound) soundRef.current = null;
+      throw createStartFailure('mr-load', 'MR 파일을 로드하지 못했습니다.');
+    }
+  }, [createMrSound]);
+
+  const downloadMrToCache = useCallback(async (
+    mrUrl: string,
+    cacheUri: string,
+    headers: Record<string, string>,
+  ) => {
+    try {
+      const result = await FileSystem.downloadAsync(mrUrl, cacheUri, { headers });
+      if (result.status < 200 || result.status >= 300) {
+        await deleteMrCacheFile(cacheUri);
+        throw createStartFailure('mr-download', 'MR 파일을 다운로드하지 못했습니다.');
+      }
+      const info = await FileSystem.getInfoAsync(cacheUri);
+      if (!info.exists || typeof info.size !== 'number' || info.size < MR_CACHE_MIN_BYTES) {
+        await deleteMrCacheFile(cacheUri);
+        throw createStartFailure('mr-download', 'MR 파일을 정상적으로 저장하지 못했습니다.');
+      }
+      return cacheUri;
+    } catch (error) {
+      const failure = normalizeStartFailure(error);
+      if (failure.stage === 'mr-download') throw failure;
+      await deleteMrCacheFile(cacheUri);
+      throw createStartFailure('mr-download', 'MR 파일을 다운로드하지 못했습니다.');
+    }
+  }, []);
+
+  const getCachedMrUri = useCallback(async (
+    mrUrl: string,
+    cacheUri: string,
+    headers: Record<string, string>,
+  ) => {
+    const info = await FileSystem.getInfoAsync(cacheUri);
+    if (info.exists && typeof info.size === 'number' && info.size >= MR_CACHE_MIN_BYTES) {
+      return cacheUri;
+    }
+    if (info.exists) await deleteMrCacheFile(cacheUri);
+    return downloadMrToCache(mrUrl, cacheUri, headers);
+  }, [downloadMrToCache]);
+
+  const prepareMrSound = useCallback(async () => {
+    const mrUrl = getSongMrUrl(songId);
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    const cacheUri = getMrCacheUri(songId, mrUrl);
+
+    if (!cacheUri) {
+      return loadMrSound({ uri: mrUrl, headers });
+    }
+
+    const localUri = await getCachedMrUri(mrUrl, cacheUri, headers);
+    try {
+      return await loadMrSound({ uri: localUri });
+    } catch {
+      await deleteMrCacheFile(cacheUri);
+    }
+
+    const redownloadedUri = await downloadMrToCache(mrUrl, cacheUri, headers);
+    try {
+      return await loadMrSound({ uri: redownloadedUri });
+    } catch {
+      await deleteMrCacheFile(cacheUri);
+      return loadMrSound({ uri: mrUrl, headers });
+    }
+  }, [downloadMrToCache, getCachedMrUri, loadMrSound, songId, token]);
+
+  const handleMrStartRetry = useCallback(async (stage: MrStartStage) => {
+    await cleanupStartFailure(soundRef.current, recorderRef.current.active);
+    if (stage === 'mr-download' || stage === 'mr-load') {
+      await deleteCurrentMrCache();
+    }
+    startCountdown();
+  }, [cleanupStartFailure, deleteCurrentMrCache, startCountdown]);
+
+  const showStartFailureAlert = useCallback((failure: MrStartFailure) => {
+    const stage = failure.stage ?? 'mr-load';
+    if (failure.kind === 'recorder') {
+      Alert.alert(
+        '녹음 시작 실패',
+        `마이크 권한 또는 입력 장치를 확인한 뒤 다시 시도해 주세요.\n(stage: ${stage})`,
+        [
+          { text: '닫기', style: 'cancel', onPress: safeGoBack },
+          { text: '다시 시도', onPress: () => { void handleMrStartRetry(stage); } },
+        ],
+      );
+      return;
+    }
+    Alert.alert(
+      'MR 재생 실패',
+      `반주 파일을 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.\n(stage: ${stage})`,
+      [
+        { text: '닫기', style: 'cancel', onPress: safeGoBack },
+        { text: '다시 시도', onPress: () => { void handleMrStartRetry(stage); } },
+      ],
+    );
+  }, [handleMrStartRetry, safeGoBack]);
+
   const startMrAndRecord = useCallback(async () => {
     let sound: Audio.Sound | null = null;
     let recorderStarted = false;
     try {
       if (!USE_MOCK) {
-        await recorderRef.current.start(
-          USE_REALTIME_PITCH ? handlePitchSamples : undefined,
-          { capturePcm: true },
-        );
+        const granted = await requestMicrophonePermission();
+        if (!granted) {
+          throw createStartFailure('recorder-start', '마이크 권한이 허용되지 않았습니다.');
+        }
+      }
+
+      sound = await prepareMrSound();
+
+      if (!USE_MOCK) {
+        try {
+          await recorderRef.current.start(
+            USE_REALTIME_PITCH ? handlePitchSamples : undefined,
+            { capturePcm: true },
+          );
+        } catch {
+          throw createStartFailure('recorder-start', '녹음을 시작하지 못했습니다.');
+        }
         recorderStarted = true;
       }
-      sound = new Audio.Sound();
-      soundRef.current = sound;
-      // ① 콜백 먼저 등록 (shouldPlay:true + loadAsync 완료 후 등록 시 초기 update 누락 방지)
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded) {
-          currentTimeRef.current = status.positionMillis / 1000;
-          if (!mountedRef.current) return;
-          setCurrentTime(status.positionMillis / 1000);
-          playingRef.current = status.isPlaying;
-          setPlaying(status.isPlaying);
-        }
-      });
-      // ② shouldPlay:false 로딩만
-      await sound.loadAsync(
-        { uri: getSongMrUrl(songId), headers: token ? { Authorization: `Bearer ${token}` } : {} },
-        { shouldPlay: false, progressUpdateIntervalMillis: 16 },
-      );
-      // ③ position 0에서 명시적 재생 시작
-      await sound.playFromPositionAsync(0);
+      try {
+        await sound.playFromPositionAsync(0);
+      } catch {
+        throw createStartFailure('mr-play', 'MR 재생을 시작하지 못했습니다.');
+      }
     } catch (e) {
-      console.error('[KaraokeScreen] startMrAndRecord error:', e);
+      const failure = normalizeStartFailure(e);
+      console.error('[KaraokeScreen] startMrAndRecord error:', {
+        stage: failure.stage ?? 'unknown',
+        kind: failure.kind ?? 'unknown',
+        message: failure.message,
+      });
       await cleanupStartFailure(sound, recorderStarted);
-      Alert.alert('재생 시작 실패', 'MR 재생을 시작하지 못했습니다. 다시 시도해 주세요.', [
-        { text: '닫기', style: 'cancel', onPress: safeGoBack },
-        { text: '다시 시도', onPress: startCountdown },
-      ]);
+      if (mountedRef.current && focusedRef.current) {
+        showStartFailureAlert(failure);
+      }
     }
-  }, [cleanupStartFailure, handlePitchSamples, safeGoBack, songId, startCountdown, token]);
+  }, [cleanupStartFailure, handlePitchSamples, prepareMrSound, showStartFailureAlert]);
 
   useEffect(() => {
     startMrAndRecordRef.current = startMrAndRecord;

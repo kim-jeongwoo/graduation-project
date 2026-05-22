@@ -14,35 +14,16 @@
 - Kept full-song `/analyze` timeout handling separate from `training-analyze` timeout handling.
 - Added app-side fallback so `training-analyze` can read V2-only `scores_v2` / `scores_meta` when legacy `scores` is absent.
 
-## APK feedback hotfix 45
-
-- Analysis attempt guard prevents stale polling completion from navigating over a newer recording session.
-- Analysis-in-progress back navigation shows a confirmation alert and invalidates only the current attempt when leaving.
-- Main tabs are rendered as a top tab row on top-level screens instead of the Android bottom navigation area.
-- Recording supports pause/resume with MR, lyrics, pitch guide, currentTime, and user pitch frozen during pause.
-- Resume countdown is a no-dim 3-2-1 overlay so the singer can see the current lyrics/guide position.
-- Paused PCM segments are written to a cached WAV `file://` output via `expo-file-system`; ArrayBuffer Blob upload is not used.
-
 ## Backlog, not for task 11
 
-- 대표님 피드백 후 문구 수정.
-- 연구개/혀경직도 미달/과함 의도 녹음 검증.
-- dml-server score_mapper 분포 검증.
-- `target_chunks` 서버 schema/endpoint/app 전환 여부 검토. 현재 vocal-app은 `timeline_scores -> extractWeakSections -> SectionList -> TrainingScreen -> trainingAnalyze` 흐름을 사용한다.
-- `pressure_balance` 활성화 여부와 하압 영상 노출 여부 결정.
-- 공개 데이터/성별/음역대 기반 개인화 calibration.
-- 회원가입/설정 음역대 입력.
-- 노래별 key 자동 조절 및 원키 선택.
-- `expo-av` -> `expo-audio` migration.
-- NativeEventEmitter root cause library replacement or native patch.
-- production server auto-start/systemd 운영 정리.
+- Add better feedback copy for soft palate and tongue tension cards.
+- Revisit whether the yellow high-star mark should appear only on trusted cards.
+- Investigate realtime pitch gauge / voice recognition behavior in section training.
+- Improve per-item training method and feedback copy after Jungwoo review.
 
 ## Production API switch checklist
 
-- Confirm the intended runtime API base before external validation. `EXPO_PUBLIC_API_URL`, if set to a non-empty value, overrides the production fallback.
-- Confirm EAS production environment before release build:
-  - `EXPO_PUBLIC_API_URL=https://api.vocal-fit.com`
-  - `EXPO_PUBLIC_USE_MOCK=false`
+- Confirm the intended runtime API base before external validation. `EXPO_PUBLIC_API_URL`, if set, overrides `CURRENT_SERVER`.
 - Confirm `https://api.vocal-fit.com` auth, sessions, songs, analysis results, and pitch-guide flows on Galaxy.
 - Confirm dml production integration separately: realtime WebSocket and vocal-server proxied analysis must point to the matching production stack.
 - Confirm timeout expectations separately:
@@ -51,6 +32,12 @@
   - `/analysis/{runId}` polling: result lookup path after full analysis starts.
 - Confirm production accepts current shared request headers, including `ngrok-skip-browser-warning`.
 - Confirm Android permissions and cleartext settings before representative / academy validation.
-- Confirm Android cleartext is disabled and app scheme is `vocal-app`.
 - Keep local/tunnel dev-client scripts as development-only tools; do not treat them as production API switch steps.
-- Run EAS build only after explicit approval from a clean GitHub main snapshot.
+
+## APK feedback follow-up status
+
+- 47 Karaoke MR start failure hardening is included: local MR cache fallback and MR download/load/play/recorder-start stage split.
+- 48 TrainingScreen audio focus hotfix is included: AppState/focus/audio mode guard before section-training MR start.
+- Feedback video modal playback is included: visible-only `Video` mount plus explicit play/pause control.
+- Galaxy validation completed for TrainingScreen MR start, recording start, pause/resume, section analysis, feedback video open/play/close, video close followed by MR restart, and Karaoke MR/pause/resume/full analyze.
+- After PR merge, create a new preview APK and reshare the corrected APK link before wider representative testing.
