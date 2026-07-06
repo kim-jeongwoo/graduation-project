@@ -50,6 +50,9 @@ results/
 !demo_responses/
 !demo_responses/*.json
 
+# ─── T2 파이프라인 테스트 더미 데이터 (평가지 사본 포함, 개인정보) ───────────
+dml-server/scripts/data_prep_t2/test_dummy/
+
 # ─── Python 캐시 ─────────────────────────────────────────────────────────
 __pycache__/
 *.pyc

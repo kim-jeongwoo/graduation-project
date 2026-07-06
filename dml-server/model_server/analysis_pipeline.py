@@ -34,6 +34,18 @@ if _AI_MODEL_DIR not in sys.path:
 
 from model.efficient_egg import build_efficient_model   # noqa: E402
 
+# score_mapper_v2 통합 (D3-2). _PROJECT_ROOT = dml-server/
+_SIDETRACK_DIR = os.path.join(_PROJECT_ROOT, "scripts", "sidetrack")
+_SIDETRACK_DIR = os.path.abspath(_SIDETRACK_DIR)
+if os.path.exists(_SIDETRACK_DIR) and _SIDETRACK_DIR not in sys.path:
+    sys.path.insert(0, _SIDETRACK_DIR)
+try:
+    from score_mapper_v2 import ScoreMapperV2  # noqa: E402
+    SCORE_MAPPER_V2_AVAILABLE = True
+except Exception as _e:
+    SCORE_MAPPER_V2_AVAILABLE = False
+    _v2_import_err = str(_e)
+
 # ── constants ──────────────────────────────────────────────────────
 TARGET_SR    = 16000
 N_FFT        = 1024
@@ -42,7 +54,7 @@ F0_FLOOR     = 75
 F0_CEIL      = 600
 WINDOW_SIZE  = 16384
 HOP_SIZE     = 8192
-MIN_VOICED_S = 5.0      # minimum voiced seconds; shorter → 422
+MIN_VOICED_S = 5.0      # minimum voiced seconds; shorter → SilentInputError → 200 no_voice
 
 EXP20_CONFIG = {
     "channels": 128, "n_layers": 30, "kernel_size": 5,
@@ -70,6 +82,20 @@ CSV_TO_CRITERIA = {
     "상압하압":  "9_pressure_balance",
 }
 CRITERIA_KEYS = list(CSV_TO_CRITERIA.values())
+
+
+# ── exceptions ─────────────────────────────────────────────────────
+
+class SilentInputError(Exception):
+    """Raised when audio has no usable vocal content (guard A or B)."""
+    def __init__(self, reason: str, guard: str, audio_info: dict,
+                 elapsed_ms: float = 0.0, cpp_mean: Optional[float] = None):
+        super().__init__(reason)
+        self.reason = reason
+        self.guard = guard          # "A" (no voiced frames) | "B" (periodic noise)
+        self.audio_info = audio_info
+        self.elapsed_ms = elapsed_ms
+        self.cpp_mean = cpp_mean
 
 
 # ── helpers ────────────────────────────────────────────────────────
@@ -213,6 +239,14 @@ def _h1_h2(audio: np.ndarray, i: int, f0: float) -> float:
     return float(h1.max() - h2.max()) if len(h1) > 0 and len(h2) > 0 else np.nan
 
 
+def _extract_user_f0(snd: parselmouth.Sound, frame_hz: int = 25) -> dict:
+    """25Hz sparse null 포맷 F0 추출. voiced→freq_hz(float), unvoiced→None."""
+    pitch = snd.to_pitch(time_step=1.0 / frame_hz, pitch_floor=50, pitch_ceiling=600)
+    freq_array = pitch.selected_array['frequency']  # 0.0 = unvoiced
+    values = [float(f) if f > 0 else None for f in freq_array]
+    return {"frame_hz": frame_hz, "values": values}
+
+
 def _aggregate(vals):
     arr = np.array([v for v in vals if v is not None and not np.isnan(v)])
     if len(arr) == 0: return None, None
@@ -302,12 +336,21 @@ class AnalysisPipeline:
             for crit_key in CRITERIA_KEYS
         }
 
+        # score_mapper_v2 인스턴스 (D3-2: 4 표시 + 2 academic 항목)
+        self.v2 = None
+        if SCORE_MAPPER_V2_AVAILABLE:
+            try:
+                self.v2 = ScoreMapperV2()
+                print(f"  ScoreMapperV2 loaded: {len(self.v2.params['models'])} models")
+            except Exception as e:
+                print(f"  ScoreMapperV2 load failed: {e}")
+
         print(
             f"[AnalysisPipeline] Ready: device={self.device}, val_corr={self._val_corr}, "
             f"params={sum(p.numel() for p in self.model.parameters()):,}"
         )
 
-    def analyze(self, audio_data: bytes) -> dict:
+    def analyze(self, audio_data: bytes, min_voiced_s: float = MIN_VOICED_S) -> dict:
         """
         Full analysis pipeline. Returns structured result dict.
 
@@ -326,10 +369,36 @@ class AnalysisPipeline:
         voiced_s = voiced_frames * HOP / TARGET_SR
         voiced_ratio = voiced_frames / n_frames if n_frames > 0 else 0.0
 
-        if voiced_s < MIN_VOICED_S:
-            raise ValueError(
-                f"Voiced audio too short: {voiced_s:.1f}s < {MIN_VOICED_S}s required"
+        _audio_info_base = {
+            "duration_s": round(duration, 2),
+            "sample_rate": TARGET_SR,
+            "voiced_ratio": round(voiced_ratio, 4),
+            "voiced_duration_s": round(voiced_s, 2),
+            "f0_min": None, "f0_max": None, "f0_mean": None,
+        }
+
+        # Guard A: no voiced frames
+        if voiced_s < min_voiced_s:
+            raise SilentInputError(
+                reason="음성이 감지되지 않았습니다. 마이크 입력을 확인하고 다시 녹음해주세요.",
+                guard="A",
+                audio_info=_audio_info_base,
+                elapsed_ms=round((time.perf_counter() - t0) * 1000, 1),
             )
+
+        # Guard B: nearly all frames "voiced" but CPP too low → periodic noise / hum
+        if voiced_ratio > 0.95:
+            cpp_pre = [_cpp_frame(audio, i) for i in range(n_frames) if vad_mask[i]]
+            cpp_pre = [v for v in cpp_pre if not np.isnan(v)]
+            cpp_pre_mean = float(np.mean(cpp_pre)) if cpp_pre else 0.0
+            if cpp_pre_mean < 0.15:
+                raise SilentInputError(
+                    reason="잡음만 녹음되었습니다. 마이크는 동작하지만 사람 목소리가 감지되지 않았습니다. 다시 녹음해주세요.",
+                    guard="B",
+                    audio_info=_audio_info_base,
+                    elapsed_ms=round((time.perf_counter() - t0) * 1000, 1),
+                    cpp_mean=cpp_pre_mean,
+                )
 
         # 3) Register boundaries
         boundaries = _split_registers(f0_vals)
@@ -354,8 +423,11 @@ class AnalysisPipeline:
             "spectral_tilt","h1_h2","singers_formant_ratio","a1_p0"
         ]} for r in ["low","mid","high"]}
 
-        # HNR via parselmouth (compute globally)
+        # User F0 (25Hz sparse null) — snd_raw 생성 직후 추출
         snd_raw = parselmouth.Sound(audio, sampling_frequency=TARGET_SR)
+        user_f0 = _extract_user_f0(snd_raw)
+
+        # HNR via parselmouth (compute globally)
         try:
             harm = call(snd_raw, "To Harmonicity (cc)", 0.01, F0_FLOOR, 0.1, 1.0)
             n_h = call(harm, "Get number of frames")
@@ -536,6 +608,56 @@ class AnalysisPipeline:
                 },
             }
 
+        # ── score_mapper_v2 적용 (D3-2): 4 표시 항목 + 2 academic ──
+        v2_scores: dict = {}
+        v2_meta: dict = {}
+        v2_academic: dict = {}
+        v2_version = None
+        if self.v2 is not None:
+            try:
+                KOR_TO_KEY = {
+                    "비강사용":"1_nasal_oral_ratio", "흉성두성":"2_chest_head_voice",
+                    "접촉강도":"3_vocal_fold_contact","호흡식별":"4_breathiness",
+                    "전방공명":"5_forward_resonance","연구개위치":"6_soft_palate",
+                    "공명개방":"7_larynx_tongue_root","혀경직도":"8_tongue_tension",
+                    "상압하압":"9_pressure_balance",
+                }
+                # v2 indicator 산출에는 raw audio 사용 (z-score 정규화 전).
+                # indicators_v2 의 amplitude 기반 함수(HNR/shimmer/h1_*) 가
+                # mean/std 정규화 영향을 받음.
+                import soundfile as _sf, io as _io
+                _raw_audio, _raw_sr = _sf.read(_io.BytesIO(audio_data), dtype="float32")
+                if _raw_audio.ndim > 1:
+                    _raw_audio = _raw_audio.mean(axis=1)
+                if _raw_sr != TARGET_SR:
+                    _raw_audio = librosa.resample(_raw_audio, orig_sr=_raw_sr, target_sr=TARGET_SR)
+                v2_raw = self.v2.score_from_audio(_raw_audio, TARGET_SR)
+                for kor, item in v2_raw.items():
+                    key = KOR_TO_KEY.get(kor, kor)
+                    tier = item.get("tier")
+                    if tier in ("high", "high_star"):
+                        v2_scores[key] = item["ai_score"]
+                        v2_meta[key] = {
+                            "tier": tier,
+                            "caveats": item.get("caveats", []),
+                            "display_mark": "asterisk" if tier == "high_star" else None,
+                            "tooltip": "외부 데이터에서 신뢰도 확보, 학습 내부 검증 약함 (모니터링 중)"
+                                       if tier == "high_star" else None,
+                            "rounded_score": item.get("rounded_score"),
+                            "icc": item.get("icc"),
+                            "icc_ratio": item.get("icc_ratio"),
+                        }
+                    elif tier == "academic_only":
+                        v2_academic[key] = {
+                            "ai_score": item["ai_score"],
+                            "caveats": item.get("caveats", []),
+                            "note": "sign_reversed 학술 분석 전용 (앱 표시 X)",
+                        }
+                v2_version = self.v2.params.get("version", "v2")
+            except Exception as v2_err:
+                # v2 실패해도 v1 응답은 유지
+                v2_scores = {}; v2_meta = {}; v2_academic = {}
+
         elapsed_ms = (time.perf_counter() - t0) * 1000
 
         return {
@@ -555,11 +677,28 @@ class AnalysisPipeline:
             },
             "registers": registers,
             "indicators": indicators,
-            "scores": scores,
+            "scores": scores,                       # v1 9항목 (legacy 호환)
+            "scores_v2": v2_scores,                 # D3-2: 4 표시 항목 (v2)
+            "scores_meta": v2_meta,                 # D3-3: tier/caveats/display_mark
+            "academic_analysis_scores": v2_academic,# D3-3: 학술 분석 2 항목
+            "score_mapper_version": v2_version,     # D3-4: "v2"
             "feedback": feedback,
             "reliability": {
-                "high_reliability": HIGH_RELIABILITY,
+                "high_reliability":   HIGH_RELIABILITY,
                 "medium_reliability": MEDIUM_RELIABILITY,
-                "unavailable": UNAVAILABLE,
+                "unavailable":        UNAVAILABLE,
+                # v2 분류
+                "shown_v2":           ["3_vocal_fold_contact","4_breathiness",
+                                       "6_soft_palate","8_tongue_tension"],
+                "shown_v2_tiers": {
+                    "3_vocal_fold_contact": "high",
+                    "4_breathiness":        "high_star",
+                    "6_soft_palate":        "high_star",
+                    "8_tongue_tension":     "high_star",
+                },
+                "academic_only_v2":   ["1_nasal_oral_ratio","5_forward_resonance"],
+                "deferred_v2":        ["2_chest_head_voice","7_larynx_tongue_root",
+                                       "9_pressure_balance"],
             },
+            "user_f0": user_f0,
         }

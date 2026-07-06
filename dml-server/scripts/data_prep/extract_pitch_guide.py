@@ -128,18 +128,48 @@ def run_demucs(sid: str) -> tuple[Path, Path]:
 
 # ── 2. CREPE F0 추출 ────────────────────────────────────────────
 
-def run_crepe(vocals_path: Path, cache_dir: Path, sr_target=16000) -> tuple:
+VOCAL_MIDI_MIN = 40    # E2 — 인간 보컬 실용 최저음
+VOCAL_MIDI_MAX = 84    # C6 — 소프라노 최고음
+ENERGY_THRESH  = 0.005 # vocals.wav RMS 기준: 이 이하는 보컬 없음으로 판정
+
+
+def _frame_energy(audio: np.ndarray, time_arr: np.ndarray, sr: int,
+                  win_ms: int = 100) -> np.ndarray:
+    """각 CREPE 프레임의 vocals.wav RMS 계산 (100ms 윈도우)."""
+    hw = int(sr * win_ms / 1000 / 2)
+    n = len(audio)
+    out = np.zeros(len(time_arr), dtype=np.float32)
+    for i, t in enumerate(time_arr):
+        s = max(0, int(t * sr) - hw)
+        e = min(n, int(t * sr) + hw)
+        seg = audio[s:e]
+        out[i] = float(np.sqrt((seg ** 2).mean())) if len(seg) else 0.0
+    return out
+
+
+def run_crepe(vocals_path: Path, cache_dir: Path,
+              sr_target: int = 16000, force: bool = False) -> tuple:
     """
     반환: (time_arr, freq_arr, conf_arr, voiced_arr, midi_arr, elapsed_sec)
     cache_dir/crepe_cache.npz 에 결과 캐싱 — 재실행 시 즉시 로드.
+    force=True 면 기존 캐시를 삭제하고 재추출.
+    voiced 판정:
+      1. conf >= 0.5
+      2. MIDI [40, 84] (비보컬 주파수 제거)
+      3. vocals.wav 프레임 RMS >= ENERGY_THRESH (무음 구간 제거)
     """
     cache_path = cache_dir / "crepe_cache.npz"
     elapsed = 0.0
+
+    if force and cache_path.exists():
+        cache_path.unlink()
+        print(f"  [CREPE] 캐시 삭제 (force)")
 
     if cache_path.exists():
         print(f"  [CREPE] 캐시 로드: {cache_path.name}")
         d = np.load(cache_path)
         time_arr, freq_arr, conf_arr = d["time"], d["freq"], d["conf"]
+        energy = d["energy"] if "energy" in d else None
     else:
         import crepe
         print(f"  [CREPE] 로드: {vocals_path.name}")
@@ -150,15 +180,26 @@ def run_crepe(vocals_path: Path, cache_dir: Path, sr_target=16000) -> tuple:
             audio, sr, viterbi=True, step_size=10, verbose=1
         )
         elapsed = time.time() - t0
-        print(f"  [CREPE] 완료 ({elapsed:.1f}s) → 캐시 저장")
-        np.savez(cache_path, time=time_arr, freq=freq_arr, conf=conf_arr)
+        print(f"  [CREPE] 완료 ({elapsed:.1f}s) → 에너지 계산 + 캐시 저장")
+        energy = _frame_energy(audio, time_arr, sr)
+        np.savez(cache_path, time=time_arr, freq=freq_arr,
+                 conf=conf_arr, energy=energy)
 
-    voiced = conf_arr >= 0.5
-    midi_arr = np.where(
-        voiced,
-        12 * np.log2(np.maximum(freq_arr, 1e-6) / 440) + 69,
-        np.nan
-    )
+    # energy 없는 구버전 캐시: vocals.wav 에서 즉석 계산 후 캐시 갱신
+    if energy is None:
+        print(f"  [CREPE] 구버전 캐시 — 에너지 재계산 + 캐시 갱신")
+        audio_e, _ = librosa.load(str(vocals_path), sr=sr_target, mono=True)
+        energy = _frame_energy(audio_e, time_arr, sr_target)
+        np.savez(cache_path, time=time_arr, freq=freq_arr,
+                 conf=conf_arr, energy=energy)
+
+    midi_raw = 12 * np.log2(np.maximum(freq_arr, 1e-6) / 440) + 69
+    vocal_range = (midi_raw >= VOCAL_MIDI_MIN) & (midi_raw <= VOCAL_MIDI_MAX)
+    voiced = (conf_arr >= 0.5) & vocal_range & (energy >= ENERGY_THRESH)
+    midi_arr = np.where(voiced, midi_raw, np.nan)
+
+    low_e = (energy < ENERGY_THRESH).sum()
+    print(f"  [필터] 에너지<{ENERGY_THRESH} 억제: {low_e}프레임 ({100*low_e/len(time_arr):.1f}%)")
     return time_arr, freq_arr, conf_arr, voiced, midi_arr, elapsed
 
 
@@ -317,7 +358,7 @@ def visualize(sid, time_arr, midi_arr, conf_arr, voiced, review_segs,
 
 # ── 7. 메인 처리 ────────────────────────────────────────────────
 
-def process_song(sid: str):
+def process_song(sid: str, force_crepe: bool = False):
     artist, title = SONGS[sid]
     print(f"\n{'='*60}")
     print(f"[{sid}] {artist} - {title}")
@@ -338,7 +379,8 @@ def process_song(sid: str):
         vocals_p, no_vocals_p, demucs_model, demucs_time = result
 
     # 2. CREPE
-    time_arr, freq_arr, conf_arr, voiced, midi_arr, crepe_time = run_crepe(vocals_p, stems_dir(sid))
+    time_arr, freq_arr, conf_arr, voiced, midi_arr, crepe_time = run_crepe(
+        vocals_p, stems_dir(sid), force=force_crepe)
     voiced_ratio = voiced.sum() / len(voiced)
     conf_mean    = float(conf_arr[voiced].mean()) if voiced.any() else 0.0
     print(f"  voiced 비율: {voiced_ratio:.1%}  conf 평균(voiced): {conf_mean:.3f}")
@@ -431,6 +473,8 @@ def main():
     g = parser.add_mutually_exclusive_group(required=True)
     g.add_argument("--song", metavar="ID")
     g.add_argument("--all",  action="store_true")
+    parser.add_argument("--force-crepe", action="store_true",
+                        help="기존 CREPE 캐시 삭제 후 vocals.wav에서 재추출")
     args = parser.parse_args()
 
     ids = (
@@ -442,7 +486,7 @@ def main():
         ids = list(SONGS.keys())
 
     for sid in ids:
-        process_song(sid)
+        process_song(sid, force_crepe=args.force_crepe)
 
 
 if __name__ == "__main__":

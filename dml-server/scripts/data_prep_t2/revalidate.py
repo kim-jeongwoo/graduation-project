@@ -6,9 +6,10 @@ revalidate.py — 신규 wav를 model_server /analyze로 분석 후 트레이너
   python revalidate.py [--mode validation|control_pre|control_post|all]
                         [--host http://localhost:8001]
                         [--csv trainer_scores_t2.csv]
+                        [--wav-dir <폴더>]
                         [--out results/analyze_t2.json]
 
-wav 경로 규칙:
+wav 경로 규칙 (--wav-dir 미지정 시 기본값):
   validation  → data/vocal_academy/validation_t2/test_{id}.wav
   control_pre → data/vocal_academy/control_pre/singer_{id}.wav
   control_post→ data/vocal_academy/control_post/singer_{id}.wav
@@ -47,26 +48,36 @@ ITEM_KEY_MAP = {
 REGISTER_MAP = {"low": "저", "mid": "중", "high": "고"}
 
 
-def check_server(host: str) -> None:
-    try:
-        r = requests.get(f"{host}/health", timeout=5)
-        r.raise_for_status()
-        print(f"[health] OK ({host})")
-    except Exception as e:
-        print(f"[ERROR] model_server 응답 없음: {e}", file=sys.stderr)
-        print("model_server 가동 후 재실행하세요.", file=sys.stderr)
-        sys.exit(1)
+def check_server(host: str, retries: int = 3) -> None:
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.get(f"{host}/health", timeout=30)
+            r.raise_for_status()
+            print(f"[health] OK ({host})")
+            return
+        except Exception as e:
+            if attempt < retries:
+                print(f"[health] 시도 {attempt}/{retries} 실패, 재시도...", file=sys.stderr)
+                time.sleep(5)
+            else:
+                print(f"[ERROR] model_server 응답 없음: {e}", file=sys.stderr)
+                print("model_server 가동 후 재실행하세요.", file=sys.stderr)
+                sys.exit(1)
 
 
-def find_wavs(vocal_dir: Path, mode: str) -> list[tuple[str, Path]]:
-    """(id, wav_path) 목록 반환"""
+def find_wavs(vocal_dir: Path, mode: str,
+              wav_dir: Path | None = None) -> list[tuple[str, Path]]:
+    """(id, wav_path) 목록 반환. wav_dir 지정 시 해당 폴더를 직접 스캔."""
+    if wav_dir is not None:
+        pattern = "test_*.wav" if mode == "validation" else "singer_*.wav"
+        return [(wav.stem, wav) for wav in sorted(wav_dir.glob(pattern))]
+
     pairs = []
     if mode in ("validation", "all"):
         d = vocal_dir / "validation_t2"
         if d.exists():
             for wav in sorted(d.glob("test_*.wav")):
-                wav_id = wav.stem  # test_01 등
-                pairs.append((wav_id, wav))
+                pairs.append((wav.stem, wav))
     if mode in ("control_pre", "all"):
         d = vocal_dir / "control_pre"
         if d.exists():
@@ -172,9 +183,10 @@ def compute_correlations(analyze_results: list[dict],
     return results
 
 
-def run(host: str, mode: str, csv_path: Path, out_path: Path) -> None:
+def run(host: str, mode: str, csv_path: Path, out_path: Path,
+        wav_dir: Path | None = None) -> None:
     check_server(host)
-    wavs = find_wavs(VOCAL_DIR, mode)
+    wavs = find_wavs(VOCAL_DIR, mode, wav_dir)
 
     if not wavs:
         print(f"[경고] {mode} 모드: wav 파일 없음.")
@@ -236,11 +248,14 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", default="all",
                     choices=["validation", "control_pre", "control_post", "all"])
-    ap.add_argument("--host",   default="http://localhost:8001")
-    ap.add_argument("--csv",    default=str(VOCAL_DIR / "trainer_scores_t2.csv"))
-    ap.add_argument("--out",    default=str(RESULTS_DIR / "analyze_t2.json"))
+    ap.add_argument("--host",    default="http://localhost:8001")
+    ap.add_argument("--csv",     default=str(VOCAL_DIR / "trainer_scores_t2.csv"))
+    ap.add_argument("--wav-dir", default=None,
+                    help="wav 폴더 덮어쓰기 (기본: vocal_academy/validation_t2 또는 control_pre)")
+    ap.add_argument("--out",     default=str(RESULTS_DIR / "analyze_t2.json"))
     args = ap.parse_args()
-    run(args.host, args.mode, Path(args.csv), Path(args.out))
+    wav_dir = Path(args.wav_dir) if args.wav_dir else None
+    run(args.host, args.mode, Path(args.csv), Path(args.out), wav_dir)
 
 
 if __name__ == "__main__":
