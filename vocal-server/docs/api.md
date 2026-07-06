@@ -514,9 +514,8 @@ Authorization: Bearer <token>
 | `"success"` | 정상 분석 완료 |
 | `"completed"` | 정상 분석 완료 (호환 상태) |
 | `"failed"` | 분석 중 에러 발생 |
-| `"invalid"` | dml-server가 유효하지 않은 입력/분석 불가 상태 반환 |
+| `"invalid"` | dml-server가 유효하지 않은 입력/분석 불가 상태 반환 (dml enum 미등록 문자열이지만 그대로 저장됨) |
 | `"no_voice"` | 무음/잡음 감지로 분석 스킵 (정상 흐름) |
-| `"error"` | dml-server가 오류 상태 반환 |
 
 **에러**
 | 코드 | 사유 |
@@ -532,7 +531,7 @@ Authorization: Bearer <token>
 
 앱 권장 흐름:
 1. `GET /analysis/{run_id}`가 `success` 또는 `completed`이면 결과 화면 진입 후 이 endpoint를 호출합니다.
-2. `failed`, `invalid`, `no_voice`, `error`이면 결과 화면 대신 실패/재녹음/안내 UX를 표시하고, 필요하면 이 endpoint의 `result_json.status/reason/detail/message/error`를 확인합니다.
+2. `failed`, `invalid`, `no_voice`이면 결과 화면 대신 실패/재녹음/안내 UX를 표시하고, 필요하면 이 endpoint의 `result_json.status/reason/error`를 확인합니다.
 3. `queued`/`running` 중에는 결과가 아직 없을 수 있으므로 이 endpoint를 최종 결과로 사용하지 않습니다. 현재 구현상 완료 전 호출도 200을 반환할 수 있지만 `metrics`가 비어 있고 `result_json`이 `null`일 수 있습니다.
 
 ```http
@@ -568,6 +567,8 @@ Authorization: Bearer <token>
 ### GET /analysis/{run_id}/comparison
 
 숙련자 기준 데이터와 비교. **현재 reference profile 미구축 상태** → `comparisons`가 빈 배열로 반환됩니다.
+
+> **주의**: 이 endpoint는 `analysis_results` 테이블(구형 3개 metric: `voiced_ratio`, `processing_time_ms`, `duration_sec`)만 기준으로 비교를 계산합니다. `scores_v2`/`scores_meta`/`academic_analysis_scores` 등 v2 필드는 반영하지 않습니다.
 
 ```http
 GET /analysis/{run_id}/comparison
@@ -924,24 +925,27 @@ Authorization: Bearer <token>
 
 `GET /analysis/{run_id}/results`의 `result_json` 및 `GET /sessions/{id}`의 `latest_analysis.result_json` 공통 구조.
 
-**`result_json.status` 값**
+**`result_json.status` 값** (dml-server가 방출하는 그대로, `AnalysisRun.status`에도 동일 문자열로 저장됨)
 
 | 값 | 의미 | scores/feedback |
 |----|------|-----------------|
-| `"completed"` | 정상 분석 완료 | 정상 포함 |
+| `"success"` | 정상 분석 완료 | 정상 포함 |
+| `"no_voice"` | 무음/잡음 감지로 분석 스킵 (정상 흐름) | `null` |
+| `"invalid"` | 파일/입력 오류로 분석 불가 | `null` |
 | `"failed"` | 분석 중 에러 발생 | `null` |
-| `"no_voice"` | 무음/잡음 감지로 분석 스킵 | `null` |
 
-> **앱 처리 권장**: `result_json.status` 분기 → `"no_voice"`이면 `reason` 텍스트 표시 + 재녹음 유도.
+> **주의**: `"invalid"`는 dml-server `schemas.AnalysisStatus` enum에 등록되지 않은 문자열이지만 실제로 방출되며, vocal-server는 이를 그대로 `AnalysisRun.status`/`result_json.status`에 저장한다. 앱은 enum 검증 없이 문자열 비교로 처리해야 한다.
+>
+> **앱 처리 권장**: `result_json.status` 분기 → `"no_voice"`이면 `reason` 텍스트 표시 + 재녹음 유도. `"invalid"`/`"failed"`는 실패 UX 표시.
 
 ---
 
-**정상 분석 응답 (`status: "completed"`)**
+**정상 분석 응답 (`status: "success"`)**
 
 ```json
 {
   "run_id": "f199f109-...",
-  "status": "completed",
+  "status": "success",
   "processing_time_ms": 19710.4,
 
   "audio_info": {
@@ -979,6 +983,24 @@ Authorization: Bearer <token>
     "9_pressure_balance":   {"ai_score": 1.91, "rounded_score": 2,    "zone": "appropriate",  "confidence": "medium"}
   },
 
+  "score_mapper_version": "v2",
+  "scores_v2": {
+    "3_vocal_fold_contact": 3.4,
+    "4_breathiness": 2.8,
+    "6_soft_palate": 1.9,
+    "8_tongue_tension": 2.2
+  },
+  "scores_meta": {
+    "3_vocal_fold_contact": {"tier": "high",      "caveats": [], "display_mark": null,        "tooltip": null, "rounded_score": 3, "icc": 0.0, "icc_ratio": 0.0},
+    "4_breathiness":        {"tier": "high_star", "caveats": [], "display_mark": "asterisk",  "tooltip": null, "rounded_score": 3, "icc": 0.0, "icc_ratio": 0.0},
+    "6_soft_palate":        {"tier": "high_star", "caveats": [], "display_mark": "asterisk",  "tooltip": null, "rounded_score": 2, "icc": 0.0, "icc_ratio": 0.0},
+    "8_tongue_tension":     {"tier": "high_star", "caveats": [], "display_mark": "asterisk",  "tooltip": null, "rounded_score": 2, "icc": 0.0, "icc_ratio": 0.0}
+  },
+  "academic_analysis_scores": {
+    "1_nasal_oral_ratio":  {"ai_score": 1.2, "caveats": [], "note": "academic_only"},
+    "5_forward_resonance": {"ai_score": 0.8, "caveats": [], "note": "academic_only"}
+  },
+
   "feedback": {
     "4_breathiness": {
       "name_ko": "호흡 소리 식별",
@@ -997,12 +1019,21 @@ Authorization: Bearer <token>
   "reliability": {
     "high_reliability":   ["3_vocal_fold_contact", "4_breathiness"],
     "medium_reliability": ["1_nasal_oral_ratio", "2_chest_head_voice", "5_forward_resonance", "6_soft_palate", "9_pressure_balance"],
-    "unavailable":        ["7_larynx_tongue_root", "8_tongue_tension"]
-  }
+    "unavailable":        ["7_larynx_tongue_root", "8_tongue_tension"],
+    "shown_v2": ["3_vocal_fold_contact", "4_breathiness", "6_soft_palate", "8_tongue_tension"],
+    "shown_v2_tiers": {"3_vocal_fold_contact": "high", "4_breathiness": "high_star", "6_soft_palate": "high_star", "8_tongue_tension": "high_star"},
+    "academic_only_v2": ["1_nasal_oral_ratio", "5_forward_resonance"],
+    "deferred_v2": ["2_chest_head_voice", "7_larynx_tongue_root", "9_pressure_balance"]
+  },
+
+  "timeline_scores": null,
+  "timeline_metadata": null
 }
 ```
 
 `feedback`에는 `confidence: "unavailable"` 항목은 포함되지 않습니다.
+
+`scores`는 **v1 legacy** 9키 전체(과거 호환용). `scores_v2`/`scores_meta`는 **표시 대상 4키만**(`3_vocal_fold_contact`(tier `high`), `4_breathiness`/`6_soft_palate`/`8_tongue_tension`(tier `high_star`)). `academic_analysis_scores`는 앱 비표시 2키(`1_nasal_oral_ratio`, `5_forward_resonance`). 나머지 3키(`2_chest_head_voice`, `7_larynx_tongue_root`, `9_pressure_balance`)는 v2 체계에서 **미산출**(deferred) — `reliability.deferred_v2` 참고. `timeline_scores`/`timeline_metadata`는 `song_id` 지정 + LRC 존재 시에만 값이 채워지며, 그 외에는 `null`(아래 timeline_scores 섹션 참고).
 
 ---
 
@@ -1034,6 +1065,58 @@ Authorization: Bearer <token>
 - `AnalysisRun.status`는 `"no_voice"`로 저장됨
 - `scores`, `feedback`, `reliability`는 모두 `null`
 - 앱: `result_json.status === "no_voice"` 감지 → `reason` 텍스트 표시 + 재녹음 유도
+
+---
+
+### timeline_scores 계약
+
+`song_id` 지정 + 해당 곡 LRC 파싱 파일이 존재할 때만 값이 채워짐. 그 외에는 `timeline_scores`/`timeline_metadata` 모두 `null`.
+
+**원소(item) shape**
+```json
+{
+  "start_sec": 24.0,
+  "end_sec": 31.0,
+  "lrc_text": "가사 한 줄",
+  "chunk_duration_s": 7.0,
+  "scores": {
+    "3_vocal_fold_contact": {"ai_score": 3.4, "rounded_score": 3, "tier": "high"},
+    "4_breathiness":        null,
+    "6_soft_palate":        {"ai_score": 1.9, "rounded_score": 2, "tier": "high_star"},
+    "8_tongue_tension":     null
+  },
+  "low_confidence_items": ["4_breathiness", "8_tongue_tension"]
+}
+```
+
+구간 경계 필드명은 `start_sec`/`end_sec`로 고정. `scores`는 항상 4키(`3_vocal_fold_contact`, `4_breathiness`, `6_soft_palate`, `8_tongue_tension`) 고정.
+
+**`scores[key]`의 null 규칙 (설계된 skip — 버그 아님)**
+- 매 chunk 기본값은 4키 전부 `null`.
+- chunk 유성 구간이 2.0초 미만이거나 v2 mapper 미가용이면 4키 전부 `null` 유지.
+- 채점 중 예외 발생 시에도 4키 전부 `null`.
+- 이론상 특정 key만 부분적으로 `null`인 경로가 코드에 존재하나, `ScoreMapperV2`가 항상 4키 모두 값을 반환하므로 **실무상 chunk 단위 all-or-nothing** (전부 값 또는 전부 null).
+
+**소비자(앱) 계약**: `timeline_scores` 자체가 `null`일 수 있고(1단계), 배열이어도 각 원소의 `scores[key]`가 `null`일 수 있다(2단계). **두 단계 모두 역참조 전 null 검사 필수.** null 항목은 "해당 구간 신뢰 가능한 점수 없음"으로 처리.
+
+---
+
+### low_confidence_items 계약
+
+`list[str]` — 9항목 key 체계를 따르는 문자열 배열(dict 아님).
+
+- `/analysis/{run_id}/results`의 `result_json.low_confidence_items`(전체 분석)와 `POST /sessions/{id}/training-analyze` 응답 최상위(§6 참고)는 chunk `duration < 5.0초`일 때 `["4_breathiness", "6_soft_palate", "8_tongue_tension"]`, 그 외에는 `[]`.
+- `timeline_scores[*].low_confidence_items`도 동일 규칙으로 chunk 단위 병합되며, 여기에 skip/예외로 인한 전체-null chunk의 키가 추가로 포함될 수 있음.
+
+---
+
+### rounded_score 생성 위치
+
+vocal-server는 `rounded_score`를 직접 계산하거나 가공하지 않음 — dml-server가 계산한 값을 그대로 전달.
+
+- **v1 legacy `scores[*].rounded_score`**: `rounded = min(5, max(0, round(ai_score)))`. `ai_score`가 `null`이면 `rounded_score`도 `null`.
+- **v2 `scores_meta[*].rounded_score` / `timeline_scores[*].scores[*].rounded_score`**: `ScoreMapperV2`가 `pred_clipped = max(0, min(5, pred))` → `rounded_score = int(round(pred_clipped))`로 계산.
+- v1과 v2는 **독립된 계산 경로**이며 한쪽이 실패하면 다른 쪽으로 대체하는 fallback 체인은 없음.
 
 ---
 
@@ -1085,10 +1168,9 @@ Authorization: Bearer <token>
 
 ## 12. 폴링 가이드
 
-현재 분석은 **동기 처리** (10~30초). `POST /analyze` 응답까지 대기하면 됩니다.  
-타임아웃은 **최소 60초** 설정 권장.
+`POST /sessions/{session_id}/analyze`는 **비동기 start endpoint**입니다. 응답은 접수 결과(`run_id`, `status:"queued"`)일 뿐이며, 실제 분석은 background task에서 진행됩니다. 앱은 `GET /analysis/{run_id}`를 polling하다가 terminal status(`success`/`completed`/`failed`/`invalid`/`no_voice`)가 되면 `GET /analysis/{run_id}/results`를 호출해야 합니다.
 
-비동기 전환 시를 대비한 폴링 패턴:
+폴링 패턴:
 
 ```python
 import time, httpx
@@ -1099,7 +1181,7 @@ headers = {"Authorization": "Bearer <token>"}
 for _ in range(30):  # 최대 150초 대기
     r = httpx.get(f"http://host:8000/analysis/{run_id}", headers=headers)
     status = r.json()["status"]
-    if status in ("success", "completed", "failed"):
+    if status in ("success", "completed", "failed", "invalid", "no_voice"):
         break
     time.sleep(5)
 
