@@ -3,7 +3,7 @@
 import math
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session as DBSession
 
 from app.database import get_db
@@ -17,7 +17,7 @@ from app.schemas.schemas import (
     ComparisonResponse,
     MetricItem,
 )
-from app.services.analysis_service import run_analysis
+from app.services.analysis_service import run_analysis_by_ids
 
 router = APIRouter(tags=["analysis"])
 
@@ -28,10 +28,11 @@ router = APIRouter(tags=["analysis"])
     response_model=AnalyzeResponse,
     status_code=status.HTTP_201_CREATED,
     summary="AI 분석 요청",
-    description="업로드된 오디오를 AI 모델 서버로 전송하여 보컬 분석을 실행합니다. 동기 처리(10~30초). 세션 status가 'uploaded'여야 합니다.",
+    description="업로드된 오디오의 AI 분석을 비동기로 시작합니다. 즉시 run_id/status를 반환하며 결과는 GET /analysis/{run_id}로 폴링합니다. 세션 status가 'uploaded'여야 합니다.",
 )
 def analyze_session(
     session_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
@@ -57,8 +58,11 @@ def analyze_session(
     db.commit()
     db.refresh(analysis_run)
 
-    # 분석 실행 (현재 동기)
-    analysis_run = run_analysis(analysis_run, session, db)
+    background_tasks.add_task(
+        run_analysis_by_ids,
+        str(analysis_run.run_id),
+        str(session.session_id),
+    )
 
     return AnalyzeResponse(run_id=analysis_run.run_id, status=analysis_run.status)
 

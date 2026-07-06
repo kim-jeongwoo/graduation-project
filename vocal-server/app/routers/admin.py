@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import os
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from threading import Lock
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, not_, or_
@@ -150,6 +154,50 @@ _TEST_EMAIL_LIKE_PATTERNS: list[str] = [
     "signup_check%",                  # signup_toggle.sh 검증
 ]
 
+_ADMIN_USERS_DEFAULT_LIMIT = 50
+_ADMIN_USERS_MAX_LIMIT = 100
+
+
+def _parse_admin_users_limit(value: str | None) -> int:
+    if value is None:
+        return _ADMIN_USERS_DEFAULT_LIMIT
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return _ADMIN_USERS_DEFAULT_LIMIT
+    if parsed < 1:
+        return _ADMIN_USERS_DEFAULT_LIMIT
+    return min(parsed, _ADMIN_USERS_MAX_LIMIT)
+
+
+def _encode_admin_users_cursor(created_at: datetime, user_id: uuid.UUID) -> str:
+    payload = {
+        "created_at": created_at.isoformat(),
+        "user_id": str(user_id),
+    }
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_admin_users_cursor(value: str | None) -> tuple[datetime, uuid.UUID] | None:
+    if not value:
+        return None
+    try:
+        padded = value + ("=" * (-len(value) % 4))
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+        created_at = datetime.fromisoformat(payload["created_at"])
+        user_id = uuid.UUID(payload["user_id"])
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        binascii.Error,
+    ):
+        return None
+    return created_at, user_id
+
 
 # ─────────────────────────────────────────────
 # Phase A-2: scaffold
@@ -275,10 +323,17 @@ def list_all_users_json(db: DBSession = Depends(get_db)):
 @router.get("/users", response_class=HTMLResponse, dependencies=[Depends(require_admin_auth)], include_in_schema=False)
 def list_all_users_page(
     request: Request,
+    search: str | None = Query(None, alias="q"),
     show_test: bool = False,
+    limit: str | None = None,
+    cursor: str | None = None,
     db: DBSession = Depends(get_db),
 ):
     """사용자 리스트 HTML 페이지 + 토글 카드. show_test=true로 테스트 계정 표시."""
+    search_q = (search or "").strip()
+    page_limit = _parse_admin_users_limit(limit)
+    decoded_cursor = _decode_admin_users_cursor(cursor)
+
     # 카운트 (N+1 방지: subquery)
     session_count = (
         db.query(Session.user_id, func.count(Session.session_id).label("c"))
@@ -300,7 +355,7 @@ def list_all_users_page(
     test_count = db.query(func.count(User.user_id)).filter(test_email_filter).scalar() or 0
     op_count = total_all - test_count
 
-    q = (
+    users_query = (
         db.query(
             User,
             func.coalesce(session_count.c.c, 0).label("sessions"),
@@ -312,12 +367,30 @@ def list_all_users_page(
         .outerjoin(att_count, att_count.c.user_id == User.user_id)
     )
     if not show_test:
-        q = q.filter(not_(test_email_filter))
+        users_query = users_query.filter(not_(test_email_filter))
+    if search_q:
+        search_like = f"%{search_q}%"
+        users_query = users_query.filter(or_(User.nickname.ilike(search_like), User.email.ilike(search_like)))
+    if decoded_cursor:
+        cursor_created_at, cursor_user_id = decoded_cursor
+        users_query = users_query.filter(
+            or_(
+                User.created_at < cursor_created_at,
+                (User.created_at == cursor_created_at) & (User.user_id < cursor_user_id),
+            )
+        )
 
-    rows = q.order_by(User.created_at.desc()).all()
+    rows = users_query.order_by(User.created_at.desc(), User.user_id.desc()).limit(page_limit + 1).all()
+    has_next_page = len(rows) > page_limit
+    page_rows = rows[:page_limit]
+    next_cursor = None
+    if has_next_page and page_rows:
+        last_user = page_rows[-1][0]
+        next_cursor = _encode_admin_users_cursor(last_user.created_at, last_user.user_id)
+
     users = []
     online_count = 0
-    for (u, s, f, a) in rows:
+    for (u, s, f, a) in page_rows:
         status_label, status_cls = _activity_status(u.last_seen_at)
         if status_label == "접속 중":
             online_count += 1
@@ -347,6 +420,22 @@ def list_all_users_page(
             "test_count": test_count,
             "online_count": online_count,
             "show_test": show_test,
+            "q": search_q,
+            "limit": page_limit,
+            "next_cursor": next_cursor,
+            "next_page_url": (
+                "/admin/users?"
+                + urlencode(
+                    {
+                        "q": search_q,
+                        "show_test": "true" if show_test else "false",
+                        "limit": str(page_limit),
+                        "cursor": next_cursor,
+                    }
+                )
+                if next_cursor
+                else None
+            ),
             "signup_enabled": app_state.signup_enabled,
         },
     )

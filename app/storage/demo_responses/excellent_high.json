@@ -1,0 +1,311 @@
+{
+  "case_name": "excellent_high",
+  "test_id": "test_11",
+  "case_description": "잘 부른 사례. 호흡식별/접촉강도 모두 적절 범위(2~3점). 모든 음역대 균형.",
+  "rationale": "전 register 호흡/접촉 2~3점 균형. avg=2.55. 가장 '적절' 범위 일관",
+  "wav_path": "data/vocal_academy/validation/test_11.wav",
+  "duration_sec": 223.6,
+  "analyzed_at": "2026-05-03T04:47:30.546934",
+  "processing_time_ms": 16620,
+  "trainer_overall": {
+    "비강사용": 2.33,
+    "흉성두성": 2.67,
+    "접촉강도": 2.6,
+    "호흡식별": 2.8,
+    "전방공명": 2.73,
+    "연구개위치": 2.2,
+    "공명개방": 2.73,
+    "혀경직도": 2.33,
+    "상압하압": 2.6
+  },
+  "trainer_per_register": {
+    "low": {
+      "비강사용": 2.0,
+      "흉성두성": 2.0,
+      "접촉강도": 2.2,
+      "호흡식별": 2.0,
+      "전방공명": 1.8,
+      "연구개위치": 2.0,
+      "공명개방": 2.4,
+      "혀경직도": 2.4,
+      "상압하압": 2.4
+    },
+    "mid": {
+      "비강사용": 2.2,
+      "흉성두성": 2.4,
+      "접촉강도": 2.4,
+      "호흡식별": 3.0,
+      "전방공명": 2.8,
+      "연구개위치": 2.2,
+      "공명개방": 2.6,
+      "혀경직도": 2.2,
+      "상압하압": 2.4
+    },
+    "high": {
+      "비강사용": 2.8,
+      "흉성두성": 3.6,
+      "접촉강도": 3.2,
+      "호흡식별": 3.4,
+      "전방공명": 3.6,
+      "연구개위치": 2.4,
+      "공명개방": 3.2,
+      "혀경직도": 2.4,
+      "상압하압": 3.0
+    }
+  },
+  "expected_feedback_focus": [
+    "4_breathiness:appropriate",
+    "3_vocal_fold_contact:appropriate"
+  ],
+  "analyze_response": {
+    "run_id": "dc8385597c3c",
+    "status": "success",
+    "processing_time_ms": 16534.6,
+    "audio_info": {
+      "duration_s": 223.61,
+      "sample_rate": 16000,
+      "voiced_ratio": 0.634,
+      "voiced_duration_s": 141.76,
+      "f0_min": 83.31692688252069,
+      "f0_max": 566.6809881653068,
+      "f0_mean": 293.9207939726256
+    },
+    "register_boundaries": {
+      "low_max": 252.61190907827216,
+      "mid_max": 330.0301444552814
+    },
+    "registers": {
+      "low": {
+        "n_frames": 2924,
+        "cq_mean": 0.43980514171511625,
+        "cq_peak": 0.509765625,
+        "cpp": 0.37123184082607125,
+        "hnr": -5.20843609843332,
+        "spectral_centroid": 1415.809672653989,
+        "spectral_tilt": -0.7545785800217312,
+        "h1_h2": 12.6881147639188,
+        "singers_formant_ratio": 0.023323409119092888,
+        "a1_p0": -1.4749741550427415
+      },
+      "mid": {
+        "n_frames": 2926,
+        "cq_mean": 0.42011011192754616,
+        "cq_peak": 0.4609375,
+        "cpp": 0.509448667387593,
+        "hnr": -5.9190084762270665,
+        "spectral_centroid": 1855.7143113777354,
+        "spectral_tilt": -0.41698819060774206,
+        "h1_h2": 4.8998658599396085,
+        "singers_formant_ratio": 0.06344365100132267,
+        "a1_p0": -1.4749741550427415
+      },
+      "high": {
+        "n_frames": 3010,
+        "cq_mean": 0.41244808970099667,
+        "cq_peak": 0.54296875,
+        "cpp": 0.46659662616461645,
+        "hnr": -2.164631304895811,
+        "spectral_centroid": 1939.0654316942728,
+        "spectral_tilt": -0.32651306897701016,
+        "h1_h2": 1.258484855670213,
+        "singers_formant_ratio": 0.09195239145631776,
+        "a1_p0": -1.474974155042741
+      }
+    },
+    "indicators": {
+      "cq_mean": 0.4240069042748307,
+      "cq_peak": 0.5,
+      "cpp_mean": 0.449275908364224,
+      "hnr_mean": -4.4090323003381275,
+      "spectral_centroid_mean": 1738.852653197661,
+      "spectral_tilt_mean": -0.49766360624408534,
+      "h1_h2_mean": 6.233080642375757,
+      "singers_formant_ratio_mean": 0.05988831482817316,
+      "a1_p0_mean": -1.474974155042741,
+      "nasal_ratio": null
+    },
+    "scores": {
+      "1_nasal_oral_ratio": {
+        "ai_score": null,
+        "rounded_score": null,
+        "zone": null,
+        "confidence": "medium"
+      },
+      "2_chest_head_voice": {
+        "ai_score": 5.0,
+        "rounded_score": 5,
+        "zone": "excessive",
+        "confidence": "medium"
+      },
+      "3_vocal_fold_contact": {
+        "ai_score": 0.0,
+        "rounded_score": 0,
+        "zone": "insufficient",
+        "confidence": "high"
+      },
+      "4_breathiness": {
+        "ai_score": 3.36,
+        "rounded_score": 3,
+        "zone": "appropriate",
+        "confidence": "high"
+      },
+      "5_forward_resonance": {
+        "ai_score": 0.0,
+        "rounded_score": 0,
+        "zone": "insufficient",
+        "confidence": "medium"
+      },
+      "6_soft_palate": {
+        "ai_score": null,
+        "rounded_score": null,
+        "zone": null,
+        "confidence": "medium"
+      },
+      "7_larynx_tongue_root": {
+        "ai_score": null,
+        "rounded_score": null,
+        "zone": null,
+        "confidence": "unavailable"
+      },
+      "8_tongue_tension": {
+        "ai_score": null,
+        "rounded_score": null,
+        "zone": null,
+        "confidence": "unavailable"
+      },
+      "9_pressure_balance": {
+        "ai_score": 5.0,
+        "rounded_score": 5,
+        "zone": "excessive",
+        "confidence": "medium"
+      }
+    },
+    "feedback": {
+      "1_nasal_oral_ratio": {
+        "name_ko": "비강, 구강 공명의 비율",
+        "ai_score": null,
+        "score_description": "",
+        "feedback_text": "AI 측정 불가",
+        "zone": null,
+        "zone_label": "",
+        "ai_indicator": {
+          "name": "nasal_ratio",
+          "value": null
+        }
+      },
+      "2_chest_head_voice": {
+        "name_ko": "흉성/두성 경향",
+        "ai_score": 5.0,
+        "score_description": "흉성 발성이 지나치게 강해 두성 사용이 거의 없음",
+        "feedback_text": "두성을 더 활용하세요. 고음에서 흉성을 밀어붙이지 말고 자연스럽게 두성으로 전환하면 톤이 가벼워집니다.",
+        "zone": "excessive",
+        "zone_label": "과함",
+        "ai_indicator": {
+          "name": "cq_mean",
+          "value": 0.424
+        }
+      },
+      "3_vocal_fold_contact": {
+        "name_ko": "성대 접촉 강도",
+        "ai_score": 0.0,
+        "score_description": "성대 접촉이 매우 약해 대부분의 소리가 기식음으로 들림",
+        "feedback_text": "성대 접촉을 강화하세요. 발성 시작 시 가볍게 성대를 모으는 연습을 하면 기식음을 줄이고 안정적인 발성을 만들 수 있습니다.",
+        "zone": "insufficient",
+        "zone_label": "미달",
+        "ai_indicator": {
+          "name": "cq_mean",
+          "value": 0.5
+        }
+      },
+      "4_breathiness": {
+        "name_ko": "호흡 소리 식별",
+        "ai_score": 3.36,
+        "score_description": "필요한 정도의 호흡이 섞여 자연스러운 질감 형성",
+        "feedback_text": "호흡과 발성의 균형이 적절합니다. 현재 질감을 유지하세요.",
+        "zone": "appropriate",
+        "zone_label": "적절",
+        "ai_indicator": {
+          "name": "hnr",
+          "value": 0.4493
+        }
+      },
+      "5_forward_resonance": {
+        "name_ko": "소리의 전방 공명 정도",
+        "ai_score": 0.0,
+        "score_description": "전방 공명이 과도하게 집중되어 얇고 자극적으로 들림",
+        "feedback_text": "공명 위치를 약간 뒤로 가져오세요. 지나치게 앞쪽에 집중된 소리는 날카롭게 들리므로, 구강 공간을 넓혀 균형을 맞추세요.",
+        "zone": "insufficient",
+        "zone_label": "미달",
+        "ai_indicator": {
+          "name": "high_freq_ratio",
+          "value": 1738.8527
+        }
+      },
+      "6_soft_palate": {
+        "name_ko": "연구개의 위치",
+        "ai_score": null,
+        "score_description": "",
+        "feedback_text": "AI 측정 불가",
+        "zone": null,
+        "zone_label": "",
+        "ai_indicator": {
+          "name": "nasal_ratio",
+          "value": null
+        }
+      },
+      "7_larynx_tongue_root": {
+        "name_ko": "후두, 혀뿌리의 위치",
+        "ai_score": null,
+        "score_description": "",
+        "feedback_text": "AI 측정 불가",
+        "zone": null,
+        "zone_label": "",
+        "ai_indicator": {
+          "name": null,
+          "value": null
+        }
+      },
+      "8_tongue_tension": {
+        "name_ko": "혀, 구강 공간의 경직도",
+        "ai_score": null,
+        "score_description": "",
+        "feedback_text": "AI 측정 불가",
+        "zone": null,
+        "zone_label": "",
+        "ai_indicator": {
+          "name": null,
+          "value": null
+        }
+      },
+      "9_pressure_balance": {
+        "name_ko": "상압/하압 비율",
+        "ai_score": 5.0,
+        "score_description": "하압이 지나치게 강해 소리가 밀리고 거칠게 들림",
+        "feedback_text": "호흡의 힘을 줄이세요. 과도한 하압은 소리를 밀어내므로, 적절한 호흡량으로 효율적인 발성을 만드세요.",
+        "zone": "excessive",
+        "zone_label": "과함",
+        "ai_indicator": {
+          "name": "spectral_tilt",
+          "value": -0.4977
+        }
+      }
+    },
+    "reliability": {
+      "high_reliability": [
+        "3_vocal_fold_contact",
+        "4_breathiness"
+      ],
+      "medium_reliability": [
+        "1_nasal_oral_ratio",
+        "2_chest_head_voice",
+        "5_forward_resonance",
+        "6_soft_palate",
+        "9_pressure_balance"
+      ],
+      "unavailable": [
+        "7_larynx_tongue_root",
+        "8_tongue_tension"
+      ]
+    }
+  }
+}

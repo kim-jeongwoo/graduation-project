@@ -193,6 +193,16 @@ TrainingScreen 관련 작업이 5/9 데드라인 이후 vocal-server에도 영�
 - 실측: dml-server `/analyze-chunk` 11 keys → vocal-server 12 keys (`-run_id +session_id +chunk_meta`)
 - §15-3 운영 규칙 적용 범위가 **모든 dml-server endpoint** (단순 `/analyze`뿐 아니라 `/analyze-chunk` 등)임을 학습. 향후 신규 dml-forward endpoint 추가 시 처음부터 통째 통과 패턴 권장.
 
+### production training-analyze 504 계측/timeout 보정 (2026-05-15)
+- production 앱 로그에서 `/sessions/{id}/training-analyze`가 약 11초 후 504로 종료되는 사례 확인. 원인은 앱 30초 timeout 전에 vocal-server `_TRAINING_TIMEOUT=10.0`이 먼저 끊는 경로.
+- `_TRAINING_TIMEOUT`을 25초로 조정하고, dml-server `/analyze-chunk` 호출 start/response/body status/timeout/request error 로그에 `session_id`, elapsed, timeout, status_code/body_status만 남기도록 계측 추가. 응답 pass-through 패턴은 유지.
+
+### full analyze async start + polling 전환 (2026-05-15)
+- production full analyze POST가 dml-server `/analyze` 완료까지 blocking 대기하면 Cloudflare 524가 발생할 수 있어, `POST /sessions/{id}/analyze`를 async start endpoint로 전환.
+- 응답은 즉시 `{run_id, status:"queued"}`이며, background task가 새 DB session에서 DML `/analyze`를 실행하고 `AnalysisRun.status/result_json`을 저장.
+- dml-server 변경 없음. `result_json` 통째 저장 패턴 유지. `/sessions/{id}/training-analyze` 및 `/analyze-chunk` 변경 없음.
+- 앱은 `GET /analysis/{run_id}` polling 후 terminal status에서 `/analysis/{run_id}/results`를 조회해야 함.
+
 ### dml-server StreamingResponse 자동 통과 (2026-05-12, P1-2)
 - dml-server `/_test_stream?duration=130` (chunked + leading whitespace keepalive) 실측 검증
 - 결과: HTTP 200 / 130.7s (Cloudflare 524 발생 안 함) / `Transfer-Encoding: chunked` / 첫 30 bytes `'                           {"t'` (leading whitespace ping) / `response.json()` 정상 파싱

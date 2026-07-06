@@ -1,0 +1,379 @@
+{
+  "generated_at": "2026-05-03T04:48:17.868944",
+  "model_server": "http://localhost:8001",
+  "cases": {
+    "excellent_high": {
+      "test_id": "test_11",
+      "wav_path": "data/vocal_academy/validation/test_11.wav",
+      "duration_sec": 223.6,
+      "trainer_scores": {
+        "1_nasal_oral_ratio": {
+          "low": 2.0,
+          "mid": 2.2,
+          "high": 2.8
+        },
+        "2_chest_head_voice": {
+          "low": 2.0,
+          "mid": 2.4,
+          "high": 3.6
+        },
+        "3_vocal_fold_contact": {
+          "low": 2.2,
+          "mid": 2.4,
+          "high": 3.2
+        },
+        "4_breathiness": {
+          "low": 2.0,
+          "mid": 3.0,
+          "high": 3.4
+        },
+        "5_forward_resonance": {
+          "low": 1.8,
+          "mid": 2.8,
+          "high": 3.6
+        },
+        "6_soft_palate": {
+          "low": 2.0,
+          "mid": 2.2,
+          "high": 2.4
+        },
+        "7_larynx_tongue": {
+          "low": 2.4,
+          "mid": 2.6,
+          "high": 3.2
+        },
+        "8_tongue_tension": {
+          "low": 2.4,
+          "mid": 2.2,
+          "high": 2.4
+        },
+        "9_pressure_balance": {
+          "low": 2.4,
+          "mid": 2.4,
+          "high": 3.0
+        }
+      },
+      "trainer_overall": {
+        "1_nasal_oral_ratio": 2.33,
+        "2_chest_head_voice": 2.67,
+        "3_vocal_fold_contact": 2.6,
+        "4_breathiness": 2.8,
+        "5_forward_resonance": 2.73,
+        "6_soft_palate": 2.2,
+        "7_larynx_tongue": 2.73,
+        "8_tongue_tension": 2.33,
+        "9_pressure_balance": 2.6
+      },
+      "registers": [
+        "low",
+        "mid",
+        "high"
+      ],
+      "case_description": "잘 부른 사례. 호흡식별/접촉강도 모두 적절 범위(2~3점). 모든 음역대 균형.",
+      "expected_feedback_focus": [
+        "4_breathiness:appropriate",
+        "3_vocal_fold_contact:appropriate"
+      ],
+      "analyzed_at": "2026-05-03T04:47:30.546934",
+      "processing_time_ms": 16620
+    },
+    "needs_work_breathing": {
+      "test_id": "test_08",
+      "wav_path": "data/vocal_academy/validation/test_08.wav",
+      "duration_sec": 182.6,
+      "trainer_scores": {
+        "1_nasal_oral_ratio": {
+          "low": 1.6,
+          "mid": 1.4,
+          "high": 1.6
+        },
+        "2_chest_head_voice": {
+          "low": 1.8,
+          "mid": 2.2,
+          "high": 2.2
+        },
+        "3_vocal_fold_contact": {
+          "low": 1.6,
+          "mid": 3.0,
+          "high": 3.8
+        },
+        "4_breathiness": {
+          "low": 0.8,
+          "mid": 1.0,
+          "high": 1.6
+        },
+        "5_forward_resonance": {
+          "low": 1.4,
+          "mid": 1.6,
+          "high": 1.4
+        },
+        "6_soft_palate": {
+          "low": 2.6,
+          "mid": 1.8,
+          "high": 2.2
+        },
+        "7_larynx_tongue": {
+          "low": 1.2,
+          "mid": 1.2,
+          "high": 1.0
+        },
+        "8_tongue_tension": {
+          "low": 2.4,
+          "mid": 2.6,
+          "high": 2.6
+        },
+        "9_pressure_balance": {
+          "low": 1.2,
+          "mid": 1.2,
+          "high": 1.2
+        }
+      },
+      "trainer_overall": {
+        "1_nasal_oral_ratio": 1.53,
+        "2_chest_head_voice": 2.07,
+        "3_vocal_fold_contact": 2.8,
+        "4_breathiness": 1.13,
+        "5_forward_resonance": 1.47,
+        "6_soft_palate": 2.2,
+        "7_larynx_tongue": 1.13,
+        "8_tongue_tension": 2.53,
+        "9_pressure_balance": 1.2
+      },
+      "registers": [
+        "low",
+        "mid",
+        "high"
+      ],
+      "case_description": "기식음 과다(호흡식별 부족). 모든 음역대에서 호흡이 insufficient. 호흡 개선 필요.",
+      "expected_feedback_focus": [
+        "4_breathiness:insufficient"
+      ],
+      "analyzed_at": "2026-05-03T04:47:44.073268",
+      "processing_time_ms": 13526
+    },
+    "needs_work_contact": {
+      "test_id": "test_05",
+      "wav_path": "data/vocal_academy/validation/test_05.wav",
+      "duration_sec": 162.6,
+      "trainer_scores": {
+        "1_nasal_oral_ratio": {
+          "low": 2.0,
+          "mid": 2.4,
+          "high": 2.4
+        },
+        "2_chest_head_voice": {
+          "low": 2.6,
+          "mid": 3.2,
+          "high": 3.8
+        },
+        "3_vocal_fold_contact": {
+          "low": 2.6,
+          "mid": 3.8,
+          "high": 4.0
+        },
+        "4_breathiness": {
+          "low": 1.6,
+          "mid": 3.2,
+          "high": 4.6
+        },
+        "5_forward_resonance": {
+          "low": 1.6,
+          "mid": 2.2,
+          "high": 3.4
+        },
+        "6_soft_palate": {
+          "low": 2.6,
+          "mid": 3.0,
+          "high": 3.0
+        },
+        "7_larynx_tongue": {
+          "low": 1.0,
+          "mid": 0.8,
+          "high": 0.8
+        },
+        "8_tongue_tension": {
+          "low": 2.6,
+          "mid": 2.8,
+          "high": 1.6
+        },
+        "9_pressure_balance": {
+          "low": 2.6,
+          "mid": 3.2,
+          "high": 4.0
+        }
+      },
+      "trainer_overall": {
+        "1_nasal_oral_ratio": 2.27,
+        "2_chest_head_voice": 3.2,
+        "3_vocal_fold_contact": 3.47,
+        "4_breathiness": 3.13,
+        "5_forward_resonance": 2.4,
+        "6_soft_palate": 2.87,
+        "7_larynx_tongue": 0.87,
+        "8_tongue_tension": 2.33,
+        "9_pressure_balance": 3.27
+      },
+      "registers": [
+        "low",
+        "mid",
+        "high"
+      ],
+      "case_description": "성대 과압박(접촉강도 과잉). 고음부에서 접촉강도 4.0 — 완화 필요.",
+      "expected_feedback_focus": [
+        "3_vocal_fold_contact:excessive"
+      ],
+      "analyzed_at": "2026-05-03T04:47:56.195885",
+      "processing_time_ms": 12122
+    },
+    "needs_work_both": {
+      "test_id": "test_01",
+      "wav_path": "data/vocal_academy/validation/test_01.wav",
+      "duration_sec": 191.0,
+      "trainer_scores": {
+        "1_nasal_oral_ratio": {
+          "low": 1.4,
+          "mid": 2.0,
+          "high": 1.8
+        },
+        "2_chest_head_voice": {
+          "low": 2.0,
+          "mid": 2.2,
+          "high": 3.0
+        },
+        "3_vocal_fold_contact": {
+          "low": 2.2,
+          "mid": 3.6,
+          "high": 4.0
+        },
+        "4_breathiness": {
+          "low": 2.2,
+          "mid": 4.0,
+          "high": 4.2
+        },
+        "5_forward_resonance": {
+          "low": 1.6,
+          "mid": 2.4,
+          "high": 3.6
+        },
+        "6_soft_palate": {
+          "low": 1.8,
+          "mid": 3.6,
+          "high": 3.6
+        },
+        "7_larynx_tongue": {
+          "low": 3.4,
+          "mid": 3.4,
+          "high": 4.0
+        },
+        "8_tongue_tension": {
+          "low": 3.0,
+          "mid": 3.4,
+          "high": 3.8
+        },
+        "9_pressure_balance": {
+          "low": 2.6,
+          "mid": 3.0,
+          "high": 4.2
+        }
+      },
+      "trainer_overall": {
+        "1_nasal_oral_ratio": 1.73,
+        "2_chest_head_voice": 2.4,
+        "3_vocal_fold_contact": 3.27,
+        "4_breathiness": 3.47,
+        "5_forward_resonance": 2.53,
+        "6_soft_palate": 3.0,
+        "7_larynx_tongue": 3.6,
+        "8_tongue_tension": 3.4,
+        "9_pressure_balance": 3.27
+      },
+      "registers": [
+        "low",
+        "mid",
+        "high"
+      ],
+      "case_description": "호흡식별+접촉강도 동시 과잉. 중·고음부에서 두 항목 모두 excessive(4+). 종합 개선 필요.",
+      "expected_feedback_focus": [
+        "4_breathiness:excessive",
+        "3_vocal_fold_contact:excessive"
+      ],
+      "analyzed_at": "2026-05-03T04:48:10.494835",
+      "processing_time_ms": 14299
+    },
+    "medium_quality": {
+      "test_id": "test_10",
+      "wav_path": "data/vocal_academy/validation/test_10.wav",
+      "duration_sec": 101.4,
+      "trainer_scores": {
+        "1_nasal_oral_ratio": {
+          "low": 2.0,
+          "mid": 2.6,
+          "high": 2.8
+        },
+        "2_chest_head_voice": {
+          "low": 2.2,
+          "mid": 2.8,
+          "high": 3.2
+        },
+        "3_vocal_fold_contact": {
+          "low": 1.8,
+          "mid": 3.2,
+          "high": 3.4
+        },
+        "4_breathiness": {
+          "low": 1.8,
+          "mid": 2.8,
+          "high": 2.6
+        },
+        "5_forward_resonance": {
+          "low": 2.6,
+          "mid": 3.0,
+          "high": 2.8
+        },
+        "6_soft_palate": {
+          "low": 2.4,
+          "mid": 3.2,
+          "high": 3.0
+        },
+        "7_larynx_tongue": {
+          "low": 2.4,
+          "mid": 3.2,
+          "high": 3.0
+        },
+        "8_tongue_tension": {
+          "low": 2.2,
+          "mid": 2.4,
+          "high": 2.4
+        },
+        "9_pressure_balance": {
+          "low": 2.2,
+          "mid": 3.0,
+          "high": 3.4
+        }
+      },
+      "trainer_overall": {
+        "1_nasal_oral_ratio": 2.47,
+        "2_chest_head_voice": 2.73,
+        "3_vocal_fold_contact": 2.8,
+        "4_breathiness": 2.4,
+        "5_forward_resonance": 2.8,
+        "6_soft_palate": 2.87,
+        "7_larynx_tongue": 2.87,
+        "8_tongue_tension": 2.33,
+        "9_pressure_balance": 2.87
+      },
+      "registers": [
+        "low",
+        "mid",
+        "high"
+      ],
+      "case_description": "전반적 평균 수준. 9개 항목 모두 2~3점대. 두드러지는 강점·약점 없음.",
+      "expected_feedback_focus": [
+        "4_breathiness:appropriate",
+        "3_vocal_fold_contact:appropriate"
+      ],
+      "analyzed_at": "2026-05-03T04:48:17.868495",
+      "processing_time_ms": 7373
+    }
+  }
+}

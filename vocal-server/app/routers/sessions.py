@@ -2,6 +2,7 @@
 
 import json as _json
 import logging
+import time
 import uuid
 from typing import Optional
 
@@ -29,7 +30,7 @@ logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
-_TRAINING_TIMEOUT = 10.0
+_TRAINING_TIMEOUT = 25.0
 
 
 def _build_song_field(session_obj) -> SongInSession | None:
@@ -209,6 +210,10 @@ def training_analyze(
     if chunk_meta:
         data_payload["chunk_meta"] = chunk_meta
 
+    analyze_started_at = time.perf_counter()
+    logger.info(
+        f"[training-analyze] dml start: session_id={session_id}, timeout={_TRAINING_TIMEOUT:.1f}s"
+    )
     try:
         r = httpx.post(
             f"{MODEL_SERVER_URL}/analyze-chunk",
@@ -217,9 +222,26 @@ def training_analyze(
             timeout=_TRAINING_TIMEOUT,
         )
     except httpx.TimeoutException:
+        elapsed = time.perf_counter() - analyze_started_at
+        logger.warning(
+            f"[training-analyze] dml timeout: session_id={session_id}, "
+            f"elapsed={elapsed:.3f}s, timeout={_TRAINING_TIMEOUT:.1f}s"
+        )
         raise HTTPException(status_code=504, detail="분석 서버 응답 시간 초과")
-    except httpx.RequestError:
+    except httpx.RequestError as exc:
+        elapsed = time.perf_counter() - analyze_started_at
+        logger.warning(
+            f"[training-analyze] dml request error: session_id={session_id}, "
+            f"elapsed={elapsed:.3f}s, timeout={_TRAINING_TIMEOUT:.1f}s, "
+            f"error_type={type(exc).__name__}"
+        )
         raise HTTPException(status_code=504, detail="분석 서버에 연결할 수 없음")
+
+    elapsed = time.perf_counter() - analyze_started_at
+    logger.info(
+        f"[training-analyze] dml response: session_id={session_id}, "
+        f"status_code={r.status_code}, elapsed={elapsed:.3f}s"
+    )
 
     if r.status_code == 400:
         try:
@@ -240,7 +262,10 @@ def training_analyze(
     except Exception:
         raise HTTPException(status_code=502, detail="분석 서버 응답 파싱 실패")
 
-    logger.info(f"[training-analyze] session_id={session_id}, status={body.get('status')}")
+    logger.info(
+        f"[training-analyze] dml body: session_id={session_id}, "
+        f"body_status={body.get('status')}, elapsed={elapsed:.3f}s"
+    )
 
     # ── 누적 시도 자동 저장 (best-effort, 응답에 영향 없음) ──
     saved_count = 0

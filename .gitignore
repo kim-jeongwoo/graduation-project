@@ -16,6 +16,7 @@ songs/
 data/vocal_academy/singer_*/
 data/vocal_academy/validation/
 data/SVD_healthy/
+backups/*.sql
 vocal-server/app/storage/songs/audio/
 vocal-server/app/storage/songs/lrc/
 vocal-server/app/storage/songs/pitch_guide/
@@ -78,6 +79,7 @@ chat_*.md
 
 # ─── 에이전트 내부 메모리 ─────────────────────────────────────────────────
 .claude/
+.codex/
 
 # ─── OS ──────────────────────────────────────────────────────────────────
 .DS_Store

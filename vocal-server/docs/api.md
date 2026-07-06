@@ -335,6 +335,8 @@ curl -X POST http://host:8000/sessions/{session_id}/files \
 TrainingScreen 사후 측정용 청크 분석. **응답은 휘발성** — dml-server `/analyze-chunk` 결과를 그대로 전달합니다. 정식 분석 흐름(`/analyze`)과 별개.
 
 > **자동 저장**: status가 `"success"`이고 `chunk_meta`에 `original_run_id`, `chunk_index`가 포함되면 백엔드가 `training_attempts` 테이블에 자동 INSERT (응답 스키마 영향 없음). 누적 기록은 `GET /users/me/training-attempts`로 조회.
+>
+> **Timeout 기준**: vocal-server는 dml-server `/analyze-chunk` 응답을 최대 25초 대기합니다. 25초 초과 또는 연결 실패 시 504를 반환하며, 서버 로그에는 `session_id`, elapsed, timeout, DML HTTP status/body status(가능한 경우)가 기록됩니다.
 
 ```http
 POST /sessions/{session_id}/training-analyze
@@ -442,7 +444,7 @@ curl -X POST http://host:8000/sessions/{session_id}/training-analyze \
 | 403 | 다른 사용자의 세션 |
 | 404 | 존재하지 않는 session_id |
 | 502 | dml-server 5xx 또는 응답 파싱 실패 |
-| 504 | dml-server timeout 또는 연결 실패 |
+| 504 | dml-server 25초 timeout 또는 연결 실패 |
 
 ---
 
@@ -450,11 +452,12 @@ curl -X POST http://host:8000/sessions/{session_id}/training-analyze \
 
 ### POST /sessions/{session_id}/analyze
 
-AI 분석 요청. **동기 처리** — 응답까지 10~90초 소요 (v2 model_mapper, wav 길이에 따라).  
+AI 분석 시작 요청. **비동기 start endpoint** — 요청을 접수하면 DML 분석 완료를 기다리지 않고 즉시 `run_id`와 `status: "queued"`를 반환합니다.
 세션 `status`가 `uploaded` 상태여야 합니다.
 
-> ⚠️ **Cloudflare Tunnel 100s origin timeout 한계**: 외부 노출 환경(`https://api.vocal-fit.com`)은 Cloudflare 무료/Pro 플랜의 origin timeout 100s 고정. dml-server 응답이 100s를 초과하면 **HTTP 524**로 끊김 (vocal-server `_ANALYZE_TIMEOUT=180s`로 늘려도 Cloudflare가 먼저 끊음).  
-> **권장**: 분석 wav는 **90초 이내** (짧은 청크). 긴 곡은 앱에서 청크 분할 후 여러 번 호출. 향후 백로그: 청크 분할 또는 비동기(폴링) 처리 검토.
+> **Cloudflare 524 회피 방식**: vocal-server가 POST 응답에서 DML `/analyze` 완료를 기다리지 않습니다. 실제 DML 호출과 `AnalysisRun.status/result_json` 저장은 background task에서 진행되며, 앱은 `GET /analysis/{run_id}`로 polling합니다.
+>
+> **구분**: 정식 full analyze는 이 endpoint + polling 흐름을 사용합니다. `/sessions/{session_id}/training-analyze`는 TrainingScreen 사후 측정용이며 내부적으로 dml-server `/analyze-chunk`를 호출합니다. `/analyze-chunk` 흐름은 이번 전환과 무관하게 기존 동작을 유지합니다.
 
 ```http
 POST /sessions/{session_id}/analyze
@@ -465,11 +468,11 @@ Authorization: Bearer <token>
 ```json
 {
   "run_id": "f199f109-8f96-4528-9b61-be811eef7ef1",
-  "status": "success"
+  "status": "queued"
 }
 ```
 
-분석 실패 시에도 201 반환, `status: "failed"`. 무음/잡음 감지 시 `status: "no_voice"` 반환.
+이 응답은 **분석 완료 결과가 아니라 접수 결과**입니다. 앱은 POST 직후 결과 화면으로 이동하지 말고 `GET /analysis/{run_id}`를 polling해야 합니다.
 
 **에러**
 | 코드 | 사유 |
@@ -482,7 +485,7 @@ Authorization: Bearer <token>
 
 ### GET /analysis/{run_id}
 
-분석 실행 상태 조회. 비동기 폴링 전환 시 사용.
+분석 실행 상태 조회. 앱은 `queued`/`running` 동안 polling하고, terminal status가 되면 `GET /analysis/{run_id}/results`를 조회합니다.
 
 ```http
 GET /analysis/{run_id}
@@ -509,8 +512,11 @@ Authorization: Bearer <token>
 | `"queued"` | 분석 대기 중 |
 | `"running"` | 분석 진행 중 |
 | `"success"` | 정상 분석 완료 |
+| `"completed"` | 정상 분석 완료 (호환 상태) |
 | `"failed"` | 분석 중 에러 발생 |
+| `"invalid"` | dml-server가 유효하지 않은 입력/분석 불가 상태 반환 |
 | `"no_voice"` | 무음/잡음 감지로 분석 스킵 (정상 흐름) |
+| `"error"` | dml-server가 오류 상태 반환 |
 
 **에러**
 | 코드 | 사유 |
@@ -522,7 +528,12 @@ Authorization: Bearer <token>
 
 ### GET /analysis/{run_id}/results
 
-분석 결과 전체 조회. `result_json`에 scores, feedback, indicators 포함.
+분석 결과 전체 조회. `result_json`에 scores, feedback, indicators 등 dml-server `/analyze` 응답 JSON 전체가 저장됩니다.
+
+앱 권장 흐름:
+1. `GET /analysis/{run_id}`가 `success` 또는 `completed`이면 결과 화면 진입 후 이 endpoint를 호출합니다.
+2. `failed`, `invalid`, `no_voice`, `error`이면 결과 화면 대신 실패/재녹음/안내 UX를 표시하고, 필요하면 이 endpoint의 `result_json.status/reason/detail/message/error`를 확인합니다.
+3. `queued`/`running` 중에는 결과가 아직 없을 수 있으므로 이 endpoint를 최종 결과로 사용하지 않습니다. 현재 구현상 완료 전 호출도 200을 반환할 수 있지만 `metrics`가 비어 있고 `result_json`이 `null`일 수 있습니다.
 
 ```http
 GET /analysis/{run_id}/results

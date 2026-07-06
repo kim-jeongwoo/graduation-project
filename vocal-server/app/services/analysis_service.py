@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,11 +11,68 @@ import httpx
 from sqlalchemy.orm import Session as DBSession
 
 from app.config import MODEL_SERVER_URL
+from app.database import SessionLocal
 from app.models.models import AnalysisResult, AnalysisRun, Session, SessionFile
 
 logger = logging.getLogger("uvicorn.error")
 
 _ANALYZE_TIMEOUT = 180.0  # dml-server v2 cold start + 긴 wav 여유 (단, Cloudflare 100s가 먼저 끊을 수 있음)
+
+
+def run_analysis_by_ids(run_id: str, session_id: str) -> None:
+    """Background task entrypoint: 새 DB 세션에서 run/session을 다시 로드해 분석합니다."""
+
+    db: DBSession = SessionLocal()
+    try:
+        run_uuid = uuid.UUID(str(run_id))
+        session_uuid = uuid.UUID(str(session_id))
+
+        run = db.query(AnalysisRun).filter(AnalysisRun.run_id == run_uuid).first()
+        if not run:
+            logger.error(f"[analyze-bg] AnalysisRun not found: run_id={run_id}")
+            return
+
+        session = db.query(Session).filter(Session.session_id == session_uuid).first()
+        if not session:
+            logger.error(f"[analyze-bg] Session not found: run_id={run.run_id}, session_id={session_id}")
+            run.status = "failed"
+            run.error_message = "세션을 찾을 수 없습니다."
+            run.finished_at = datetime.now(timezone.utc)
+            run.result_json = {
+                "error": True,
+                "http_status": None,
+                "raw_response": None,
+                "exception": "Session not found",
+            }
+            db.commit()
+            return
+
+        run_analysis(run, session, db)
+    except Exception as exc:
+        logger.error(f"[analyze-bg] background task failed: run_id={run_id}, error={exc}")
+        try:
+            db.rollback()
+            run_uuid = uuid.UUID(str(run_id))
+            run = db.query(AnalysisRun).filter(AnalysisRun.run_id == run_uuid).first()
+            if run:
+                session = db.query(Session).filter(Session.session_id == run.session_id).first()
+                run.status = "failed"
+                run.error_message = str(exc)[:1000]
+                run.finished_at = datetime.now(timezone.utc)
+                run.result_json = {
+                    "error": True,
+                    "http_status": None,
+                    "raw_response": None,
+                    "exception": str(exc),
+                }
+                if session:
+                    session.status = "failed"
+                db.commit()
+        except Exception as store_exc:
+            db.rollback()
+            logger.error(f"[analyze-bg] failed to store failure state: run_id={run_id}, error={store_exc}")
+    finally:
+        db.close()
 
 
 def run_analysis(run: AnalysisRun, session: Session, db: DBSession) -> AnalysisRun:
