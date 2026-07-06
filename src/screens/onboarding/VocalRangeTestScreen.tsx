@@ -234,12 +234,8 @@ export default function VocalRangeTestScreen() {
         }
         try {
           if (!recordingRef.current) return;
-          // DEBUG: 디버깅 후 원복
-          const statusBeforeStop = await recordingRef.current.getStatusAsync();
-          console.log('[녹음] 상태:', JSON.stringify(statusBeforeStop));
           await recordingRef.current.stopAndUnloadAsync();
           const uri = recordingRef.current.getURI();
-          console.log('[녹음] URI:', uri); // DEBUG: 디버깅 후 원복
           recordingRef.current = null;
           setMeterLevel(0);
 
@@ -269,8 +265,7 @@ export default function VocalRangeTestScreen() {
           setRecordState('error');
         }
       }, RECORD_DURATION_SEC * 1000);
-    } catch (e: unknown) {
-      console.log('[VocalRange] recording error:', e);
+    } catch {
       setRecordState('error');
       setErrorMessage('녹음을 시작할 수 없습니다.');
     }

@@ -3,9 +3,11 @@ import { ActivityIndicator, View, Text } from 'react-native';
 import { NavigationContainer, CommonActions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useVocalProfile } from '../context/VocalProfileContext';
 import { COLORS } from '../utils/colors';
+import type { HistoryStackParamList, ResultStackParamList } from './types';
 
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
@@ -18,7 +20,6 @@ import HistoryScreen from '../screens/history/HistoryScreen';
 import HistoryDetailScreen from '../screens/history/HistoryDetailScreen';
 import FavoritesScreen from '../screens/history/FavoritesScreen';
 import SongHistoryScreen from '../screens/history/SongHistoryScreen';
-import GoalsScreen from '../screens/goals/GoalsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ProfileScreen from '../screens/settings/ProfileScreen';
 import VocalRangeTestScreen from '../screens/onboarding/VocalRangeTestScreen';
@@ -112,7 +113,7 @@ function HomeStackNavigator() {
 }
 
 // ─── History Stack (히스토리 탭 내부) ───
-const HistoryStack = createNativeStackNavigator();
+const HistoryStack = createNativeStackNavigator<HistoryStackParamList>();
 
 function HistoryStackNavigator() {
   return (
@@ -169,7 +170,7 @@ function HistoryStackNavigator() {
 
 // ─── Result Stack (분석 결과 탭 내부) ───
 // LatestAnalysisScreen이 마운트 시 GET /sessions → 최신 completed run_id 추출 → reset to EvalResult
-const ResultStack = createNativeStackNavigator();
+const ResultStack = createNativeStackNavigator<ResultStackParamList>();
 
 function ResultStackNavigator() {
   return (
@@ -216,12 +217,7 @@ function MainTabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          paddingBottom: 6,
-          height: 60,
-          backgroundColor: COLORS.card,
-          borderTopColor: COLORS.cardBorder,
-        },
+        tabBarStyle: { display: 'none' },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
@@ -275,14 +271,6 @@ function MainTabNavigator() {
           tabBarIcon: () => <TabIcon label="📊" />,
         }}
       />
-      <Tab.Screen
-        name="GoalsTab"
-        component={GoalsScreen}
-        options={{
-          tabBarLabel: '목표관리',
-          tabBarIcon: () => <TabIcon label="🎯" />,
-        }}
-      />
     </Tab.Navigator>
   );
 }
@@ -321,12 +309,14 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      {!token ? (
-        <AuthNavigator />
-      ) : (
-        <AppRootNavigator />
-      )}
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        {!token ? (
+          <AuthNavigator />
+        ) : (
+          <AppRootNavigator />
+        )}
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

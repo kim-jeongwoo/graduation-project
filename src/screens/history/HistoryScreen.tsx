@@ -9,12 +9,15 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { isAuthExpiredError } from '../../api/client';
 import { getSessions } from '../../api/sessions';
 import { formatDate } from '../../utils/labels';
 import type { Session } from '../../types/api';
 import { COLORS } from '../../utils/colors';
+import type { HistoryStackParamList } from '../../navigation/types';
+import MainTopTabs from '../../components/navigation/MainTopTabs';
 
-type Props = NativeStackScreenProps<Record<string, object | undefined>, string>;
+type Props = NativeStackScreenProps<HistoryStackParamList, 'HistoryList'>;
 
 // 곡 제목/아티스트/ID fallback (서버 응답 nested song 우선)
 const getSongTitle  = (s: Session) => s.song?.title  ?? s.song_title ?? null;
@@ -35,13 +38,16 @@ export default function HistoryScreen({ navigation }: Props) {
   const [sessions, setSessions]   = useState<Session[]>([]);
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
 
   const loadSessions = useCallback(async () => {
+    setErrorMsg(null);
     try {
       const data = await getSessions();
       setSessions(data);
     } catch (e: unknown) {
-      console.log('[HistoryScreen] error:', e);
+      if (isAuthExpiredError(e)) return;
+      setErrorMsg('분석 기록을 불러오지 못했습니다.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -87,12 +93,12 @@ export default function HistoryScreen({ navigation }: Props) {
   }, [sessions]);
 
   const handleFolderPress = (folder: SongFolder) => {
-    navigation.navigate('SongHistory' as never, {
+    navigation.navigate('SongHistory', {
       songId:     folder.songId,
       songTitle:  folder.songTitle,
       songArtist: folder.songArtist,
       sessions:   folder.sessions,
-    } as never);
+    });
   };
 
   const renderItem = ({ item }: { item: SongFolder }) => {
@@ -112,25 +118,56 @@ export default function HistoryScreen({ navigation }: Props) {
     );
   };
 
+  const renderHeader = () => (
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>📊 히스토리</Text>
+        <TouchableOpacity
+          style={styles.favBtn}
+          onPress={() => navigation.navigate('Favorites')}
+        >
+          <Text style={styles.favBtnText}>⭐ 즐겨찾기</Text>
+        </TouchableOpacity>
+      </View>
+  );
+
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+      <View style={styles.container}>
+        {renderHeader()}
+        <MainTopTabs activeTab="HistoryTab" />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (errorMsg) {
+    return (
+      <View style={styles.container}>
+        {renderHeader()}
+        <MainTopTabs activeTab="HistoryTab" />
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{errorMsg}</Text>
+          <Text style={styles.errorSubtext}>잠시 후 다시 시도해 주세요.</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => {
+              setLoading(true);
+              loadSessions();
+            }}
+          >
+            <Text style={styles.retryText}>다시 불러오기</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>📊 히스토리</Text>
-        <TouchableOpacity
-          style={styles.favBtn}
-          onPress={() => navigation.navigate('Favorites' as never)}
-        >
-          <Text style={styles.favBtnText}>⭐ 즐겨찾기</Text>
-        </TouchableOpacity>
-      </View>
+      {renderHeader()}
+      <MainTopTabs activeTab="HistoryTab" />
 
       <FlatList
         data={folders}
@@ -145,8 +182,8 @@ export default function HistoryScreen({ navigation }: Props) {
         ListEmptyComponent={
           <View style={styles.emptyView}>
             <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyText}>완료된 분석이 없습니다</Text>
-            <Text style={styles.emptySubtext}>녹음을 완료하면 여기에 표시됩니다</Text>
+            <Text style={styles.emptyText}>아직 분석 기록이 없습니다.</Text>
+            <Text style={styles.emptySubtext}>노래를 녹음하고 분석하면 이곳에서 기록을 확인할 수 있습니다.</Text>
           </View>
         }
       />
@@ -170,7 +207,11 @@ const styles = StyleSheet.create({
   emptyView:      { alignItems: 'center' },
   emptyIcon:      { fontSize: 48, marginBottom: 12 },
   emptyText:      { fontSize: 16, color: COLORS.textSecondary },
-  emptySubtext:   { fontSize: 13, color: COLORS.textMuted, marginTop: 4 },
+  emptySubtext:   { fontSize: 13, color: COLORS.textMuted, marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
+  errorText:      { fontSize: 16, color: COLORS.danger, textAlign: 'center' },
+  errorSubtext:   { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
+  retryBtn:       { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: COLORS.primary, marginTop: 8 },
+  retryText:      { fontSize: 14, color: '#ffffff', fontWeight: '700' },
   card: {
     backgroundColor: COLORS.card, borderRadius: 12, padding: 16, marginBottom: 10,
     borderWidth: 1, borderColor: COLORS.cardBorder,

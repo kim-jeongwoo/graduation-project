@@ -2,6 +2,7 @@
   "expo": {
     "name": "vocal-app",
     "slug": "vocal-app",
+    "scheme": "vocal-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -23,7 +24,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true,
+      "usesCleartextTraffic": false,
       "package": "com.vocal.app",
       "versionCode": 1,
       "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS", "INTERNET"]

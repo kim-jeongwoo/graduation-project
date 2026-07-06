@@ -15,14 +15,17 @@ interface EvalItemCardProps {
   zone: Zone | null;
   confidence: ConfidenceLevel;
   feedbackText: string;
+  itemDescription?: string;
+  statusText?: string;
   scoreDescription?: string;
+  scoreUnavailableLabel?: string;
   isFocus?: boolean;
   onTrainPress?: () => void;
   trainDisabled?: boolean;
   // v2 신규
   tier?:    ScoreTier;
   tooltip?: string | null;
-  isHighlighted?: boolean;  // 호흡 카드 정적 글로우 (v2)
+  isHighlighted?: boolean;  // v2 정적 글로우
   isDimmed?: boolean;        // 비활성 항목 카드 전체 어둡게
 }
 
@@ -32,7 +35,10 @@ export default function EvalItemCard({
   zone,
   confidence,
   feedbackText,
+  itemDescription,
+  statusText,
   scoreDescription,
+  scoreUnavailableLabel,
   isFocus = false,
   onTrainPress,
   trainDisabled = false,
@@ -71,15 +77,23 @@ export default function EvalItemCard({
         </View>
       </View>
 
+      {itemDescription ? (
+        <Text style={styles.itemDescription}>{itemDescription}</Text>
+      ) : null}
+
       {/* 중단: 게이지 */}
       <View style={styles.gaugeArea}>
-        <ScoreGauge score={score} zone={zone} size="md" />
+        <ScoreGauge score={score} zone={zone} size="md" unavailableLabel={scoreUnavailableLabel} />
       </View>
 
       {/* 하단: 피드백 */}
       <Text style={styles.feedback} numberOfLines={3}>
         {feedbackText}
       </Text>
+
+      {statusText ? (
+        <Text style={styles.statusText}>{statusText}</Text>
+      ) : null}
 
       {/* 평가 기준표 (접기/펼치기) */}
       {scoreDescription ? (
@@ -104,7 +118,7 @@ const styles = StyleSheet.create({
     borderColor: FOCUS_BORDER_COLOR,
     borderWidth: FOCUS_BORDER_WIDTH,
   },
-  // v2 호흡 카드 정적 글로우 (보라 유사색 #8B83FF)
+  // v2 정적 글로우 (보라 유사색 #8B83FF)
   highlightCard: {
     borderColor:   '#8B83FF',
     borderWidth:   2,
@@ -154,10 +168,22 @@ const styles = StyleSheet.create({
   gaugeArea: {
     marginBottom: SPACING.sm,
   },
+  itemDescription: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+    marginBottom: SPACING.sm,
+  },
   feedback: {
     ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     lineHeight: 22,
+  },
+  statusText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+    marginTop: SPACING.xs,
   },
   toggleBtn: {
     marginTop: SPACING.xs,

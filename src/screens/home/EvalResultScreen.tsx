@@ -13,13 +13,16 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
 import EvalItemCard from '../../components/eval/EvalItemCard';
+import ImprovementPriorityCard, { type ImprovementPriorityItem } from '../../components/eval/ImprovementPriorityCard';
+import SectionStabilityChart, { type StabilityIndicatorKey } from '../../components/eval/SectionStabilityChart';
 import { getResultsByRunId } from '../../api/analyze';
-import { getSongMidiSegmentsRaw } from '../../api/songs';
+import { getSongMidiSegmentsOptional } from '../../api/songs';
 import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
 import { EVALUATION_ITEMS } from '../../domain/evaluationItems';
-import type { AnalyzeResult, TimelineChunkScore } from '../../types/analyze';
-import type { EvaluationItemKey } from '../../domain/evaluationItems';
+import type { AnalyzeResult, TimelineChunkScore, Zone, ScoreMetaEntry } from '../../types/analyze';
+import type { EvaluationItemKey, ConfidenceLevel } from '../../domain/evaluationItems';
 import { extractWeakSections, type IndicatorAppKey } from '../../domain/weakSections';
+import type { ResultStackParamList } from '../../navigation/types';
 
 type Tab = 'basic' | 'advanced';
 
@@ -27,10 +30,7 @@ type Tab = 'basic' | 'advanced';
 const FOCUS_ITEMS_FROM_USER: EvaluationItemKey[] = [];
 const BASE_ITEMS: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact'];
 
-type Props = NativeStackScreenProps<
-  { EvalResult: { runId?: string; songId?: string } },
-  'EvalResult'
->;
+type Props = NativeStackScreenProps<ResultStackParamList, 'EvalResult'>;
 
 // ─── Timeline constants ───
 const PX_PER_SEC = 60;
@@ -51,8 +51,126 @@ function scoreColor(pct: number | null): string {
 }
 
 type VisualizationMode = 'pitch' | 'breathiness' | 'vocalFoldContact' | 'softPalate' | 'tongueTension';
+type TimelineIndicatorMode = Exclude<VisualizationMode, 'pitch'>;
+type TimelineScoreField = keyof TimelineChunkScore['scores'];
 type RawSeg = { start: number; end: number; midi: number };
 type UserF0 = { frameHz: number; values: (number | null)[] };
+
+const COLOR_APPROPRIATE = '#59dda5';
+const COLOR_WARNING = '#ffb4ab';
+const COLOR_DATA_MISSING = '#7ecfff';
+const COLOR_EVALUATION_MISSING = '#6b7280';
+const COLOR_LOW_CONFIDENCE = '#9ca3af';
+
+const TIMELINE_MODE_CONFIG = {
+  breathiness: {
+    appKey: 'breathiness',
+    serverKey: '4_breathiness',
+    scoreField: 'breathiness',
+    label: '호흡 소리 식별',
+  },
+  vocalFoldContact: {
+    appKey: 'vocal_fold_contact',
+    serverKey: '3_vocal_fold_contact',
+    scoreField: 'vocalFoldContact',
+    label: '성대 접촉 강도',
+  },
+  softPalate: {
+    appKey: 'soft_palate',
+    serverKey: '6_soft_palate',
+    scoreField: 'softPalate',
+    label: '연구개 위치',
+  },
+  tongueTension: {
+    appKey: 'tongue_tension',
+    serverKey: '8_tongue_tension',
+    scoreField: 'tongueTension',
+    label: '혀/구강 공간 경직도',
+  },
+} as const satisfies Record<TimelineIndicatorMode, {
+  appKey: IndicatorAppKey;
+  serverKey: string;
+  scoreField: TimelineScoreField;
+  label: string;
+}>;
+type TimelineModeConfig = typeof TIMELINE_MODE_CONFIG[TimelineIndicatorMode];
+
+function isTimelineIndicatorMode(mode: string): mode is TimelineIndicatorMode {
+  return Object.prototype.hasOwnProperty.call(TIMELINE_MODE_CONFIG, mode);
+}
+
+function stripServerPrefix(key: string): string {
+  return key.replace(/^\d+_/, '');
+}
+
+function deriveZoneFromRoundedScore(roundedScore: number): Zone {
+  if (roundedScore <= 1) return 'insufficient';
+  if (roundedScore >= 4) return 'excessive';
+  return 'appropriate';
+}
+
+function hasLowConfidence(
+  lowConfidenceItems: string[] | undefined,
+  config: TimelineModeConfig,
+): boolean {
+  return lowConfidenceItems?.some((item) => {
+    const stripped = stripServerPrefix(item);
+    return item === config.serverKey
+      || item === config.appKey
+      || item === config.scoreField
+      || stripped === config.appKey;
+  }) ?? false;
+}
+
+function getTimelineModeForAppKey(key: EvaluationItemKey): TimelineIndicatorMode | null {
+  if (key === 'breathiness') return 'breathiness';
+  if (key === 'vocal_fold_contact') return 'vocalFoldContact';
+  if (key === 'soft_palate') return 'softPalate';
+  if (key === 'tongue_tension') return 'tongueTension';
+  return null;
+}
+
+function getEvaluationColorForTime(
+  tMaster: number,
+  timelineScores: TimelineChunkScore[],
+  config: TimelineModeConfig,
+): string {
+  const chunk = timelineScores.find(c => tMaster >= c.startSec && tMaster <= c.endSec);
+  if (!chunk) return COLOR_EVALUATION_MISSING;
+  if (hasLowConfidence(chunk.lowConfidenceItems, config)) {
+    return COLOR_LOW_CONFIDENCE;
+  }
+
+  const roundedScore = chunk.scores[config.scoreField]?.roundedScore;
+  if (typeof roundedScore !== 'number' || !Number.isInteger(roundedScore) || roundedScore < 0 || roundedScore > 5) {
+    return COLOR_EVALUATION_MISSING;
+  }
+
+  const zone = deriveZoneFromRoundedScore(roundedScore);
+  return zone === 'appropriate' ? COLOR_APPROPRIATE : COLOR_WARNING;
+}
+
+function getMappedScoreMeta(
+  record: Partial<Record<EvaluationItemKey, ScoreMetaEntry>> | undefined,
+  key: EvaluationItemKey,
+  config: TimelineModeConfig | null,
+): ScoreMetaEntry | undefined {
+  const raw = record as Record<string, ScoreMetaEntry | undefined> | undefined;
+  if (!raw) return undefined;
+  const candidates = config ? [key, config.serverKey, config.scoreField] : [key];
+  return candidates.map(candidate => raw[candidate]).find(Boolean);
+}
+
+function getMappedNumber(
+  record: Partial<Record<EvaluationItemKey, number>> | undefined,
+  key: EvaluationItemKey,
+  config: TimelineModeConfig | null,
+): number | undefined {
+  const raw = record as Record<string, number | undefined> | undefined;
+  if (!raw) return undefined;
+  const candidates = config ? [key, config.serverKey, config.scoreField] : [key];
+  return candidates.map(candidate => raw[candidate]).find(value => typeof value === 'number');
+}
 
 const MODE_BUTTONS: { id: string; label: string; active: boolean; v2Only?: boolean }[] = [
   { id: 'pitch',            label: '음정',          active: true  },
@@ -67,6 +185,154 @@ const MODE_BUTTONS: { id: string; label: string; active: boolean; v2Only?: boole
   { id: 'pressure',         label: '상압하압비율',   active: false },
 ];
 
+const CONSERVATIVE_FEEDBACK_BY_ZONE: Partial<Record<EvaluationItemKey, Record<Zone, string>>> = {
+  breathiness: {
+    insufficient: '숨소리가 많이 섞이고 발성 밀도가 약한 경향이 보입니다. 소리가 지나치게 새지 않는지 확인해 볼 수 있습니다.',
+    appropriate:  '호흡감과 발성 밀도가 자연스럽게 섞인 상태로 보입니다. 현재의 균형감을 유지하는 데 도움이 될 수 있습니다.',
+    excessive:    '숨소리가 거의 없거나 소리가 지나치게 눌리고 압축된 경향이 보입니다. 소리가 답답하게 모이지 않는지 확인해 볼 수 있습니다.',
+  },
+  vocal_fold_contact: {
+    insufficient: '성대 접촉이 약해 소리가 가볍거나 힘이 덜 실릴 수 있는 경향이 보입니다. 소리의 중심이 안정적으로 모이는지 확인해 볼 수 있습니다.',
+    appropriate:  '성대 접촉이 비교적 안정적이고 소리가 자연스럽게 유지되는 경향이 보입니다. 현재의 접촉감을 이어가는 데 도움이 될 수 있습니다.',
+    excessive:    '성대 접촉이 강하거나 눌린 느낌이 생길 수 있는 경향이 보입니다. 힘이 과하게 모이지 않는지 확인해 볼 수 있습니다.',
+  },
+  soft_palate: {
+    insufficient: '입 안쪽 공간이 좁아지거나 소리가 답답하게 느껴질 수 있는 경향이 보입니다. 공간이 자연스럽게 열리는 느낌을 확인해 볼 수 있습니다.',
+    appropriate:  '입 안쪽 공간과 연구개 위치가 비교적 안정적인 경향이 보입니다. 현재의 편안한 공명감을 이어가는 데 도움이 될 수 있습니다.',
+    excessive:    '입천장 뒤쪽이나 목 주변에 힘이 과하게 들어갈 수 있는 경향이 보입니다. 과하게 들어 올리려 하기보다 힘을 덜어내는 방향을 확인해 볼 수 있습니다.',
+  },
+  tongue_tension: {
+    insufficient: '발음 지지가 약해 소리가 흐리거나 덜 또렷하게 느껴질 수 있는 경향이 보입니다. 필요한 만큼만 또렷하게 사용하는 느낌을 확인해 볼 수 있습니다.',
+    appropriate:  '혀와 구강 공간의 긴장도가 비교적 자연스럽고 발음이 안정적인 경향이 보입니다. 현재의 유연한 발음감을 이어가는 데 도움이 될 수 있습니다.',
+    excessive:    '혀, 턱, 입 안쪽에 힘이 많이 들어가 소리가 뭉개지거나 경직될 수 있는 경향이 보입니다. 혀끝과 턱 주변의 힘을 덜어내는 방향을 확인해 볼 수 있습니다.',
+  },
+};
+
+const SCORE_DESCRIPTION_BY_ZONE: Partial<Record<EvaluationItemKey, Record<Zone, string>>> = {
+  breathiness: {
+    insufficient: '숨소리가 많이 섞이고 발성 밀도가 약한 경향.',
+    appropriate:  '호흡감과 발성 밀도가 자연스럽게 섞인 경향.',
+    excessive:    '숨소리가 거의 없거나 소리가 지나치게 눌리고 압축된 경향.',
+  },
+  vocal_fold_contact: {
+    insufficient: '성대 접촉이 약해 소리가 가볍거나 힘이 덜 실리는 경향.',
+    appropriate:  '성대 접촉이 비교적 안정적인 경향.',
+    excessive:    '접촉이 강하거나 눌린 느낌이 생길 수 있는 경향.',
+  },
+  soft_palate: {
+    insufficient: '입 안쪽 공간이 좁아지거나 답답하게 느껴질 수 있는 경향.',
+    appropriate:  '입 안쪽 공간과 연구개 위치가 비교적 안정적인 경향.',
+    excessive:    '입천장 뒤쪽이나 목 주변에 힘이 과하게 들어갈 수 있는 경향.',
+  },
+  tongue_tension: {
+    insufficient: '발음 지지가 약하거나 소리가 덜 또렷하게 느껴질 수 있는 경향.',
+    appropriate:  '혀와 구강 공간의 긴장도가 비교적 자연스럽고 안정적인 경향.',
+    excessive:    '혀, 턱, 입 안쪽에 힘이 많이 들어간 경향.',
+  },
+};
+
+const ITEM_DISPLAY_NAMES: Record<EvaluationItemKey, string> = {
+  breathiness:        '호흡 소리 식별',
+  vocal_fold_contact: '성대 접촉 강도',
+  nasal_oral_ratio:   '비강/구강 공명 비율',
+  chest_head_voice:   '흉성/두성 경향',
+  forward_resonance:  '전방 공명 정도',
+  soft_palate:        '연구개 위치',
+  pressure_balance:   '상압/하압 비율',
+  larynx_tongue_root: '공명 개방감',
+  tongue_tension:     '혀/구강 공간 경직도',
+};
+
+const ITEM_DESCRIPTIONS: Record<EvaluationItemKey, string> = {
+  breathiness:        '소리에 섞인 호흡감과 발성 밀도의 균형을 추정합니다. 호흡이 너무 많이 새거나 지나치게 눌린 구간을 확인하는 데 도움을 줍니다.',
+  vocal_fold_contact: '소리를 낼 때 성대가 맞닿는 강도의 경향을 추정합니다. 너무 약하거나 강한 접촉 경향을 구간별로 확인할 수 있습니다.',
+  nasal_oral_ratio:   '비강과 구강 쪽 울림의 균형을 참고하는 항목입니다. 소리가 한쪽 공명에 치우치는 경향을 이해하는 데 도움을 줍니다.',
+  chest_head_voice:   '흉성/두성 사용 경향을 참고하는 항목입니다. 소리의 무게감이나 전환 구간의 변화를 이해하는 데 도움을 줍니다.',
+  forward_resonance:  '소리가 앞쪽으로 모이는 공명 경향을 참고하는 항목입니다. 발성 위치감이 어떻게 들리는지 이해하는 데 도움을 줍니다.',
+  soft_palate:        '입 안쪽 공간과 연구개 위치에 관련된 소리 특성을 추정합니다. 공명 공간이 좁거나 긴장된 경향을 참고할 수 있습니다.',
+  pressure_balance:   '발성 압력의 위아래 균형을 참고하는 항목입니다. 소리가 눌리거나 힘이 몰리는 경향을 이해하는 데 도움을 줍니다.',
+  larynx_tongue_root: '후두와 혀뿌리 주변의 열림과 긴장 경향을 참고하는 항목입니다. 목 안쪽 공간이 답답해지는 경향을 이해하는 데 도움을 줍니다.',
+  tongue_tension:     '혀와 입 안쪽 공간의 긴장감이 소리에 주는 영향을 추정합니다. 발음이 흐려지거나 과하게 힘이 들어간 구간을 참고할 수 있습니다.',
+};
+
+const INACTIVE_REFERENCE_TEXT = '현재는 학습/검증 데이터가 더 필요해 참고용으로 표시됩니다. 지금은 점수보다 항목 의미를 이해하는 용도로 참고해 주세요.';
+const UNAVAILABLE_REFERENCE_TEXT = '현재는 측정 불가 항목입니다. 추가 데이터 수집 후 정식 피드백으로 확장할 예정입니다.';
+const INACTIVE_FEEDBACK_TEXT = '지금은 정식 피드백이 아니라 항목 의미를 이해하기 위한 참고 카드입니다.';
+const UNAVAILABLE_FEEDBACK_TEXT = '현재는 정식 점수와 피드백을 제공하지 않는 항목입니다.';
+const INACTIVE_SCORE_DESCRIPTION_TEXT = '현재는 정식 평가 기준을 앱에서 확정하지 않은 참고 항목입니다.\n추가 데이터 수집과 검증 후 점수 방향과 기준 설명을 확정할 예정입니다.';
+const UNAVAILABLE_SCORE_DESCRIPTION_TEXT = '현재는 측정 불가 항목입니다.\n추가 검증 후 정식 점수와 피드백으로 확장할 예정입니다.';
+
+const HIDE_HIGH_STAR_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
+const APP_COPY_PRIORITY_ITEMS = new Set<EvaluationItemKey>(['breathiness', 'vocal_fold_contact', 'soft_palate', 'tongue_tension']);
+const FALLBACK_FEEDBACK_ITEMS = new Set<EvaluationItemKey>(['soft_palate', 'tongue_tension']);
+const INVALID_FEEDBACK_TEXTS = new Set(['ai측정불가', '측정불가', 'ai측정불가입니다']);
+const ACTIVE_RESULT_ITEMS: IndicatorAppKey[] = ['breathiness', 'vocal_fold_contact', 'soft_palate', 'tongue_tension'];
+
+const PRIORITY_ACTION_TEXT: Record<IndicatorAppKey, Record<Zone, string>> = {
+  breathiness: {
+    insufficient: '소리가 새지 않도록 호흡을 한 번에 밀기보다 중심을 모으는 연습을 추천합니다.',
+    appropriate: '현재 호흡감과 발성 밀도의 균형을 유지해 보세요.',
+    excessive: '소리를 더 누르기보다 답답하게 압축되는 느낌을 줄이는 방향을 확인해 보세요.',
+  },
+  vocal_fold_contact: {
+    insufficient: '가볍게 새는 소리보다 성대 접촉이 안정적으로 모이는 느낌을 확인해 보세요.',
+    appropriate: '현재 접촉감을 유지하면서 구간별 흔들림만 확인해 보세요.',
+    excessive: '목에 힘을 더 주기보다 눌림을 줄이는 방향으로 연습해 보세요.',
+  },
+  soft_palate: {
+    insufficient: '입 안쪽 공간이 너무 좁아지지 않는지 확인하며 소리를 열어 보세요.',
+    appropriate: '현재의 편안한 공명감을 유지하면서 취약 구간만 확인해 보세요.',
+    excessive: '입천장 뒤쪽을 과하게 들기보다 목 주변 힘을 덜어내는 방향을 확인해 보세요.',
+  },
+  tongue_tension: {
+    insufficient: '필요한 만큼만 또렷하게 쓰면서 혀와 턱의 움직임을 확인해 보세요.',
+    appropriate: '혀와 구강 공간의 자연스러운 긴장도를 유지해 보세요.',
+    excessive: '혀와 턱 주변의 힘을 덜어내고 발음을 또렷하게 유지해 보세요.',
+  },
+};
+
+function isInvalidFallbackFeedbackText(text: string | undefined): boolean {
+  const normalized = text?.trim().toLowerCase().replace(/\s+/g, '').replace(/[.。]+$/g, '');
+  return !normalized || INVALID_FEEDBACK_TEXTS.has(normalized);
+}
+
+function getResultCardFeedbackText(
+  key: EvaluationItemKey,
+  serverFeedbackText: string | undefined,
+  zone: Zone | null,
+  score: number | null,
+): string {
+  const text = serverFeedbackText?.trim();
+  const fallback = score === null || !zone ? '' : CONSERVATIVE_FEEDBACK_BY_ZONE[key]?.[zone] ?? '';
+  if (APP_COPY_PRIORITY_ITEMS.has(key) && fallback) {
+    return fallback;
+  }
+  if (FALLBACK_FEEDBACK_ITEMS.has(key) && fallback && isInvalidFallbackFeedbackText(text)) {
+    return fallback;
+  }
+  if (text) return text;
+  return fallback;
+}
+
+function getScoreDescriptionText(
+  key: EvaluationItemKey,
+  serverScoreDescription: string | undefined,
+): string | undefined {
+  const criteria = SCORE_DESCRIPTION_BY_ZONE[key];
+  if (!criteria) return serverScoreDescription;
+  return [
+    `0~1 미달: ${criteria.insufficient}`,
+    `2~3 적절: ${criteria.appropriate}`,
+    `4~5 과함: ${criteria.excessive}`,
+  ].join('\n');
+}
+
+function calculateImprovementPriority(score: number, weakSectionCount: number): number {
+  const distanceFromTarget = score < 2 ? 2 - score : score > 3 ? score - 3 : 0;
+  if (distanceFromTarget <= 0) return Math.min(20, weakSectionCount * 5);
+  return Math.min(100, Math.round((distanceFromTarget / 2) * 75 + Math.min(25, weakSectionCount * 8)));
+}
+
 interface TimelineSectionProps {
   timelineScores: TimelineChunkScore[];
   midiSegments:   RawSeg[];
@@ -74,9 +340,10 @@ interface TimelineSectionProps {
   activeMode:     VisualizationMode;
   lrcOffsetSec:   number;
   guideOffset:    number;
+  guideUnavailable?: boolean;
 }
 
-function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrcOffsetSec, guideOffset }: TimelineSectionProps) {
+function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrcOffsetSec, guideOffset, guideUnavailable = false }: TimelineSectionProps) {
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -109,19 +376,14 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
             : Math.min(Math.abs(tMaster - sA), Math.abs(tMaster - eA));
           if (d < minDist) { minDist = d; nearest = s; }
         }
-        if (!nearest || minDist > 1.5) return '#7ecfff';
+        if (!nearest || minDist > 1.5) return COLOR_DATA_MISSING;
         const diff = Math.abs(midi - nearest.midi);
-        return diff < 0.5 ? '#59dda5' : diff < 1.0 ? '#ffb780' : '#ffb4ab';
+        return diff < 0.5 ? COLOR_APPROPRIATE : diff < 1.0 ? '#ffb780' : COLOR_WARNING;
       }
-      // breathiness / vocalFoldContact / softPalate / tongueTension — chunk zone 기준 (v2)
-      const chunk = timelineScores.find(c => tMaster >= c.startSec && tMaster <= c.endSec);
-      const zone  = activeMode === 'breathiness'      ? chunk?.scores.breathiness?.zone
-                  : activeMode === 'vocalFoldContact' ? chunk?.scores.vocalFoldContact?.zone
-                  : activeMode === 'softPalate'       ? chunk?.scores.softPalate?.zone
-                  : activeMode === 'tongueTension'    ? chunk?.scores.tongueTension?.zone
-                  : undefined;
-      if (!zone) return '#7ecfff';
-      return zone === 'appropriate' ? '#59dda5' : '#ffb4ab';
+      // dml-server v2 timeline_scores 기준: rounded_score가 source of truth, low_confidence 우선.
+      if (!isTimelineIndicatorMode(activeMode)) return COLOR_EVALUATION_MISSING;
+      const config = TIMELINE_MODE_CONFIG[activeMode];
+      return getEvaluationColorForTime(tMaster, timelineScores, config);
     };
 
     const nodes: React.ReactNode[] = [];
@@ -129,7 +391,7 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
 
     const flush = () => {
       if (!d) return;
-      nodes.push(<Path key={key++} d={d} stroke={curColor} strokeWidth={2.5}
+      nodes.push(<Path key={`${activeMode}-${curColor}-${key++}`} d={d} stroke={curColor} strokeWidth={2.5}
         fill="none" strokeLinecap="round" strokeLinejoin="round" />);
       d = '';
     };
@@ -140,7 +402,10 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
       const midi = 12 * Math.log2(freq / 440) + 69;
       if (midi < MIDI_MIN || midi > MIDI_MAX) { flush(); continue; }
 
-      const color = getColor(i, freq);
+      const evaluationColor = isTimelineIndicatorMode(activeMode)
+        ? getEvaluationColorForTime(i / frameHz + lrcOffsetSec, timelineScores, TIMELINE_MODE_CONFIG[activeMode])
+        : null;
+      const color = evaluationColor ?? getColor(i, freq);
       if (color !== curColor && d) flush();
       curColor = color;
 
@@ -182,6 +447,11 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
           ))}
           {f0Paths}
         </Svg>
+        {guideUnavailable && (
+          <View style={tlStyles.guideNotice}>
+            <Text style={tlStyles.guideNoticeText}>피치 가이드를 불러오지 못했습니다. 결과와 사용자 피치는 계속 표시됩니다.</Text>
+          </View>
+        )}
         {timelineScores.length > 0 && (
           <View style={{ width: totalW, height: LRC_H, backgroundColor: '#1a1a2e', position: 'relative' }}>
             {timelineScores.map((chunk, i) => chunk.lrcText.trim() ? (
@@ -208,20 +478,34 @@ function TimelineSection({ timelineScores, midiSegments, userF0, activeMode, lrc
 
 const tlStyles = StyleSheet.create({
   scroll: { borderTopWidth: 1, borderTopColor: COLORS.divider, flexGrow: 0 },
+  guideNotice: {
+    position: 'absolute',
+    top: 8,
+    left: 12,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  guideNoticeText: { fontSize: 12, color: COLORS.textSecondary, textAlign: 'center' },
 });
 
 // ─── Color legend ───
 const ZONE_LEGEND = [
-  { color: '#59dda5', label: '적절' },
-  { color: '#ffb4ab', label: '과함/미달' },
-  { color: '#7ecfff', label: '데이터 없음' },
+  { color: COLOR_APPROPRIATE, label: '적절 (2~3)' },
+  { color: COLOR_WARNING, label: '미달/과함 (0~1, 4~5)' },
+  { color: COLOR_LOW_CONFIDENCE, label: '신뢰도 낮음' },
+  { color: COLOR_EVALUATION_MISSING, label: '데이터 없음' },
 ];
 const LEGEND_ITEMS: Record<VisualizationMode, Array<{ color: string; label: string }>> = {
   pitch: [
-    { color: '#59dda5', label: '정확 (≤0.5반음)' },
+    { color: COLOR_APPROPRIATE, label: '정확 (≤0.5반음)' },
     { color: '#ffb780', label: '살짝 어긋남 (≤1.0)' },
-    { color: '#ffb4ab', label: '틀림 (>1.0반음)' },
-    { color: '#7ecfff', label: '가이드 없음' },
+    { color: COLOR_WARNING, label: '틀림 (>1.0반음)' },
+    { color: COLOR_DATA_MISSING, label: '가이드 없음' },
   ],
   breathiness:      ZONE_LEGEND,
   vocalFoldContact: ZONE_LEGEND,
@@ -255,6 +539,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
   const { runId, songId } = route.params ?? {};
   const [result, setResult]     = useState<AnalyzeResult | null>(null);
   const [midiSegs, setMidiSegs] = useState<RawSeg[]>([]);
+  const [guideUnavailable, setGuideUnavailable] = useState(false);
   const [loading, setLoading]   = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [tab, setTab]               = useState<Tab>('basic');
@@ -276,12 +561,20 @@ export default function EvalResultScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (!songId || !result) return;
-    getSongMidiSegmentsRaw(songId)
-      .then(({ segments, lrcOffsetSec: offset }) => {
+    setGuideUnavailable(false);
+    getSongMidiSegmentsOptional(songId, 'eval')
+      .then((data) => {
+        if (!data) {
+          setMidiSegs([]);
+          setLrcOffsetSec(0);
+          setGuideUnavailable(true);
+          return;
+        }
+        const { segments, lrcOffsetSec: offset } = data;
         setMidiSegs(segments);
         setLrcOffsetSec(offset);
-      })
-      .catch((e) => { if (__DEV__) console.warn('[EvalResult] midiSegs fetch failed:', e); });
+        setGuideUnavailable(false);
+      });
   }, [songId, result]);
 
   const guideOffset = SONG_GUIDE_OFFSETS[songId ?? ''] ?? 0;
@@ -363,31 +656,101 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         ...result.reliability.medium_reliability,
         ...result.reliability.unavailable,
       ];
+  const shownStripped: EvaluationItemKey[] = result.scoreMapperVersion === 'v2' && result.reliability.shownV2
+    ? result.reliability.shownV2
+    : (result.timelineMetadata?.shownIndicators ?? [])
+        .map(s => s.replace(/^\d+_/, '') as EvaluationItemKey);
+  const activeStabilityKeys: StabilityIndicatorKey[] = ACTIVE_RESULT_ITEMS.filter((key) => {
+    const mode = getTimelineModeForAppKey(key);
+    if (!mode) return false;
+    const scoreField = TIMELINE_MODE_CONFIG[mode].scoreField;
+    return shownStripped.includes(key)
+      || (result.timelineScores ?? []).some(chunk => typeof chunk.scores[scoreField]?.roundedScore === 'number');
+  });
+  const improvementPriorityItems: ImprovementPriorityItem[] = ACTIVE_RESULT_ITEMS.map((key) => {
+    const mode = getTimelineModeForAppKey(key);
+    const timelineConfig = mode ? TIMELINE_MODE_CONFIG[mode] : null;
+    const scoreEntry = result.scores[key];
+    const scoreMeta = getMappedScoreMeta(result.scoresMeta, key, timelineConfig);
+    const v2Score = typeof scoreMeta?.roundedScore === 'number'
+      ? scoreMeta.roundedScore
+      : getMappedNumber(result.scoresV2, key, timelineConfig);
+    const hasV2Score = result.scoreMapperVersion === 'v2' && typeof v2Score === 'number';
+    const score = hasV2Score ? v2Score : (scoreEntry?.ai_score ?? null);
+    const zone = hasV2Score ? deriveZoneFromRoundedScore(v2Score) : (scoreEntry?.zone ?? null);
+    const isShown = shownStripped.includes(key);
+    const weakSectionCount = extractWeakSections(
+      result.timelineScores ?? [],
+      key,
+      result.audio_info?.duration_sec,
+    ).length;
+    const hasScore = typeof score === 'number';
+    const isDataMissing = !isShown || !hasScore || !zone;
+
+    return {
+      key,
+      label: ITEM_DISPLAY_NAMES[key],
+      score,
+      zone,
+      priority: hasScore && !isDataMissing ? calculateImprovementPriority(score, weakSectionCount) : 0,
+      actionText: zone ? PRIORITY_ACTION_TEXT[key][zone] : '표시할 수 있는 구간별 점수 데이터가 부족합니다.',
+      weakSectionCount,
+      isDataMissing,
+    };
+  });
+  const activeTimelineMode: VisualizationMode =
+    activeMode === 'pitch'
+    || result.scoreMapperVersion !== 'v2'
+    || (isTimelineIndicatorMode(activeMode) && shownStripped.includes(TIMELINE_MODE_CONFIG[activeMode].appKey))
+      ? activeMode
+      : 'pitch';
 
   const renderCard = (key: EvaluationItemKey) => {
     const meta       = EVALUATION_ITEMS.find(m => m.key === key)!;
     const scoreEntry = result.scores[key];
     const fb         = result.feedback[key];
-    const confidence = scoreEntry?.confidence ?? meta.defaultConfidence;
     const nameKo     = fb?.name_ko ?? meta.nameKo;
+    const timelineMode = getTimelineModeForAppKey(key);
+    const timelineConfig = timelineMode ? TIMELINE_MODE_CONFIG[timelineMode] : null;
+    const isUnavailable = result.reliability.unavailable.includes(key);
+    const isAcademicOnly = result.reliability.academicOnlyV2?.includes(key) ?? false;
+    const isDeferred = result.reliability.deferredV2?.includes(key) ?? false;
+    const scoreMeta = getMappedScoreMeta(result.scoresMeta, key, timelineConfig);
+    const v2Score = typeof scoreMeta?.roundedScore === 'number'
+      ? scoreMeta.roundedScore
+      : getMappedNumber(result.scoresV2, key, timelineConfig);
+    const hasV2Score = result.scoreMapperVersion === 'v2' && typeof v2Score === 'number';
+    const score = hasV2Score ? v2Score : (scoreEntry?.ai_score ?? null);
+    const zone = hasV2Score ? deriveZoneFromRoundedScore(v2Score) : (scoreEntry?.zone ?? null);
+    const isShown = shownStripped.includes(key);
+    const rawConfidence: ConfidenceLevel = scoreEntry?.confidence ?? meta.defaultConfidence;
+    const confidence: ConfidenceLevel = HIDE_HIGH_STAR_ITEMS.has(key) && isShown && hasV2Score && rawConfidence === 'unavailable'
+      ? 'high'
+      : rawConfidence;
+    const isInactiveCard = !isShown || isAcademicOnly || isDeferred;
+    const isUnavailableInactiveCard = isInactiveCard && (isUnavailable || confidence === 'unavailable');
+    const feedbackText = isInactiveCard
+      ? (isUnavailableInactiveCard ? UNAVAILABLE_FEEDBACK_TEXT : INACTIVE_FEEDBACK_TEXT)
+      : getResultCardFeedbackText(key, fb?.feedback_text, zone, score);
+    const statusText = isInactiveCard
+      ? (isUnavailable || confidence === 'unavailable' ? UNAVAILABLE_REFERENCE_TEXT : INACTIVE_REFERENCE_TEXT)
+      : undefined;
+    const cardScore = isInactiveCard ? null : score;
+    const cardZone = isInactiveCard ? null : zone;
+    const scoreUnavailableLabel = isInactiveCard
+      ? (isUnavailableInactiveCard ? '현재 측정 불가' : '참고용 항목')
+      : undefined;
+    const scoreDescription = isInactiveCard
+      ? (isUnavailableInactiveCard ? UNAVAILABLE_SCORE_DESCRIPTION_TEXT : INACTIVE_SCORE_DESCRIPTION_TEXT)
+      : getScoreDescriptionText(key, fb?.score_description);
+    const displayTier = HIDE_HIGH_STAR_ITEMS.has(key) && scoreMeta?.tier === 'high_star'
+      ? 'high'
+      : scoreMeta?.tier;
 
     // 9항목 모두 동적 분기 — v2 분기: reliability.shownV2 우선, fallback: timelineMetadata.shownIndicators
-    // SectionList/Training 코어는 호흡/접촉만 지원 (나머지는 "준비 중" Alert)
-    const SUPPORTED: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact'];
-    const shownStripped: EvaluationItemKey[] = result.scoreMapperVersion === 'v2' && result.reliability.shownV2
-      ? result.reliability.shownV2
-      : (result.timelineMetadata?.shownIndicators ?? [])
-          .map(s => s.replace(/^\d+_/, '') as EvaluationItemKey);
-    const isShown       = shownStripped.includes(key);
-    // ─── V2 진단 — shown 매핑 + tier (key='breathiness'일 때만 출력, 노이즈 회피) ───
-    if (key === 'breathiness') {
-      console.log('[V2 진단] scoreMapperVersion:', result.scoreMapperVersion);
-      console.log('[V2 진단] reliability.shownV2:', result.reliability.shownV2);
-      console.log('[V2 진단] shownStripped:', shownStripped);
-      console.log('[V2 진단] breathiness tier:', result.scoresMeta?.['breathiness']?.tier);
-      console.log('[V2 진단] breathiness tooltip:', result.scoresMeta?.['breathiness']?.tooltip);
-    }
-    const trainDisabled = !isShown;
+    // SectionList/Training 코어는 v2 4항목 지원
+    const SUPPORTED: EvaluationItemKey[] = ['breathiness', 'vocal_fold_contact', 'soft_palate', 'tongue_tension'];
+    const trainDisabled = isInactiveCard;
     const onTrainPress = () => {
       if (trainDisabled) {
         Alert.alert('곧 출시', '데이터 수집 후 활성화 예정입니다.');
@@ -398,37 +761,48 @@ export default function EvalResultScreen({ route, navigation }: Props) {
         return;
       }
       const indicatorKey = key as IndicatorAppKey;
+      if (!songId) {
+        Alert.alert('곡 정보 없음', '이 결과는 구간 훈련에 필요한 곡 정보가 없습니다.');
+        return;
+      }
       const weakSections = extractWeakSections(
         result.timelineScores ?? [],
         indicatorKey,
         result.audio_info?.duration_sec,
       );
-      navigation.navigate('SectionList' as never, {
+      if (weakSections.length === 0) {
+        Alert.alert('연습 구간 없음', '이 항목에서 바로 연습할 약점 구간이 없습니다.');
+        return;
+      }
+      navigation.navigate('SectionList', {
         indicatorKey,
         weakSections,
-        feedbackText: fb?.feedback_text ?? '',
+        feedbackText,
         runId,
         songId,
         sessionId: result.session_id,
-      } as never);
+      });
     };
 
     return (
       <EvalItemCard
         key={key}
         itemKey={key}
-        nameKo={nameKo}
-        score={scoreEntry?.ai_score ?? null}
-        zone={scoreEntry?.zone ?? null}
+        nameKo={ITEM_DISPLAY_NAMES[key] ?? nameKo}
+        score={cardScore}
+        zone={cardZone}
         confidence={confidence}
-        feedbackText={fb?.feedback_text ?? ''}
-        scoreDescription={fb?.score_description}
+        feedbackText={feedbackText}
+        itemDescription={ITEM_DESCRIPTIONS[key]}
+        statusText={statusText}
+        scoreDescription={scoreDescription}
+        scoreUnavailableLabel={scoreUnavailableLabel}
         isFocus={FOCUS_ITEMS_FROM_USER.includes(key)}
-        onTrainPress={onTrainPress}
+        onTrainPress={trainDisabled ? undefined : onTrainPress}
         trainDisabled={trainDisabled}
-        tier={result.scoresMeta?.[key]?.tier}
-        tooltip={result.scoresMeta?.[key]?.tooltip}
-        isHighlighted={key === 'breathiness' && result.scoreMapperVersion === 'v2'}
+        tier={displayTier}
+        tooltip={scoreMeta?.tooltip}
+        isHighlighted={key === 'vocal_fold_contact' && result.scoreMapperVersion === 'v2'}
         isDimmed={result.scoreMapperVersion === 'v2' && trainDisabled}
       />
     );
@@ -453,9 +827,10 @@ export default function EvalResultScreen({ route, navigation }: Props) {
           timelineScores={result.timelineScores ?? []}
           midiSegments={midiSegs}
           userF0={result.userF0 ?? null}
-          activeMode={activeMode}
+          activeMode={activeTimelineMode}
           lrcOffsetSec={lrcOffsetSec}
           guideOffset={guideOffset}
+          guideUnavailable={guideUnavailable}
         />
       )}
 
@@ -466,22 +841,27 @@ export default function EvalResultScreen({ route, navigation }: Props) {
           contentContainerStyle={{ paddingHorizontal: SPACING.base, alignItems: 'center', paddingVertical: 4 }}
         >
           {MODE_BUTTONS.map(btn => {
-            // v2Only 버튼은 score_mapper_version === 'v2'일 때만 활성
-            const effectiveActive = btn.active && (!btn.v2Only || result.scoreMapperVersion === 'v2');
+            const mode = btn.id as VisualizationMode;
+            const isShownMode = mode === 'pitch'
+              || result.scoreMapperVersion !== 'v2'
+              || (isTimelineIndicatorMode(mode) && shownStripped.includes(TIMELINE_MODE_CONFIG[mode].appKey));
+            const effectiveActive = btn.active
+              && (!btn.v2Only || result.scoreMapperVersion === 'v2')
+              && isShownMode;
             return (
               <TouchableOpacity
                 key={btn.id}
                 activeOpacity={effectiveActive ? 0.7 : 1}
                 style={[
                   styles.modeBtn,
-                  effectiveActive && (btn.id as VisualizationMode) === activeMode && styles.modeBtnActive,
+                  effectiveActive && mode === activeTimelineMode && styles.modeBtnActive,
                   !effectiveActive && styles.modeBtnDisabled,
                 ]}
-                onPress={() => { if (effectiveActive) setActiveMode(btn.id as VisualizationMode); }}
+                onPress={() => { if (effectiveActive) setActiveMode(mode); }}
               >
                 <Text style={[
                   styles.modeBtnLabel,
-                  effectiveActive && (btn.id as VisualizationMode) === activeMode && styles.modeBtnLabelActive,
+                  effectiveActive && mode === activeTimelineMode && styles.modeBtnLabelActive,
                   !effectiveActive && styles.modeBtnLabelDisabled,
                 ]}>
                   {btn.label}
@@ -493,7 +873,7 @@ export default function EvalResultScreen({ route, navigation }: Props) {
       )}
 
       {/* 색상 범례 */}
-      {showTimeline && <LegendRow activeMode={activeMode} />}
+      {showTimeline && <LegendRow activeMode={activeTimelineMode} />}
 
       <ScrollView style={{ flex: 1 }}>
       {/* 음정·박자 점수 */}
@@ -523,6 +903,14 @@ export default function EvalResultScreen({ route, navigation }: Props) {
           (다른 항목은 신뢰도가 충분히 높지 않아 시간 구간 표시 X)
         </Text>
       )}
+
+      <View style={styles.insightSection}>
+        <ImprovementPriorityCard items={improvementPriorityItems} />
+        <SectionStabilityChart
+          timelineScores={result.timelineScores ?? []}
+          activeIndicatorKeys={activeStabilityKeys}
+        />
+      </View>
 
       {/* 탭 */}
       <View style={styles.tabRow}>
@@ -575,6 +963,7 @@ const styles = StyleSheet.create({
   tabBtnActive:   { borderBottomWidth: 2, borderBottomColor: COLORS.primary },
   tabLabel:       { ...TYPOGRAPHY.body, color: COLORS.textMuted },
   tabLabelActive: { color: COLORS.primary, fontWeight: '600' },
+  insightSection:       { paddingHorizontal: SPACING.base, paddingTop: SPACING.base },
   scroll:               { padding: SPACING.base, paddingBottom: SPACING.xl },
   modeBtnRow:           { height: 36, borderBottomWidth: 1, borderBottomColor: COLORS.divider, flexGrow: 0 },
   modeBtn:              { flexShrink: 0, height: 28, paddingHorizontal: 9, borderRadius: 14, marginRight: 8, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.divider, justifyContent: 'center', alignItems: 'center' },

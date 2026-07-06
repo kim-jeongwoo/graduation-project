@@ -127,9 +127,7 @@ export default function AnalysisResultScreen({ route }: Props) {
           }
           setFeedback(fbData);
           if (pitchComp) setPitchData(pitchComp);
-        } catch (e: unknown) {
-          console.log('[AnalysisResult] load error:', e);
-        } finally {
+        } catch {} finally {
           if (!cancelled) setLoading(false);
         }
       };
@@ -366,93 +364,76 @@ export default function AnalysisResultScreen({ route }: Props) {
             )}
 
             {/* 3. 목표 연관 메트릭 */}
-            {showMetrics && (
+            {showMetrics && goals.length > 0 && (
               <Animated.View style={{ opacity: fadeMetrics }}>
                 <Text style={styles.sectionTitle}>🎯 목표 관련 분석</Text>
-                {goals.length === 0 ? (
-                  <View style={styles.emptyGoalCard}>
-                    <Text style={styles.emptyGoalText}>
-                      목표를 설정하면 맞춤 피드백을 받을 수 있습니다
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.goGoalsButton}
-                      onPress={() => {
-                        const parent = navigation.getParent();
-                        if (parent) parent.navigate('GoalsTab');
-                      }}
-                    >
-                      <Text style={styles.goGoalsButtonText}>목표 설정하기</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  goals.map((goal) => {
-                    const metric = goalMetrics.find((m) => m.key === goal.parameter);
-                    const comp = goalComparisons.find((c) => c.key === goal.parameter);
-                    if (!metric) return null;
+                {goals.map((goal) => {
+                  const metric = goalMetrics.find((m) => m.key === goal.parameter);
+                  const comp = goalComparisons.find((c) => c.key === goal.parameter);
+                  if (!metric) return null;
 
-                    const diff = goal.direction === 'above'
-                      ? goal.target - metric.value
-                      : metric.value - goal.target;
-                    const isAchieved = diff <= 0;
-                    const diffAbs = Math.abs(diff);
-                    const unit = metric.unit;
+                  const diff = goal.direction === 'above'
+                    ? goal.target - metric.value
+                    : metric.value - goal.target;
+                  const isAchieved = diff <= 0;
+                  const diffAbs = Math.abs(diff);
+                  const unit = metric.unit;
 
-                    return (
-                      <View key={goal.id} style={styles.goalMetricCard}>
-                        <View style={styles.goalMetricHeader}>
-                          <Text style={styles.goalMetricEmoji}>
-                            {isAchieved ? '🎉' : '🎯'}
-                          </Text>
-                          <Text style={styles.goalMetricName}>{goal.name}</Text>
-                        </View>
-
-                        <View style={styles.goalMetricBody}>
-                          <View style={styles.goalMetricRow}>
-                            <Text style={styles.goalMetricLabel}>현재 값</Text>
-                            <Text style={styles.goalMetricValue}>
-                              {metric.key === 'egg_correlation'
-                                ? metric.value.toFixed(2)
-                                : metric.value.toFixed(1)}
-                              {unit}
-                            </Text>
-                          </View>
-                          <View style={styles.goalMetricRow}>
-                            <Text style={styles.goalMetricLabel}>목표 값</Text>
-                            <Text style={styles.goalMetricValue}>
-                              {goal.target}{unit} {goal.direction === 'above' ? '이상' : '이하'}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={[
-                          styles.goalStatusBadge,
-                          { backgroundColor: isAchieved ? 'rgba(76,175,80,0.15)' : 'rgba(255,193,7,0.15)' },
-                        ]}>
-                          <Text style={[
-                            styles.goalStatusText,
-                            { color: isAchieved ? COLORS.success : COLORS.warning },
-                          ]}>
-                            {isAchieved
-                              ? '🎉 목표 달성!'
-                              : `목표까지 ${diffAbs.toFixed(1)}${unit ? unit.replace('%', '%p') : ''} 남았습니다`}
-                          </Text>
-                        </View>
-
-                        {comp && (
-                          <View style={styles.goalCompWrapper}>
-                            <ComparisonBar
-                              label={getMetricLabel(comp.key)}
-                              userValue={comp.user_value}
-                              referenceMean={comp.reference_mean}
-                              zScore={comp.z_score}
-                              percentile={comp.percentile}
-                            />
-                          </View>
-                        )}
+                  return (
+                    <View key={goal.id} style={styles.goalMetricCard}>
+                      <View style={styles.goalMetricHeader}>
+                        <Text style={styles.goalMetricEmoji}>
+                          {isAchieved ? '🎉' : '🎯'}
+                        </Text>
+                        <Text style={styles.goalMetricName}>{goal.name}</Text>
                       </View>
-                    );
-                  })
-                )}
+
+                      <View style={styles.goalMetricBody}>
+                        <View style={styles.goalMetricRow}>
+                          <Text style={styles.goalMetricLabel}>현재 값</Text>
+                          <Text style={styles.goalMetricValue}>
+                            {metric.key === 'egg_correlation'
+                              ? metric.value.toFixed(2)
+                              : metric.value.toFixed(1)}
+                            {unit}
+                          </Text>
+                        </View>
+                        <View style={styles.goalMetricRow}>
+                          <Text style={styles.goalMetricLabel}>목표 값</Text>
+                          <Text style={styles.goalMetricValue}>
+                            {goal.target}{unit} {goal.direction === 'above' ? '이상' : '이하'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={[
+                        styles.goalStatusBadge,
+                        { backgroundColor: isAchieved ? 'rgba(76,175,80,0.15)' : 'rgba(255,193,7,0.15)' },
+                      ]}>
+                        <Text style={[
+                          styles.goalStatusText,
+                          { color: isAchieved ? COLORS.success : COLORS.warning },
+                        ]}>
+                          {isAchieved
+                            ? '🎉 목표 달성!'
+                            : `목표까지 ${diffAbs.toFixed(1)}${unit ? unit.replace('%', '%p') : ''} 남았습니다`}
+                        </Text>
+                      </View>
+
+                      {comp && (
+                        <View style={styles.goalCompWrapper}>
+                          <ComparisonBar
+                            label={getMetricLabel(comp.key)}
+                            userValue={comp.user_value}
+                            referenceMean={comp.reference_mean}
+                            zScore={comp.z_score}
+                            percentile={comp.percentile}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </Animated.View>
             )}
 
@@ -774,25 +755,6 @@ const styles = StyleSheet.create({
   },
   goalStatusText: { fontSize: 14, fontWeight: '600' },
   goalCompWrapper: { marginTop: 4 },
-
-  // Empty goal
-  emptyGoalCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-  },
-  emptyGoalText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 12 },
-  goGoalsButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  goGoalsButtonText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
 
   emptyCard: {
     backgroundColor: COLORS.card,

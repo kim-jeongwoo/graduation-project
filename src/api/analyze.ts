@@ -1,13 +1,10 @@
-import { BASE_URL } from './client';
 import { pollAnalysisStatus, getAnalysisResults } from './analysis';
+import { AnalyzeStatusError, isAnalyzeFailureStatus } from './sessions';
 import { MOCK_FIXED_RESULT } from './mock';
 import type { AnalyzeResult, ServerAnalyzeResult, ServerAnalyzeResultsResponse, ScoreEntry, FeedbackEntry, ScoreMetaEntry, Zone } from '../types/analyze';
 import type { EvaluationItemKey } from '../domain/evaluationItems';
 
 const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
-
-// 부팅 시 환경 확인용 로그
-console.log('[boot] USE_MOCK=', USE_MOCK, 'API_URL=', BASE_URL);
 
 // ─── prefix 어댑터 ───
 // 서버 키 "1_nasal_oral_ratio" → 도메인 키 "nasal_oral_ratio"
@@ -24,10 +21,10 @@ function deriveZone(roundedScore: number): Zone {
 }
 
 // chunk.scores raw entry → 내부 표현 (zone derive 포함)
-function adaptChunkScore(raw: { ai_score: number; zone?: Zone; rounded_score: number; tier?: 'high'|'high_star' }) {
+function adaptChunkScore(raw: { ai_score: number; zone?: Zone; rounded_score?: number; tier?: 'high'|'high_star' }) {
   return {
     aiScore:      raw.ai_score,
-    zone:         raw.zone ?? deriveZone(raw.rounded_score),
+    zone:         raw.zone ?? (typeof raw.rounded_score === 'number' ? deriveZone(raw.rounded_score) : undefined),
     roundedScore: raw.rounded_score,
     tier:         raw.tier,
   };
@@ -35,14 +32,10 @@ function adaptChunkScore(raw: { ai_score: number; zone?: Zone; rounded_score: nu
 
 function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResult {
   const inner: ServerAnalyzeResult = response.result_json;
-  // ─── V2 진단 — 서버 응답 raw (v1 vs v2 격리) ───
-  console.log('[V2 진단] raw 응답 keys:', Object.keys(inner));
-  console.log('[V2 진단] score_mapper_version:', inner.score_mapper_version);
-  console.log('[V2 진단] has scores_v2:', !!inner.scores_v2, 'has scores_meta:', !!inner.scores_meta);
-  console.log('[V2 진단] reliability keys:', Object.keys(inner.reliability || {}));
-  console.log('[V2 진단] reliability.shown_v2:', (inner.reliability as any)?.shown_v2);
+  if (isAnalyzeFailureStatus(inner.status)) {
+    throw new AnalyzeStatusError({ run_id: inner.run_id, status: inner.status });
+  }
   const isV2 = inner.score_mapper_version === 'v2' && !!inner.scores_v2;
-  console.log('[V2 진단] isV2 detect:', isV2);
 
   return {
     run_id:              inner.run_id,
@@ -78,7 +71,7 @@ function adaptServerResult(response: ServerAnalyzeResultsResponse): AnalyzeResul
         softPalate:       chunk.scores['6_soft_palate']        ? adaptChunkScore(chunk.scores['6_soft_palate'])        : undefined,
         tongueTension:    chunk.scores['8_tongue_tension']     ? adaptChunkScore(chunk.scores['8_tongue_tension'])     : undefined,
       },
-      lowConfidenceItems: chunk.low_confidence_items?.map(stripPrefix),
+      lowConfidenceItems: chunk.low_confidence_items,
     })),
     timelineMetadata: inner.timeline_metadata ? {
       chunkMethod:           inner.timeline_metadata.chunk_method ?? '',

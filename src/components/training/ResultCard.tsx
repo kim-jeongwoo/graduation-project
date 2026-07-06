@@ -13,6 +13,8 @@ export interface BeforeAfterScore {
 interface Props {
   before: BeforeAfterScore;
   after:  BeforeAfterScore;
+  beforeLowConfidence?: boolean;
+  afterLowConfidence?:  boolean;
 }
 
 /**
@@ -49,22 +51,22 @@ function judgeImprovement(before: BeforeAfterScore, after: BeforeAfterScore): {
   return { label: `${diffStr} 악화`, color: '#ffb4ab' };
 }
 
-export default function ResultCard({ before, after }: Props) {
+export default function ResultCard({ before, after, beforeLowConfidence, afterLowConfidence }: Props) {
   const verdict = judgeImprovement(before, after);
   return (
     <View style={styles.card}>
       <Text style={styles.title}>이번 시도 결과</Text>
       <View style={styles.row}>
-        <ScoreCol label="원본 점수" score={before} />
+        <ScoreCol label="원본 점수" score={before} lowConfidence={beforeLowConfidence} />
         <Text style={styles.arrow}>→</Text>
-        <ScoreCol label="이번 시도" score={after} />
+        <ScoreCol label="이번 시도" score={after} lowConfidence={afterLowConfidence} />
       </View>
       <Text style={[styles.verdict, { color: verdict.color }]}>{verdict.label}</Text>
     </View>
   );
 }
 
-function ScoreCol({ label, score }: { label: string; score: BeforeAfterScore }) {
+function ScoreCol({ label, score, lowConfidence }: { label: string; score: BeforeAfterScore; lowConfidence?: boolean }) {
   return (
     <View style={styles.col}>
       <Text style={styles.colLabel}>{label}</Text>
@@ -72,6 +74,7 @@ function ScoreCol({ label, score }: { label: string; score: BeforeAfterScore }) 
         {score.aiScore.toFixed(2)}
       </Text>
       <Text style={styles.colZone}>{ZONE_LABELS[score.zone]}</Text>
+      {lowConfidence && <Text style={styles.lowConfidence}>신뢰도 낮음</Text>}
     </View>
   );
 }
@@ -91,6 +94,7 @@ const styles = StyleSheet.create({
   colLabel: { fontSize: 11, color: COLORS.textSecondary },
   colScore: { fontSize: 24, fontWeight: '800' },
   colZone:  { fontSize: 12, color: COLORS.textPrimary },
+  lowConfidence: { fontSize: 11, color: COLORS.textMuted },
   arrow:    { fontSize: 20, color: COLORS.textMuted, paddingHorizontal: 8 },
   verdict:  { ...TYPOGRAPHY.body, fontWeight: '700', textAlign: 'center' },
 });

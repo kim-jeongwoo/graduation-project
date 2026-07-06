@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useCallback, useEffect, Rea
 import type { WeakSection, IndicatorAppKey } from '../domain/weakSections';
 import { useAuth } from './AuthContext';
 import {
+  isAuthExpiredError,
+} from '../api/client';
+import {
   getFavoritesList,
   postFavorite,
   deleteFavorite,
@@ -57,6 +60,9 @@ function fromServer(item: FavoriteServerItem): FavoriteSection | null {
 
 interface FavoritesContextValue {
   favorites:           FavoriteSection[];
+  favoritesLoading:    boolean;
+  favoritesError:      string | null;
+  reloadFavorites:     () => Promise<void>;
   addFavorite:         (fav: Omit<FavoriteSection, 'id' | 'addedAt'>) => Promise<void>;
   removeFavoriteById:  (id: string) => Promise<void>;
   removeFavoriteByKey: (params: { songId: string; chunkIndex: number; indicatorKey: IndicatorAppKey }) => Promise<void>;
@@ -68,28 +74,49 @@ const FavoritesContext = createContext<FavoritesContextValue | null>(null);
 export function FavoritesProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth();
   const [favorites, setFavorites] = useState<FavoriteSection[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
+  const [favoritesError, setFavoritesError] = useState<string | null>(null);
+
+  const loadFavorites = useCallback(async (shouldIgnore?: () => boolean) => {
+    if (!token) {
+      setFavorites([]);
+      setFavoritesLoading(false);
+      setFavoritesError(null);
+      return;
+    }
+    setFavoritesLoading(true);
+    setFavoritesError(null);
+    try {
+      const res = await getFavoritesList();
+      if (shouldIgnore?.()) return;
+      const items = res.items
+        .map(fromServer)
+        .filter((x): x is FavoriteSection => x !== null);
+      setFavorites(items);
+    } catch (e: unknown) {
+      if (shouldIgnore?.()) return;
+      if (!isAuthExpiredError(e)) {
+        setFavoritesError('즐겨찾기를 불러오지 못했습니다.');
+      }
+    } finally {
+      if (!shouldIgnore?.()) {
+        setFavoritesLoading(false);
+      }
+    }
+  }, [token]);
 
   // 토큰 변화 시 서버에서 즐겨찾기 로드 (로그아웃/만료 시 비움)
   useEffect(() => {
     if (!token) {
       setFavorites([]);
+      setFavoritesLoading(false);
+      setFavoritesError(null);
       return;
     }
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await getFavoritesList();
-        if (cancelled) return;
-        const items = res.items
-          .map(fromServer)
-          .filter((x): x is FavoriteSection => x !== null);
-        setFavorites(items);
-      } catch (e) {
-        console.error('[FavoritesContext] initial load error:', e);
-      }
-    })();
+    void loadFavorites(() => cancelled);
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, loadFavorites]);
 
   const addFavorite = useCallback(async (fav: Omit<FavoriteSection, 'id' | 'addedAt'>) => {
     // runId 없으면 서버 호출 불가 (mock 등) → 로컬에만
@@ -129,7 +156,6 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       } else {
         // rollback
         setFavorites(prev => prev.filter(f => f.id !== tempId));
-        console.error('[FavoritesContext] addFavorite error:', e);
       }
     }
   }, []);
@@ -144,11 +170,10 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     if (id.startsWith('tmp-') || id.startsWith('local-')) return;
     try {
       await deleteFavorite(id);
-    } catch (e) {
+    } catch {
       // rollback
       const saved = target;
       setFavorites(prev => saved ? [...prev, saved] : prev);
-      console.error('[FavoritesContext] deleteFavorite error:', e);
     }
   }, []);
 
@@ -174,7 +199,16 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <FavoritesContext.Provider value={{ favorites, addFavorite, removeFavoriteById, removeFavoriteByKey, isFavorite }}>
+    <FavoritesContext.Provider value={{
+      favorites,
+      favoritesLoading,
+      favoritesError,
+      reloadFavorites: loadFavorites,
+      addFavorite,
+      removeFavoriteById,
+      removeFavoriteByKey,
+      isFavorite,
+    }}>
       {children}
     </FavoritesContext.Provider>
   );

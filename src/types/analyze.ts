@@ -22,12 +22,12 @@ export interface TimelineChunkScore {
   lrcText:          string;
   chunkDurationS?:  number;
   scores: {
-    breathiness?:      { aiScore: number; zone: Zone; roundedScore: number; tier?: ScoreTier };
-    vocalFoldContact?: { aiScore: number; zone: Zone; roundedScore: number; tier?: ScoreTier };
-    softPalate?:       { aiScore: number; zone: Zone; roundedScore: number; tier?: ScoreTier };
-    tongueTension?:    { aiScore: number; zone: Zone; roundedScore: number; tier?: ScoreTier };
+    breathiness?:      { aiScore: number; zone?: Zone; roundedScore?: number; tier?: ScoreTier };
+    vocalFoldContact?: { aiScore: number; zone?: Zone; roundedScore?: number; tier?: ScoreTier };
+    softPalate?:       { aiScore: number; zone?: Zone; roundedScore?: number; tier?: ScoreTier };
+    tongueTension?:    { aiScore: number; zone?: Zone; roundedScore?: number; tier?: ScoreTier };
   };
-  lowConfidenceItems?: EvaluationItemKey[];
+  lowConfidenceItems?: string[];
 }
 
 export interface TimelineMetadata {
@@ -147,7 +147,7 @@ export interface ServerAnalyzeResult
     end_sec:   number;
     lrc_text:  string;
     chunk_duration_s?: number;
-    scores: Record<string, { ai_score: number; zone?: Zone; rounded_score: number; tier?: ScoreTier }>;
+    scores: Record<string, { ai_score: number; zone?: Zone; rounded_score?: number; tier?: ScoreTier }>;
     low_confidence_items?: string[];
   }>;
   timeline_metadata?: {

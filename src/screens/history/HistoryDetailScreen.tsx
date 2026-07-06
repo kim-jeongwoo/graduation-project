@@ -98,9 +98,7 @@ export default function HistoryDetailScreen({ route, navigation }: Props) {
             }
             setFeedback(fbData);
           }
-        } catch (e: unknown) {
-          console.log('[HistoryDetail] error:', e);
-        } finally {
+        } catch {} finally {
           if (!cancelled) setLoading(false);
         }
       };

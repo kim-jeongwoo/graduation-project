@@ -13,12 +13,17 @@ import { Audio } from 'expo-av';
 import Pitchy from 'react-native-pitchy';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { getSessionDetail } from '../../api/sessions';
-import { startAnalysis } from '../../api/sessions';
+import { AnalyzeStatusError, getSessionDetail, startAnalysis } from '../../api/sessions';
+import { AnalysisPollingTimeoutError, pollAnalysisStatus } from '../../api/analysis';
+import { isAuthExpiredError } from '../../api/client';
 import { getSongLrc, getSongMrUrl, getSongPitchGuideCompat } from '../../api/songs';
 
 // [deprecated] 구형 화면 aliases — P1에서 정리 예정
-const requestAnalysis = (sid: string) => startAnalysis(sid).then(r => ({ run_id: r.run_id, status: r.status }));
+const requestAnalysis = async (sid: string) => {
+  const response = await startAnalysis(sid);
+  await pollAnalysisStatus(response.run_id);
+  return { run_id: response.run_id, status: response.status };
+};
 const getSongLyrics = getSongLrc;
 const getSongAudioUrl = getSongMrUrl;
 const getSongPitch = (songId: string) => getSongPitchGuideCompat(songId).catch(() => null);
@@ -83,19 +88,15 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
   // 가사 로드 (songId 파라미터 또는 detail.song_id 사용)
   useEffect(() => {
     const sid = songId ?? detail?.song_id;
-    console.log('[가사] effectiveSongId:', sid, '(songId:', songId, ', detail?.song_id:', detail?.song_id, ')');
     if (!sid) return;
     let cancelled = false;
     (async () => {
       try {
         const data = await getSongLyrics(sid);
         if (!cancelled) {
-          console.log('[가사] 로드 성공, 라인 수:', data.lines.length);
           setLyrics(data.lines);
         }
-      } catch (e: unknown) {
-        console.log('[가사] 로드 실패:', e);
-      }
+      } catch {}
     })();
     return () => {
       cancelled = true;
@@ -111,13 +112,10 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
       try {
         const data = await getSongPitch(sid);
         if (!cancelled && data) {
-          console.log('[PITCH-DATA] 로드 성공:', data.frames.length, '프레임, resolution:', data.resolution_ms, 'ms');
           setReferencePitchFrames(data.frames);
           setReferencePitchResolution(data.resolution_ms);
         }
-      } catch (e) {
-        console.log('[PITCH-DATA] 로드 실패:', e);
-      }
+      } catch {}
     })();
     return () => { cancelled = true; };
   }, [songId, detail?.song_id]);
@@ -126,9 +124,7 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
     try {
       const data = await getSessionDetail(sessionId);
       setDetail(data);
-    } catch (e: unknown) {
-      console.log('[SessionDetail] error:', e);
-    } finally {
+    } catch {} finally {
       setLoading(false);
     }
   }, [sessionId]);
@@ -170,21 +166,11 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
     if (lyrics.length === 0 || !isRecording) return;
     const idx = lyrics.findIndex((l) => l.time_ms > elapsedMs) - 1;
     const newIdx = idx >= 0 ? idx : lyrics.length - 1;
-    if (newIdx !== currentLineIdx) {
-      console.log('[가사] 경과:', elapsedMs, 'ms → 라인:', newIdx, lyrics[newIdx]?.text);
-    }
     setCurrentLineIdx(newIdx);
   }, [elapsedMs, lyrics, isRecording, currentLineIdx]);
 
   const startRecording = async () => {
     const activeSongId = effectiveSongId;
-    console.log('[SONG-ID] route.params songId:', songId);
-    console.log('[SONG-ID] detail?.song_id:', detail?.song_id);
-    console.log('[SONG-ID] effectiveSongId:', activeSongId);
-    if (activeSongId) {
-      console.log('[SONG-ID] audio URL:', getSongAudioUrl(activeSongId));
-      console.log('[SONG-ID] UUID 형태?', /^[0-9a-f]{8}-/.test(activeSongId));
-    }
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
@@ -200,14 +186,12 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
         staysActiveInBackground: false,
         shouldDuckAndroid: true,
       });
-      console.log('[녹음] Audio 모드 설정 완료');
 
       // 2) 원곡 오디오 미리 로드 (재생은 녹음 시작 후)
       let preloadedSound: Audio.Sound | null = null;
       if (activeSongId) {
         try {
           const audioUrl = getSongAudioUrl(activeSongId);
-          console.log('[녹음] 원곡 pre-load 시작:', audioUrl);
           const { sound } = await Audio.Sound.createAsync(
             {
               uri: audioUrl,
@@ -216,13 +200,7 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
             { shouldPlay: false, volume: 0.7 },
           );
           preloadedSound = sound;
-          console.log('[녹음] 원곡 pre-load 성공');
-        } catch (preloadErr: unknown) {
-          const err = preloadErr instanceof Error ? preloadErr : new Error(String(preloadErr));
-          console.error('[AUDIO] pre-load 실패 상세:', err.message);
-          console.error('[AUDIO] Error name:', err.name);
-          console.error('[AUDIO] Full error:', JSON.stringify(preloadErr, Object.getOwnPropertyNames(err)));
-        }
+        } catch {}
       }
 
       // 3) 녹음 시작
@@ -248,7 +226,6 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
           isMeteringEnabled: true,
         },
       );
-      console.log('[녹음] Recording 생성 성공');
 
       recordingRef.current = recording;
       setIsRecording(true);
@@ -267,21 +244,15 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
           // 원곡 재생 완료 시 녹음 자동 중지
           preloadedSound.setOnPlaybackStatusUpdate((status) => {
             if (status.isLoaded && status.didJustFinish && recordingRef.current) {
-              console.log('[녹음] 원곡 재생 완료 → 녹음 자동 중지');
               stopRecording();
             }
           });
-          console.log('[녹음] 원곡 재생 시작 성공');
-        } catch (playErr: unknown) {
-          console.log('[녹음] 원곡 재생 실패:', playErr);
+        } catch {
           preloadedSound.unloadAsync().catch(() => {});
           Alert.alert('알림', '원곡 재생에 실패했습니다. 녹음은 계속됩니다.');
         }
       } else if (activeSongId) {
-        console.log('[녹음] pre-load 실패 → 원곡 재생 건너뜀');
         Alert.alert('알림', '원곡을 불러올 수 없습니다. 녹음은 계속됩니다.');
-      } else {
-        console.log('[녹음] songId 없음 → 원곡 재생 건너뜀');
       }
 
       // 5) 실시간 피치 감지 시작
@@ -304,9 +275,7 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
           }
         });
         await Pitchy.start();
-        console.log('[PITCH] 감지 시작 성공');
-      } catch (pitchErr: unknown) {
-        console.error('[PITCH] 시작 실패:', pitchErr);
+      } catch {
         // 피치 감지 실패해도 녹음은 계속
       }
 
@@ -332,15 +301,13 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
           }
         }
       }, 200);
-    } catch (e: unknown) {
-      console.log('[Recording] error:', e);
+    } catch {
       Alert.alert('녹음 실패', '녹음을 시작할 수 없습니다.');
     }
   };
 
   const stopRecording = async () => {
     if (!recordingRef.current) return;
-    console.log('[녹음] 중지 요청');
     try {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -350,10 +317,7 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
       // 피치 감지 중지
       try {
         await Pitchy.stop();
-        console.log('[PITCH] 감지 중지');
-      } catch (pitchStopErr) {
-        console.error('[PITCH] 중지 에러:', pitchStopErr);
-      }
+      } catch {}
       if (pitchSubRef.current) {
         pitchSubRef.current.remove();
         pitchSubRef.current = null;
@@ -364,7 +328,6 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
 
       // 원곡 재생 중지
       if (bgSoundRef.current) {
-        console.log('[녹음] 원곡 재생 중지');
         await bgSoundRef.current.stopAsync().catch(() => {});
         await bgSoundRef.current.unloadAsync().catch(() => {});
         bgSoundRef.current = null;
@@ -380,8 +343,7 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
       setRecordingDurationMs(durationMs);
       setVolumeLevel(0);
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-    } catch (e: unknown) {
-      console.log('[Recording] stop error:', e);
+    } catch {
       setIsRecording(false);
     }
   };
@@ -424,8 +386,7 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
       );
       soundRef.current = sound;
       setIsPlaying(true);
-    } catch (e: unknown) {
-      console.log('[Playback] error:', e);
+    } catch {
       Alert.alert('재생 실패', '녹음 파일을 재생할 수 없습니다.');
     }
   };
@@ -482,7 +443,7 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
     // 단계별 진행 (0.8초 간격)
     let step = 0;
     analysisTimerRef.current = setInterval(() => {
-      step += 1;
+      step = Math.min(step + 1, analysisSteps.length - 1);
       setAnalysisStep(step);
     }, 800);
 
@@ -511,7 +472,22 @@ export default function SessionDetailScreen({ route, navigation }: Props) {
         songId: effectiveSongId,
       });
     } catch (e: unknown) {
-      Alert.alert('오류', '분석 요청에 실패했습니다.');
+      if (isAuthExpiredError(e)) {
+        return;
+      }
+      if (e instanceof AnalyzeStatusError) {
+        Alert.alert(
+          e.status === 'no_voice' ? '음성이 감지되지 않았습니다' : '분석 실패',
+          e.message,
+        );
+      } else if (e instanceof AnalysisPollingTimeoutError) {
+        Alert.alert(
+          '분석 진행 중',
+          '분석이 계속 진행 중입니다. 잠시 후 히스토리에서 결과를 확인해주세요.',
+        );
+      } else {
+        Alert.alert('오류', e instanceof Error ? e.message : '분석 요청에 실패했습니다.');
+      }
     } finally {
       if (analysisTimerRef.current) {
         clearInterval(analysisTimerRef.current);

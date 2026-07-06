@@ -42,3 +42,7 @@ yarn-error.*
 
 # local env — do not commit
 .env
+.env.backup*
+
+# Codex local scratch
+.codex/ACTIVE_PLAN.md

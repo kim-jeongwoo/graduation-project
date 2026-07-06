@@ -39,6 +39,97 @@ npx expo start --android      # Android 에뮬레이터
 
 ---
 
+## Project workflow
+- 이 repo는 vocal feedback project의 Expo 모바일 앱 `vocal-app`이다.
+- 작업은 허브 페이지/사용자 지시문을 우선 source of truth로 삼고, repo 내부 active agent 지시는 `AGENTS.md`를 기준으로 한다.
+- 코드 변경 전 현재 구현을 먼저 확인하고 접근 방법을 3~5줄로 요약한다.
+- 작업이 plan-first 또는 "정우 OK 후 진행"을 명시하면, 정우 OK 전에는 파일을 수정하지 않는다.
+- 기존 패턴 위에 최소 diff로 변경한다.
+- key/schema/API 응답 매핑은 추측하지 말고 raw/schema/code를 먼저 확인한다.
+- Galaxy 검증 실패 시 추측 수정하지 말고 진단 로그와 raw 출력 확인을 먼저 요청한다.
+
+## Codex ExecPlan workflow
+- 긴 작업은 `/compact` 단독에 의존하지 말고 `AGENTS.md` + `.codex/PLANS.md` + `.codex/ACTIVE_PLAN.md` 조합으로 운영한다.
+- 새 긴 작업을 시작하면 `.codex/PLANS.md` 템플릿을 복사해 `.codex/ACTIVE_PLAN.md`에 현재 목표, 금지 범위, 진행 상태, 검증 기준을 기록한다.
+- context 압축, 새 Codex 재개, 장시간 중단 후에는 먼저 `AGENTS.md`를 읽고 이어서 `.codex/ACTIVE_PLAN.md`를 읽은 뒤 현재 작업을 복원한다.
+- 작업 중 결정, 검증 결과, 남은 리스크가 바뀌면 기능 코드와 분리해 `.codex/ACTIVE_PLAN.md`를 갱신한다.
+- `.codex/ACTIVE_PLAN.md`는 현재 진행 중인 작업의 source of continuity이며, 사용자 최신 지시문과 충돌하면 사용자 최신 지시문이 우선한다.
+- `.codex/PLANS.md`는 템플릿/운영 규칙 파일이다. 특정 작업의 상세 진행 상황은 `ACTIVE_PLAN.md`에만 적는다.
+- ExecPlan 문서 업데이트 작업은 앱 기능 코드 변경과 분리한다. 사용자가 명시하지 않으면 `src/`, API URL, package scripts, server repo를 건드리지 않는다.
+
+## Model selection
+- 복잡한 설계, 다중 파일 의존성, 디버깅, schema migration, 위험한 edge case는 GPT-5 high reasoning 또는 사용 가능한 가장 강력한 GPT/Codex 모델을 사용한다.
+- 단순 매핑, 로그 추가, timeout/text 변경, 기존 패턴 복사는 빠른 Codex/GPT 모델을 사용할 수 있다.
+- 데드라인이 촉박하고 한 번에 정확히 끝내야 하면 단순해 보여도 강한 모델을 우선 사용한다.
+
+## Parallel Codex workflow
+- 작업이 복잡하고 안전하게 분할 가능하면 Codex subagent/parallel thread를 사용한다.
+- 좋은 병렬 대상: read-only codebase exploration, schema/type/data-flow audit, test failure triage, log/raw analysis, 독립적인 파일 패턴 조사, uncommitted diff review.
+- 같은 파일에 대한 write-heavy 병렬 작업은 피한다.
+- 병렬 에이전트는 보통 inspect/report만 수행한다.
+- 최종 patch 적용은 하나의 main integrator가 담당한다.
+- 병렬 에이전트를 사용한 경우 완료 보고에 각 agent의 scope, key findings, conflicts/disagreements, final integrated decision을 포함한다.
+
+## Codex Computer Use / Browser verification
+
+정우 has enabled Codex Computer Use and Google Chrome for verification tasks.
+
+Use Computer Use or Chrome when verification can be done through:
+- public or approved web pages
+- local development servers
+- API health pages
+- GitHub PR pages
+- browser-visible app/admin pages
+- Expo/Metro web-accessible diagnostics
+
+Prefer Codex self-verification for:
+- production API health checks
+- endpoint reachability checks
+- GitHub PR/document review
+- browser-based UI checks
+- local server pages that can be opened in Chrome
+- console/log inspection that does not require secrets
+
+Do not ask 정우 to manually verify browser/API things Codex can verify with allowed tools.
+
+Limits:
+- Real Galaxy microphone input, singing, vocal training feel, MR/MIDI/LRC timing by ear, and physical device UX still require 정우 verification.
+- Do not enter passwords, tokens, or sensitive credentials unless 정우 is present and explicitly approves.
+- Do not use Computer Use for destructive actions such as deploy, reset, delete, merge, or production state changes without explicit approval.
+- Keep browser tasks narrow: one app/page/flow at a time.
+- If Computer Use is unavailable or permission is missing, report that clearly and provide a one-shot command or URL for 정우.
+
+## Hard constraints
+- `KaraokeScreen`은 명시 요청 없이는 건드리지 않는다.
+- 즐겨찾기, 곡별 폴더, history, 사후 측정 흐름은 명시 요청 없이는 건드리지 않는다.
+- 정우가 요청하지 않으면 EAS build를 제안하지 않는다.
+- 검증 완료된 기존 flow는 유지한다.
+- 검증 후 명시 요청이 있기 전까지 diagnostic log를 제거하지 않는다.
+- `.env` / `.env.*` 파일은 명시 요청 없이는 읽지 않는다.
+
+## Verification
+- 실행 가능한 검증 명령은 `package.json` 기준으로 확인한다.
+- 현재 `vocal-app`의 알려진 타입 체크 명령은 `npx tsc --noEmit`이다.
+- `npm run typecheck`, `npm run lint`, `npm test`는 script가 있을 때만 실행한다.
+- typecheck가 기존 unrelated navigation typing error로 실패하면 별도 보고하고, 금지된 화면은 명시 승인 없이 수정하지 않는다.
+- 완료 보고에는 항상 `git diff --stat`을 포함한다.
+
+## Reporting format
+- 조사 전용 작업:
+  1. Current state
+  2. Findings
+  3. Recommended action
+  4. Files that would change
+  5. Questions/risks
+- 구현 작업:
+  1. Changed files
+  2. Core changes in 3 lines
+  3. Verification result
+  4. git diff --stat
+  5. Manual/Galaxy verification checklist if relevant
+
+---
+
 ## 에이전트 행동 규칙 (Karpathy 4원칙)
 
 ### 1. Think Before Coding (추측 금지)
@@ -100,4 +191,3 @@ npx expo start --android      # Android 에뮬레이터
 <!-- 형식: [날짜] [카테고리] 실수 / 원인 / 대신 어떻게 -->
 <!-- 최신이 위. 기존 항목은 절대 지우지 말고 누적만. -->
 <!-- 에이전트가 실수했을 때 즉시 추가 -->
-

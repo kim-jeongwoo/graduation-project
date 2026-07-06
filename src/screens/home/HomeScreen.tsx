@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
+  Alert,
   View,
   Text,
   FlatList,
+  Linking,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -12,14 +14,18 @@ import { useAuth } from '../../context/AuthContext';
 import { getSongs } from '../../api/songs';
 import type { Song } from '../../types/api';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import MainTopTabs from '../../components/navigation/MainTopTabs';
 
 type Props = NativeStackScreenProps<Record<string, object | undefined>, string>;
+
+const SPEECH_WEB_URL = 'https://speech.vocal-fit.com';
 
 export default function HomeScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const showSpeechWeb = process.env.EXPO_PUBLIC_ENABLE_SPEECH_WEB === 'true';
 
   const loadSongs = useCallback(async () => {
     setLoading(true);
@@ -30,7 +36,6 @@ export default function HomeScreen({ navigation }: Props) {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '곡 목록을 불러올 수 없습니다.';
       setError(msg);
-      console.log('[HomeScreen] getSongs error:', msg);
     } finally {
       setLoading(false);
     }
@@ -38,6 +43,21 @@ export default function HomeScreen({ navigation }: Props) {
 
   // GET /songs는 14곡 정적 데이터 — 마운트 시 1회만 fetch (focus마다 재호출 X, 학원 학생 부하 회피)
   useEffect(() => { loadSongs(); }, [loadSongs]);
+
+  const openSpeechEvaluation = useCallback(async () => {
+    try {
+      const canOpen = await Linking.canOpenURL(SPEECH_WEB_URL);
+      if (!canOpen) {
+        throw new Error('Cannot open speech web URL');
+      }
+      await Linking.openURL(SPEECH_WEB_URL);
+    } catch {
+      Alert.alert(
+        '스피치 평가를 열 수 없습니다',
+        '네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+      );
+    }
+  }, []);
 
   const renderSong = ({ item, index }: { item: Song; index: number }) => {
     const ready = item.hasLrc && item.hasPitchGuide;
@@ -77,6 +97,32 @@ export default function HomeScreen({ navigation }: Props) {
           <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
+
+      <MainTopTabs activeTab="HomeTab" />
+
+      {showSpeechWeb ? (
+        <View style={styles.speechCard}>
+          <View style={styles.speechHeader}>
+            <View style={styles.speechTitleRow}>
+              <Text style={styles.speechTitle}>스피치 평가</Text>
+              <View style={styles.webBadge}>
+                <Text style={styles.webBadgeText}>WEB</Text>
+              </View>
+            </View>
+            <Text style={styles.speechDescription}>
+              낭독/새도잉 기반 스피치 분석 웹으로 이동합니다.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.speechButton}
+            activeOpacity={0.78}
+            onPress={openSpeechEvaluation}
+          >
+            <Text style={styles.speechButtonText}>웹으로 열기</Text>
+          </TouchableOpacity>
+          <Text style={styles.speechNote}>별도 웹페이지에서 진행됩니다.</Text>
+        </View>
+      ) : null}
 
       {/* ─── 곡 목록 ─── */}
       {loading ? (
@@ -120,6 +166,66 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, color: COLORS.textSecondary },
   nickname: { fontSize: 22, fontWeight: '700', color: COLORS.textPrimary },
   settingsIcon: { fontSize: 24 },
+
+  speechCard: {
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 14,
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  speechHeader: {
+    gap: 6,
+    marginBottom: 14,
+  },
+  speechTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  speechTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  webBadge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '22',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  webBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primaryLight,
+  },
+  speechDescription: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.textSecondary,
+  },
+  speechButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  speechButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  speechNote: {
+    marginTop: 10,
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
 
   sectionTitle: {
     fontSize: 16,

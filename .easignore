@@ -1,0 +1,16 @@
+.git
+node_modules
+.expo
+.env
+.env.*
+!.env.example
+.env.backup*
+.claude
+.codex
+*.bak
+*.log
+*.tmp
+.DS_Store
+docs/HANDOVER.md
+docs/CURRENT_STATE_v1.md
+assets/*.bak

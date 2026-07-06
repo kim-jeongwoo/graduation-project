@@ -1,37 +1,232 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Audio } from 'expo-av';
+import { Audio, ResizeMode, Video } from 'expo-av';
 import { COLORS } from '../../utils/colors';
 import { SPACING, TYPOGRAPHY } from '../../theme/tokens';
-import { IndicatorAppKey, INDICATOR_LABELS, ZONE_LABELS } from '../../domain/weakSections';
-
-// 이슈 3 — 사후 측정 결과 zone별 피드백 텍스트 (클라이언트 hardcode, 5/10 임시)
-const FEEDBACK_BY_ZONE: Record<IndicatorAppKey, Record<Zone, string>> = {
-  breathiness: {
-    insufficient: '성대를 더 모아 호흡 새는 소리를 줄이세요.',
-    appropriate:  '현재 발성 유지하세요.',
-    excessive:    '호흡을 더 섞어 부드럽게 발성하세요.',
-  },
-  vocal_fold_contact: {
-    insufficient: '성대를 더 모아 발성하세요.',
-    appropriate:  '현재 발성 유지하세요.',
-    excessive:    '성대 접촉을 줄이세요.',
-  },
-};
+import { isAuthExpiredError } from '../../api/client';
+import {
+  IndicatorAppKey,
+  INDICATOR_LABELS,
+  SECTION_FEEDBACK_BY_ZONE as FEEDBACK_BY_ZONE,
+  ZONE_LABELS,
+} from '../../domain/weakSections';
+import { getFeedbackVideoForTraining } from '../../domain/feedbackVideos';
 import type { Zone } from '../../types/analyze';
+
+const SERVER_INDICATOR_KEY: Record<IndicatorAppKey, string> = {
+  breathiness:         '4_breathiness',
+  vocal_fold_contact:  '3_vocal_fold_contact',
+  soft_palate:         '6_soft_palate',
+  tongue_tension:      '8_tongue_tension',
+};
+
+const WS_CONNECT_TIMEOUT_MS = 3000;
+const MIN_TRAINING_ANALYZE_SEC = 3;
+const VOICE_RECENT_MS = 900;
+const MIC_UI_UPDATE_MS = 120;
+const INPUT_STATUS_WINDOW_MS = 1200;
+const MIC_ANALYSIS_LEVEL_HINT_THRESHOLD = 0.06;
+const MIN_ANALYSIS_VOICED_FRAMES = 3;
+const INPUT_GUIDANCE = '최소 3초 이상, 조금 더 크게 불러 주세요.';
+const SECTION_END_TRIM_SEC = 1;
+const RECORDING_PRE_ROLL_SEC = 1;
+const RECORDING_POST_ROLL_SEC = 0.35;
+
+interface InputFrame {
+  at: number;
+  voiced: boolean;
+  level: number;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function parseJsonRecord(value: string | undefined): Record<string, unknown> | null {
+  if (!value) return null;
+  try {
+    return asRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function getApiErrorInfo(error: unknown) {
+  const err = asRecord(error);
+  const response = asRecord(err?.response);
+  const responseData = asRecord(response?.data);
+  const parsedMessage = parseJsonRecord(error instanceof Error ? error.message : undefined);
+  const parsedDetail = asRecord(parsedMessage?.detail) ?? parsedMessage;
+  const detail = asRecord(responseData?.detail) ?? parsedDetail;
+  const responseStatus = response?.status;
+  const errorStatus = err?.status;
+  const code = typeof responseStatus === 'number'
+    ? responseStatus
+    : (typeof errorStatus === 'number' ? errorStatus : undefined);
+  return {
+    code,
+    detail,
+    message: error instanceof Error ? error.message : undefined,
+  };
+}
+
+function getStringDetail(detail: Record<string, unknown> | null, key: string): string | null {
+  const value = detail?.[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function getNumberDetail(detail: Record<string, unknown> | null, key: string): number | null {
+  const value = detail?.[key];
+  return typeof value === 'number' ? value : null;
+}
+
+function getRmsLevel(samples: Float32Array): number {
+  if (samples.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+  return Math.sqrt(sum / samples.length);
+}
+
+function formatDuration(sec: number): string {
+  return sec.toFixed(1);
+}
+
+function getTooShortMessage(durationSec: number | null, minRequiredSec = MIN_TRAINING_ANALYZE_SEC): string {
+  const current = durationSec !== null ? `\n현재 녹음: ${formatDuration(durationSec)}초` : '';
+  return `분석을 위해 최소 ${minRequiredSec}초 이상 녹음이 필요합니다.${current}\n${INPUT_GUIDANCE}`;
+}
+
+function getInputFailureMessage(reason?: string | null): string {
+  const trimmed = reason?.trim();
+  return trimmed ? `${trimmed}\n${INPUT_GUIDANCE}` : `입력이 부족해 분석이 어렵습니다.\n${INPUT_GUIDANCE}`;
+}
+
+function getNoVoiceMessage(reason?: string | null): string {
+  const trimmed = reason?.trim();
+  return trimmed
+    ? `음성이 충분히 감지되지 않았습니다.\n${trimmed}\n${INPUT_GUIDANCE}`
+    : `음성이 충분히 감지되지 않았습니다.\n${INPUT_GUIDANCE}`;
+}
+
+function isValidZone(value: unknown): value is Zone {
+  return value === 'insufficient' || value === 'appropriate' || value === 'excessive';
+}
+
+function getInputStatus(
+  durationSec: number | null,
+  recentVoicedFrames: number,
+  level: number,
+  levelThreshold = MIC_ANALYSIS_LEVEL_HINT_THRESHOLD,
+): VoiceInputStatus {
+  if (durationSec === null) return 'waiting';
+  if (recentVoicedFrames === 0) return durationSec > VOICE_RECENT_MS / 1000 ? 'noVoice' : 'waiting';
+  if (
+    durationSec >= MIN_TRAINING_ANALYZE_SEC
+    && recentVoicedFrames >= MIN_ANALYSIS_VOICED_FRAMES
+    && level >= levelThreshold
+  ) {
+    return 'ready';
+  }
+  return 'weak';
+}
+
 import type { MidiSegment, PitchPoint } from '../../types/karaoke';
-import { getSongMidiSegmentsRaw, getSongMrUrl } from '../../api/songs';
+import { getSongMidiSegmentsOptional, getSongMrUrl } from '../../api/songs';
 import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
 import { VocalRecorder } from '../../services/audio/recorder';
+import {
+  isAudioFocusNotAcquiredError,
+  isAudioStartBlockedError,
+  prepareAudioForPlaybackOnly,
+  prepareAudioForRecordAndPlayback,
+  waitForAppActive,
+} from '../../services/audio/audioMode';
 import { detectPitch } from '../../services/audio/pitchDetector';
 import { requestMicrophonePermission } from '../../services/audio/microphone';
 import { useAuth } from '../../context/AuthContext';
 import SectionPitchGraph from '../../components/training/SectionPitchGraph';
-import { PitchCard, BreathCard, BreathInfoCard, pitchVerdictFromScore, type PitchVerdict } from '../../components/training/RealtimeFeedback';
+import {
+  PitchCard,
+  BreathCard,
+  BreathInfoCard,
+  SoftPalateInfoCard,
+  TongueTensionInfoCard,
+  VoiceInputCard,
+  pitchVerdictFromScore,
+  type PitchLiveStatus,
+  type PitchVerdict,
+  type VoiceInputStatus,
+} from '../../components/training/RealtimeFeedback';
 import { buildRealtimeWsUrl } from '../../api/dmlClient';
-import { trainingAnalyze, type TrainingAnalyzeScore } from '../../api/sessions';
+import { trainingAnalyze, type TrainingAnalyzeResponse } from '../../api/sessions';
 import ResultCard, { type BeforeAfterScore } from '../../components/training/ResultCard';
+
+function deriveZoneFromRoundedScore(roundedScore: number): Zone {
+  if (roundedScore <= 1) return 'insufficient';
+  if (roundedScore >= 4) return 'excessive';
+  return 'appropriate';
+}
+
+function getKeyedValue<T>(
+  record: Record<string, T> | null | undefined,
+  indicatorKey: IndicatorAppKey,
+  serverIndicatorKey: string,
+): T | undefined {
+  return record?.[serverIndicatorKey] ?? record?.[indicatorKey];
+}
+
+function getTrainingAnalyzeScore(
+  res: TrainingAnalyzeResponse,
+  indicatorKey: IndicatorAppKey,
+  serverIndicatorKey: string,
+): BeforeAfterScore | null {
+  const legacy = getKeyedValue(res.scores, indicatorKey, serverIndicatorKey);
+  if (legacy) {
+    if (!Number.isFinite(legacy.ai_score) || !isValidZone(legacy.zone)) return null;
+    return { aiScore: legacy.ai_score, zone: legacy.zone };
+  }
+
+  const meta = getKeyedValue(res.scores_meta, indicatorKey, serverIndicatorKey);
+  const roundedScore = typeof meta?.rounded_score === 'number'
+    ? meta.rounded_score
+    : getKeyedValue(res.scores_v2, indicatorKey, serverIndicatorKey);
+  if (typeof roundedScore !== 'number') return null;
+  return { aiScore: roundedScore, zone: deriveZoneFromRoundedScore(roundedScore) };
+}
+
+function normalizeTrainingAnalyzeStatus(res: TrainingAnalyzeResponse): string {
+  const raw = (res as TrainingAnalyzeResponse & { bodyStatus?: string | null }).body_status
+    ?? (res as TrainingAnalyzeResponse & { bodyStatus?: string | null }).bodyStatus
+    ?? res.status;
+  return typeof raw === 'string' && raw.trim() ? raw.trim().toLowerCase() : 'unknown';
+}
+
+function getTrainingAnalyzeReason(res: TrainingAnalyzeResponse): string | null {
+  if (typeof res.reason === 'string' && res.reason.trim()) return res.reason;
+  if (typeof res.message === 'string' && res.message.trim()) return res.message;
+  if (typeof res.error === 'string' && res.error.trim()) return res.error;
+  if (typeof res.detail === 'string' && res.detail.trim()) return res.detail;
+  if (res.detail && typeof res.detail === 'object') {
+    const detail = res.detail as Record<string, unknown>;
+    for (const key of ['reason', 'message', 'detail', 'error']) {
+      const value = detail[key];
+      if (typeof value === 'string' && value.trim()) return value;
+    }
+  }
+  return null;
+}
+
+function hasLowConfidenceItem(
+  items: string[] | null | undefined,
+  indicatorKey: IndicatorAppKey,
+  serverIndicatorKey: string,
+): boolean {
+  return items?.some((item) => {
+    const stripped = item.replace(/^\d+_/, '');
+    return item === serverIndicatorKey || item === indicatorKey || stripped === indicatorKey;
+  }) ?? false;
+}
 
 type Props = NativeStackScreenProps<
   {
@@ -45,23 +240,30 @@ type Props = NativeStackScreenProps<
       sectionEndSec:   number;  // master time
       chunkInfo:       { startSec: number; endSec: number; lrcText: string };
       scoreInfo:       { aiScore: number; zone: Zone };
+      lowConfidenceItems?: string[];
       feedbackText:    string;
     };
   },
   'Training'
 >;
 
-export default function TrainingScreen({ route }: Props) {
+export default function TrainingScreen({ route, navigation }: Props) {
   const {
     indicatorKey, runId, songId, sessionId, chunkIndex,
     sectionStartSec, sectionEndSec,
-    chunkInfo, scoreInfo, feedbackText,
+    chunkInfo, scoreInfo, lowConfidenceItems, feedbackText,
   } = route.params;
   const indicatorLabel = INDICATOR_LABELS[indicatorKey];
   const { token } = useAuth();
+  const trainingSectionEndSec = Math.max(sectionStartSec, sectionEndSec - SECTION_END_TRIM_SEC);
+  const trainingChunkStartSec = chunkInfo.startSec;
+  const trainingChunkEndSec = Math.max(trainingChunkStartSec, chunkInfo.endSec);
+  const recordingStartSec = Math.max(sectionStartSec, trainingChunkStartSec - RECORDING_PRE_ROLL_SEC);
+  const recordingEndSec = Math.min(trainingSectionEndSec, trainingChunkEndSec + RECORDING_POST_ROLL_SEC);
 
   const [loading,      setLoading]      = useState(true);
   const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
+  const [guideUnavailable, setGuideUnavailable] = useState(false);
   const [midiSegments, setMidiSegments] = useState<MidiSegment[]>([]);
   const [lrcOffsetSec, setLrcOffsetSec] = useState(0);
   const [currentTime,  setCurrentTime]  = useState(sectionStartSec);  // master time
@@ -72,23 +274,55 @@ export default function TrainingScreen({ route }: Props) {
   // 실시간 피드백 state (Phase 3)
   const [pitchMatchScore, setPitchMatchScore] = useState<number | null>(null);
   const [pitchVerdict,    setPitchVerdict]    = useState<PitchVerdict>('unknown');
+  const [pitchLiveStatus, setPitchLiveStatus] = useState<PitchLiveStatus>('idle');
+  const [voiceInputStatus, setVoiceInputStatus] = useState<VoiceInputStatus>('idle');
+  const [micLevel, setMicLevel] = useState(0);
+  const [voicedFrameCount, setVoicedFrameCount] = useState(0);
+  const [analysisInputLevel, setAnalysisInputLevel] = useState(0);
   const [breathZone,      setBreathZone]      = useState<Zone | null>(null);
   const [breathScore,     setBreathScore]     = useState<number | null>(null);
 
   // 사후 측정 state (Phase 4-2)
-  type Status = 'idle' | 'countdown' | 'recording' | 'stopped' | 'analyzing' | 'result';
+  type Status = 'idle' | 'countdown' | 'preparing' | 'recording' | 'stopped' | 'analyzing' | 'result';
   const [status,         setStatus]        = useState<Status>('idle');
   const [recordedUri,    setRecordedUri]   = useState<string | null>(null);
+  const [recordedDurationSec, setRecordedDurationSec] = useState<number | null>(null);
   const [afterScore,     setAfterScore]    = useState<BeforeAfterScore | null>(null);
+  const [afterLowConfidence, setAfterLowConfidence] = useState(false);
+  const [feedbackVideoVisible, setFeedbackVideoVisible] = useState(false);
+  const [feedbackVideoError, setFeedbackVideoError] = useState<string | null>(null);
+  const [feedbackVideoPlaying, setFeedbackVideoPlaying] = useState(false);
 
-  const showBreath = indicatorKey === 'breathiness';
-  const serverIndicatorKey = indicatorKey === 'breathiness' ? '4_breathiness' : '3_vocal_fold_contact';
+  const serverIndicatorKey = SERVER_INDICATOR_KEY[indicatorKey];
+  const beforeLowConfidence = lowConfidenceItems?.includes(serverIndicatorKey) ?? false;
   const canAnalyze = !!sessionId && !!recordedUri;
+  const currentFeedbackZone = status === 'result' && afterScore ? afterScore.zone : scoreInfo.zone;
+  const feedbackVideo = getFeedbackVideoForTraining(indicatorKey, currentFeedbackZone);
+  const blocksFeedbackVideo =
+    countdown !== null
+    || status === 'countdown'
+    || status === 'preparing'
+    || status === 'recording'
+    || status === 'analyzing';
 
   const soundRef       = useRef<Audio.Sound | null>(null);
+  const feedbackVideoRef = useRef<Video | null>(null);
   const recorderRef    = useRef(new VocalRecorder());
+  const focusedRef     = useRef(false);
   const currentTimeRef = useRef(sectionStartSec);  // master time
   const stoppedRef     = useRef(false);
+  const recordingStartedRef = useRef(false);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const lastVoiceAtRef = useRef<number | null>(null);
+  const lastMicUiAtRef = useRef(0);
+  const voicedFrameCountRef = useRef(0);
+  const recentInputFramesRef = useRef<InputFrame[]>([]);
+  const analysisLevelSumRef = useRef(0);
+  const analysisFrameCountRef = useRef(0);
+  const maxInputLevelRef = useRef(0);
+  const attemptIdRef = useRef(0);
+  const startingRef = useRef(false);
+  const recordingStartPendingRef = useRef(false);
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // WebSocket + PCM buffering refs (Phase 3)
@@ -96,6 +330,25 @@ export default function TrainingScreen({ route }: Props) {
   const wsReadyRef     = useRef(false);
   const pcmBufferRef   = useRef<number[]>([]);
   const pitchHistRef   = useRef<PitchVerdict[]>([]);  // 최근 5프레임 다수결
+
+  const getCurrentRecordingDurationSec = useCallback((): number | null => {
+    if (recordingStartedAtRef.current === null) return null;
+    return Math.max(0, (Date.now() - recordingStartedAtRef.current) / 1000);
+  }, []);
+
+  const getAnalysisInputLevel = useCallback((): number => {
+    if (analysisFrameCountRef.current === 0) return 0;
+    return analysisLevelSumRef.current / analysisFrameCountRef.current;
+  }, []);
+
+  const disposeSound = useCallback(async (sound?: Audio.Sound | null, phase = 'cleanup') => {
+    const s = sound ?? soundRef.current;
+    if (!s) return;
+    try { s.setOnPlaybackStatusUpdate(null); } catch {}
+    try { await s.stopAsync(); } catch {}
+    try { await s.unloadAsync(); } catch {}
+    if (soundRef.current === s) soundRef.current = null;
+  }, []);
 
   // ─── songId 기반 midi/offset 로드 ───
   useEffect(() => {
@@ -107,12 +360,21 @@ export default function TrainingScreen({ route }: Props) {
     }
     (async () => {
       try {
+        setGuideUnavailable(false);
         const granted = await requestMicrophonePermission();
         if (!granted) {
           Alert.alert('마이크 권한 필요', '훈련하려면 마이크 권한이 필요합니다.');
         }
-        const { segments, lrcOffsetSec: off } = await getSongMidiSegmentsRaw(songId);
+        const guideData = await getSongMidiSegmentsOptional(songId, 'training');
         if (cancelled) return;
+        if (!guideData) {
+          setMidiSegments([]);
+          setLrcOffsetSec(0);
+          setGuideUnavailable(true);
+          setLoading(false);
+          return;
+        }
+        const { segments, lrcOffsetSec: off } = guideData;
         const guideOffset = SONG_GUIDE_OFFSETS[songId] ?? 0;
         const adjusted: MidiSegment[] = segments.map(s => ({
           start:    s.start + guideOffset,
@@ -122,6 +384,7 @@ export default function TrainingScreen({ route }: Props) {
         }));
         setMidiSegments(adjusted);
         setLrcOffsetSec(off);
+        setGuideUnavailable(false);
         setLoading(false);
       } catch (e) {
         console.error('[TrainingScreen] load error:', e);
@@ -136,7 +399,7 @@ export default function TrainingScreen({ route }: Props) {
       cleanup();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songId]);
+  }, [songId, sectionStartSec, sectionEndSec, trainingSectionEndSec, trainingChunkStartSec, trainingChunkEndSec, chunkInfo]);
 
   // ─── WebSocket 종료 ───
   const closeWs = useCallback(() => {
@@ -157,37 +420,158 @@ export default function TrainingScreen({ route }: Props) {
       countdownTimer.current = null;
     }
     closeWs();
-    const s = soundRef.current;
-    if (s) {
-      try { await s.unloadAsync(); } catch {}
-      soundRef.current = null;
-    }
+    await disposeSound(undefined, 'cleanup');
     try { await recorderRef.current.cancel(); } catch {}
-  }, [closeWs]);
+    recordingStartedRef.current = false;
+    recordingStartedAtRef.current = null;
+    lastVoiceAtRef.current = null;
+    voicedFrameCountRef.current = 0;
+    recentInputFramesRef.current = [];
+    analysisLevelSumRef.current = 0;
+    analysisFrameCountRef.current = 0;
+    startingRef.current = false;
+    recordingStartPendingRef.current = false;
+  }, [closeWs, disposeSound]);
+
+  const closeFeedbackVideo = useCallback(async () => {
+    setFeedbackVideoVisible(false);
+    setFeedbackVideoError(null);
+    setFeedbackVideoPlaying(false);
+    const video = feedbackVideoRef.current;
+    if (!video) return;
+    try { await video.stopAsync(); } catch {}
+  }, []);
+
+  useEffect(() => {
+    focusedRef.current = navigation.isFocused();
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      focusedRef.current = true;
+    });
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      focusedRef.current = false;
+      void closeFeedbackVideo();
+    });
+    return () => {
+      focusedRef.current = false;
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [closeFeedbackVideo, navigation]);
+
+  const showAudioInactiveAlert = useCallback(() => {
+    Alert.alert('훈련 시작 실패', '앱이 활성화된 뒤 다시 시도해 주세요.');
+  }, []);
+
+  const isScreenAudioReady = useCallback(async () => {
+    if (!focusedRef.current || !navigation.isFocused()) {
+      showAudioInactiveAlert();
+      return false;
+    }
+    const active = await waitForAppActive();
+    if (!active || !focusedRef.current || !navigation.isFocused()) {
+      showAudioInactiveAlert();
+      return false;
+    }
+    return true;
+  }, [navigation, showAudioInactiveAlert]);
+
+  const openFeedbackVideo = useCallback(async () => {
+    if (!feedbackVideo || blocksFeedbackVideo) return;
+    if (!await isScreenAudioReady()) return;
+    try {
+      await prepareAudioForPlaybackOnly();
+      setFeedbackVideoError(null);
+      setFeedbackVideoPlaying(false);
+      setFeedbackVideoVisible(true);
+    } catch (e) {
+      if (isAudioStartBlockedError(e) || isAudioFocusNotAcquiredError(e)) {
+        showAudioInactiveAlert();
+        return;
+      }
+      Alert.alert('영상 재생 실패', '추천 영상을 재생하지 못했습니다. 다시 열어 주세요.');
+    }
+  }, [blocksFeedbackVideo, feedbackVideo, isScreenAudioReady, showAudioInactiveAlert]);
+
+  const playFeedbackVideo = useCallback(async () => {
+    const video = feedbackVideoRef.current;
+    if (!video) return;
+    if (!await isScreenAudioReady()) return;
+    try {
+      await prepareAudioForPlaybackOnly();
+      await video.playAsync();
+      setFeedbackVideoPlaying(true);
+      setFeedbackVideoError(null);
+    } catch {
+      setFeedbackVideoPlaying(false);
+      setFeedbackVideoError('playback');
+      Alert.alert('영상 재생 실패', '추천 영상을 재생하지 못했습니다. 다시 열어 주세요.');
+    }
+  }, [isScreenAudioReady]);
+
+  const pauseFeedbackVideo = useCallback(async () => {
+    const video = feedbackVideoRef.current;
+    if (!video) return;
+    try { await video.pauseAsync(); } catch {}
+    setFeedbackVideoPlaying(false);
+  }, []);
+
+  useEffect(() => {
+    if (feedbackVideoVisible && blocksFeedbackVideo) {
+      closeFeedbackVideo();
+    }
+  }, [blocksFeedbackVideo, closeFeedbackVideo, feedbackVideoVisible]);
 
   // ─── WebSocket 연결 (1회 재시도) ───
-  const openWs = useCallback((retried = false): Promise<WebSocket | null> => {
+  const openWs = useCallback((startTimestampSec: number, retried = false): Promise<WebSocket | null> => {
     return new Promise((resolve) => {
       if (!songId) { resolve(null); return; }
       const url = buildRealtimeWsUrl(songId);
       const ws = new WebSocket(url);
+      wsRef.current = ws;
       ws.binaryType = 'arraybuffer';
       let resolved = false;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+      const clearConnectTimeout = () => {
+        if (timeout) {
+          clearTimeout(timeout);
+          timeout = null;
+        }
+      };
+      const settle = (value: WebSocket | null) => {
+        if (resolved) return;
+        resolved = true;
+        clearConnectTimeout();
+        resolve(value);
+      };
+      timeout = setTimeout(() => {
+        wsReadyRef.current = false;
+        if (wsRef.current === ws) wsRef.current = null;
+        try { ws.close(); } catch {}
+        settle(null);
+      }, WS_CONNECT_TIMEOUT_MS);
       ws.onopen = () => {
+        if (resolved) {
+          try { ws.close(); } catch {}
+          return;
+        }
         wsReadyRef.current = true;
+        if (stoppedRef.current) {
+          try { ws.close(); } catch {}
+          settle(null);
+          return;
+        }
         // meta 송신
         try {
           ws.send(JSON.stringify({
             type: 'meta',
             sample_rate: 16000,
-            start_timestamp: sectionStartSec,
+            start_timestamp: startTimestampSec,
           }));
-        } catch (e) {
-          console.error('[TrainingScreen] meta send error:', e);
-        }
-        if (!resolved) { resolved = true; resolve(ws); }
+        } catch {}
+        settle(ws);
       };
       ws.onmessage = (ev) => {
+        if (stoppedRef.current) return;
         if (typeof ev.data !== 'string') return;
         try {
           const msg = JSON.parse(ev.data);
@@ -196,11 +580,22 @@ export default function TrainingScreen({ route }: Props) {
             if (msg.user_midi === null || msg.user_midi === undefined) {
               setPitchMatchScore(null);
               setPitchVerdict('unknown');
+              setPitchLiveStatus('noVoice');
               pitchHistRef.current = [];
               return;
             }
             const score: number | null = msg.match_score ?? null;
+            const voiceRecent = lastVoiceAtRef.current !== null
+              && Date.now() - lastVoiceAtRef.current <= VOICE_RECENT_MS;
+            if (!voiceRecent) {
+              setPitchMatchScore(null);
+              setPitchVerdict('unknown');
+              setPitchLiveStatus('noVoice');
+              pitchHistRef.current = [];
+              return;
+            }
             setPitchMatchScore(score);
+            setPitchLiveStatus('active');
             const v = pitchVerdictFromScore(score);
             const hist = pitchHistRef.current;
             hist.push(v);
@@ -217,150 +612,341 @@ export default function TrainingScreen({ route }: Props) {
             setBreathZone((msg.zone ?? null) as Zone | null);
             setBreathScore(msg.ai_score ?? null);
           }
-        } catch (e) {
-          console.error('[TrainingScreen] ws message parse error:', e);
-        }
+        } catch {}
       };
-      ws.onerror = (e) => {
-        console.error('[TrainingScreen] ws error:', e);
-      };
+      ws.onerror = () => {};
       ws.onclose = () => {
         wsReadyRef.current = false;
+        if (wsRef.current === ws) wsRef.current = null;
         if (!resolved) {
-          resolved = true;
+          clearConnectTimeout();
           if (!retried) {
-            console.log('[TrainingScreen] ws first connect failed, retrying...');
-            openWs(true).then(resolve);
+            openWs(startTimestampSec, true).then(settle);
           } else {
-            Alert.alert('연결 실패', '실시간 분석 서버에 연결할 수 없습니다.');
-            resolve(null);
+            settle(null);
           }
+        } else if (!stoppedRef.current) {
+          setPitchLiveStatus('serverUnavailable');
         }
       };
     });
-  }, [songId, sectionStartSec]);
+  }, [songId]);
 
   // ─── MR + recorder 시작 ───
   const startMrAndRecord = useCallback(async () => {
     if (!songId) return;
+    if (feedbackVideoVisible) {
+      showAudioInactiveAlert();
+      return;
+    }
+    if (!await isScreenAudioReady()) {
+      setStatus('idle');
+      setPitchLiveStatus('idle');
+      return;
+    }
     const mrStart = Math.max(0, sectionStartSec - lrcOffsetSec);  // MR time
-    const mrEnd   = Math.max(0, sectionEndSec   - lrcOffsetSec);
+    const recordingStartMaster = recordingStartSec;
+    const recordingEndMaster = recordingEndSec;
+    const recordingStartMr = Math.max(0, recordingStartMaster - lrcOffsetSec);
+    const mrEnd = Math.max(recordingStartMr, recordingEndMaster - lrcOffsetSec);
+    const attemptId = attemptIdRef.current + 1;
+    attemptIdRef.current = attemptId;
     stoppedRef.current = false;
-    setStatus('recording');
-
-    // WebSocket 연결 (실패 시 음성 분석 없이 진행)
-    const ws = await openWs();
-    wsRef.current = ws;
-
+    setStatus('preparing');
+    setPitchLiveStatus('idle');
+    setVoiceInputStatus('leadIn');
+    setMicLevel(0);
     try {
-      // recorder
-      await recorderRef.current.start((samples) => {
-        // ── 로컬 피치 (기존) ──
-        const result = detectPitch(samples);
-        const t = currentTimeRef.current;
-        if (result.voiced && result.midi !== null) {
-          setUserPitch(prev => [...prev, {
-            time: t, midi: result.midi, voiced: true,
-            freqHz: result.freq, confidence: 1,
-          }]);
-        }
-        // ── PCM buffering → 200ms(3200 samples) 단위로 WS 송신 ──
-        const buf = pcmBufferRef.current;
-        for (let i = 0; i < samples.length; i++) buf.push(samples[i]);
-        while (buf.length >= 3200) {
-          const chunk = buf.splice(0, 3200);
-          if (wsReadyRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-            const int16 = new Int16Array(3200);
-            for (let i = 0; i < 3200; i++) {
-              const v = Math.round(chunk[i] * 32768);
-              int16[i] = v < -32768 ? -32768 : v > 32767 ? 32767 : v;
-            }
-            try { wsRef.current.send(int16.buffer); } catch (e) {
-              console.error('[TrainingScreen] ws send error:', e);
-            }
-          }
-        }
-      });
+      const granted = await requestMicrophonePermission();
+      if (!granted) {
+        Alert.alert('마이크 권한 필요', '마이크 권한이 필요합니다. 설정에서 마이크 권한을 허용해 주세요.');
+        setStatus('idle');
+        setPitchLiveStatus('idle');
+        return;
+      }
+      await prepareAudioForRecordAndPlayback();
+      if (!focusedRef.current || !navigation.isFocused()) {
+        showAudioInactiveAlert();
+        setStatus('idle');
+        setPitchLiveStatus('idle');
+        return;
+      }
+      await disposeSound(undefined, 'start-replace');
+      if (stoppedRef.current || attemptIdRef.current !== attemptId) return;
 
       // MR sound
       const sound = new Audio.Sound();
+      soundRef.current = sound;
+      const stopTargetRecording = async (phase = 'auto-stop') => {
+        if (stoppedRef.current || attemptIdRef.current !== attemptId || soundRef.current !== sound) return;
+        stoppedRef.current = true;
+        recordingStartPendingRef.current = false;
+        const hadRecording = recordingStartedRef.current;
+        try {
+          if (hadRecording) {
+            const durationSec = getCurrentRecordingDurationSec();
+            const result = await recorderRef.current.stop();
+            recordingStartedRef.current = false;
+            recordingStartedAtRef.current = null;
+            setRecordedDurationSec(durationSec);
+            setRecordedUri(result.uri);
+            const analysisLevel = getAnalysisInputLevel();
+            setVoiceInputStatus(getInputStatus(durationSec, 0, 0));
+            setVoicedFrameCount(voicedFrameCountRef.current);
+            setAnalysisInputLevel(analysisLevel);
+          } else {
+            try { await recorderRef.current.cancel(); } catch {}
+            recordingStartedRef.current = false;
+            recordingStartedAtRef.current = null;
+          }
+        } catch (e) {
+          console.error('[TrainingScreen] recorder.stop (auto) error:', e);
+          recordingStartedRef.current = false;
+          recordingStartedAtRef.current = null;
+        }
+        closeWs();
+        await disposeSound(sound, phase);
+        setPitchLiveStatus('idle');
+        setPlaying(false);
+        setStatus(hadRecording ? 'stopped' : 'idle');
+      };
+
+      const startTargetRecording = async () => {
+        if (
+          stoppedRef.current
+          || attemptIdRef.current !== attemptId
+          || recordingStartedRef.current
+          || recordingStartPendingRef.current
+        ) {
+          return;
+        }
+        recordingStartPendingRef.current = true;
+        setPitchLiveStatus('serverConnecting');
+        setVoiceInputStatus('waiting');
+        openWs(recordingStartSec).then((ws) => {
+          if (stoppedRef.current || attemptIdRef.current !== attemptId) {
+            if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
+              try { ws.close(); } catch {}
+            }
+            return;
+          }
+          setPitchLiveStatus(ws ? 'micWaiting' : 'serverUnavailable');
+        });
+        try {
+          await recorderRef.current.start((samples) => {
+            if (stoppedRef.current || attemptIdRef.current !== attemptId || !recordingStartedRef.current) return;
+            // ── 로컬 피치 (기존) ──
+            const result = detectPitch(samples);
+            const now = Date.now();
+            const level = Math.min(1, getRmsLevel(samples) * 8);
+            maxInputLevelRef.current = Math.max(maxInputLevelRef.current, level);
+            const hasVoice = result.voiced && result.midi !== null;
+            if (hasVoice) {
+              lastVoiceAtRef.current = now;
+              voicedFrameCountRef.current += 1;
+            }
+            recentInputFramesRef.current = [
+              ...recentInputFramesRef.current.filter((frame) => now - frame.at <= INPUT_STATUS_WINDOW_MS),
+              { at: now, voiced: hasVoice, level },
+            ];
+            analysisLevelSumRef.current += level;
+            analysisFrameCountRef.current += 1;
+            if (now - lastMicUiAtRef.current >= MIC_UI_UPDATE_MS) {
+              const durationSec = getCurrentRecordingDurationSec();
+              const recentFrames = recentInputFramesRef.current;
+              const recentVoicedFrames = recentFrames.filter((frame) => frame.voiced).length;
+              const recentLevel = recentFrames.length
+                ? recentFrames.reduce((sum, frame) => sum + frame.level, 0) / recentFrames.length
+                : level;
+              const analysisLevel = getAnalysisInputLevel();
+              setMicLevel(level);
+              setVoiceInputStatus(getInputStatus(durationSec, recentVoicedFrames, recentLevel));
+              setVoicedFrameCount(voicedFrameCountRef.current);
+              setAnalysisInputLevel(analysisLevel);
+              setRecordedDurationSec(durationSec);
+              lastMicUiAtRef.current = now;
+            }
+            const t = currentTimeRef.current;
+            if (hasVoice) {
+              setUserPitch(prev => [...prev, {
+                time: t, midi: result.midi, voiced: true,
+                freqHz: result.freq, confidence: 1,
+              }]);
+            }
+            // ── PCM buffering → 200ms(3200 samples) 단위로 WS 송신 ──
+            const buf = pcmBufferRef.current;
+            for (let i = 0; i < samples.length; i++) buf.push(samples[i]);
+            while (buf.length >= 3200) {
+              const chunk = buf.splice(0, 3200);
+              if (wsReadyRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+                const int16 = new Int16Array(3200);
+                for (let i = 0; i < 3200; i++) {
+                  const v = Math.round(chunk[i] * 32768);
+                  int16[i] = v < -32768 ? -32768 : v > 32767 ? 32767 : v;
+                }
+                try { wsRef.current.send(int16.buffer); } catch {}
+              }
+            }
+          });
+          recordingStartPendingRef.current = false;
+          if (stoppedRef.current || attemptIdRef.current !== attemptId) {
+            try { await recorderRef.current.cancel(); } catch {}
+            recordingStartedRef.current = false;
+            recordingStartedAtRef.current = null;
+            setPitchLiveStatus('idle');
+            return;
+          }
+          recordingStartedRef.current = true;
+          recordingStartedAtRef.current = Date.now();
+          lastVoiceAtRef.current = null;
+          setRecordedDurationSec(0);
+          setStatus('recording');
+        } catch (e) {
+          recordingStartPendingRef.current = false;
+          Alert.alert('훈련 시작 실패', '녹음을 시작할 수 없습니다. 마이크 상태를 확인해 주세요.');
+          await stopTargetRecording('recording-start-failure');
+        }
+      };
+
       sound.setOnPlaybackStatusUpdate((status) => {
+        if (attemptIdRef.current !== attemptId || soundRef.current !== sound) return;
         if (!status.isLoaded) return;
         const mrPos = status.positionMillis / 1000;
         const masterPos = mrPos + lrcOffsetSec;
         currentTimeRef.current = masterPos;
         setCurrentTime(masterPos);
         setPlaying(status.isPlaying);
-        // 자동 정지: 구간 끝 도달
+        if (!stoppedRef.current && masterPos >= recordingStartMaster) {
+          void startTargetRecording();
+        }
+        // 자동 정지: target chunk 끝 도달
         if (!stoppedRef.current && mrPos >= mrEnd) {
-          stoppedRef.current = true;
-          (async () => {
-            try { await sound.pauseAsync(); } catch {}
-            try {
-              const result = await recorderRef.current.stop();
-              setRecordedUri(result.uri);
-            } catch (e) {
-              console.error('[TrainingScreen] recorder.stop (auto) error:', e);
-            }
-            closeWs();
-            setPlaying(false);
-            setStatus('stopped');
-          })();
+          void stopTargetRecording('auto-stop');
         }
       });
       await sound.loadAsync(
         { uri: getSongMrUrl(songId), headers: token ? { Authorization: `Bearer ${token}` } : {} },
         { shouldPlay: false, progressUpdateIntervalMillis: 50 },
       );
+      if (stoppedRef.current || attemptIdRef.current !== attemptId) {
+        await disposeSound(sound, 'load-cancel');
+        try { await recorderRef.current.cancel(); } catch {}
+        recordingStartedRef.current = false;
+        recordingStartedAtRef.current = null;
+        recordingStartPendingRef.current = false;
+        setPitchLiveStatus('idle');
+        return;
+      }
       await sound.playFromPositionAsync(mrStart * 1000);
-      soundRef.current = sound;
+      if (stoppedRef.current || attemptIdRef.current !== attemptId) {
+        await disposeSound(sound, 'play-cancel');
+        try { await recorderRef.current.cancel(); } catch {}
+        recordingStartedRef.current = false;
+        recordingStartedAtRef.current = null;
+        recordingStartPendingRef.current = false;
+        setPitchLiveStatus('idle');
+        return;
+      }
     } catch (e) {
-      console.error('[TrainingScreen] startMrAndRecord error:', e);
-      Alert.alert('오류', 'MR 또는 녹음을 시작할 수 없습니다.');
+      if (isAudioStartBlockedError(e) || isAudioFocusNotAcquiredError(e)) {
+        showAudioInactiveAlert();
+      } else {
+        Alert.alert('훈련 시작 실패', '반주 또는 녹음을 시작할 수 없습니다. 마이크 상태를 확인해 주세요.');
+      }
       stoppedRef.current = true;
+      try { await recorderRef.current.cancel(); } catch {}
+      recordingStartedRef.current = false;
+      recordingStartedAtRef.current = null;
+      recordingStartPendingRef.current = false;
+      await disposeSound(undefined, 'start-failure');
       closeWs();
+      setPitchLiveStatus('idle');
+      setPlaying(false);
       setStatus('idle');
     }
-  }, [songId, sectionStartSec, sectionEndSec, lrcOffsetSec, token, openWs, closeWs]);
+  }, [
+    songId,
+    sectionStartSec,
+    sectionEndSec,
+    trainingSectionEndSec,
+    trainingChunkStartSec,
+    trainingChunkEndSec,
+    recordingStartSec,
+    recordingEndSec,
+    lrcOffsetSec,
+    token,
+    openWs,
+    closeWs,
+    getCurrentRecordingDurationSec,
+    getAnalysisInputLevel,
+    disposeSound,
+    midiSegments,
+    chunkInfo,
+    feedbackVideoVisible,
+    isScreenAudioReady,
+    navigation,
+    showAudioInactiveAlert,
+  ]);
 
-  // ─── 사후 측정 ───
-  const handleAnalyze = useCallback(async () => {
+  const performTrainingAnalyze = useCallback(async () => {
     if (!sessionId || !recordedUri) {
       Alert.alert('알림', '녹음 데이터 또는 세션 정보가 없습니다.');
       return;
     }
     setStatus('analyzing');
+    setAfterScore(null);
+    setAfterLowConfidence(false);
     const chunkMeta = {
       chunk_index: chunkIndex,
-      start_sec: chunkInfo.startSec,
-      end_sec: chunkInfo.endSec,
+      start_sec: recordingStartSec,
+      end_sec: recordingEndSec,
       original_run_id: runId,
     };
     try {
       const res = await trainingAnalyze(sessionId, recordedUri, chunkMeta);
-      if (res.status === 'no_voice') {
-        Alert.alert('음성 미감지', res.reason ?? '음성이 감지되지 않았습니다.');
+      const bodyStatus = normalizeTrainingAnalyzeStatus(res);
+      const responseReason = getTrainingAnalyzeReason(res);
+      if (bodyStatus === 'no_voice') {
+        setVoiceInputStatus('noVoice');
+        Alert.alert('음성 미감지', getNoVoiceMessage(responseReason));
         setStatus('stopped');
         return;
       }
-      if (res.status !== 'success' || !res.scores) {
-        Alert.alert('분석 실패', res.reason ?? '분석에 실패했습니다.');
+      if (bodyStatus === 'invalid') {
+        setVoiceInputStatus('weak');
+        Alert.alert('입력 확인', getInputFailureMessage(responseReason ?? '분석할 수 없는 입력입니다.'));
         setStatus('stopped');
         return;
       }
-      const entry: TrainingAnalyzeScore | undefined = res.scores[serverIndicatorKey];
-      if (!entry) {
-        Alert.alert('분석 결과 없음', '진입 항목 점수가 응답에 없습니다.');
+      if (bodyStatus !== 'success') {
+        setVoiceInputStatus('weak');
+        Alert.alert('분석 실패', getInputFailureMessage(responseReason ?? '분석에 실패했습니다.'));
         setStatus('stopped');
         return;
       }
-      setAfterScore({ aiScore: entry.ai_score, zone: entry.zone as Zone });
+      const after = getTrainingAnalyzeScore(res, indicatorKey, serverIndicatorKey);
+      if (!after) {
+        setVoiceInputStatus('weak');
+        Alert.alert('분석 결과 없음', getInputFailureMessage('진입 항목 점수가 응답에 없습니다.'));
+        setStatus('stopped');
+        return;
+      }
+      setAfterScore(after);
+      setAfterLowConfidence(hasLowConfidenceItem(res.low_confidence_items, indicatorKey, serverIndicatorKey));
       setStatus('result');
-    } catch (e: any) {
-      const code = e?.response?.status;
-      const detail = e?.response?.data?.detail;
-      if (code === 400 && detail?.error === 'chunk_too_short') {
-        Alert.alert('녹음 너무 짧음', detail.reason ?? '최소 3초 이상 녹음이 필요합니다.');
+    } catch (e: unknown) {
+      if (isAuthExpiredError(e)) {
+        setStatus('stopped');
+        return;
+      }
+      const { code, detail, message } = getApiErrorInfo(e);
+      const detailError = getStringDetail(detail, 'error');
+      const detailReason = getStringDetail(detail, 'reason');
+      const serverDurationSec = getNumberDetail(detail, 'duration_sec') ?? recordedDurationSec;
+      const minRequiredSec = getNumberDetail(detail, 'min_required_sec') ?? MIN_TRAINING_ANALYZE_SEC;
+      if (code === 400 && (detailError === 'chunk_too_short' || detailReason?.includes('최소 3초'))) {
+        setVoiceInputStatus('weak');
+        Alert.alert('녹음 너무 짧음', detailReason ?? getTooShortMessage(serverDurationSec, minRequiredSec));
       } else if (code === 401) {
         Alert.alert('인증 만료', '다시 로그인해주세요.');
       } else if (code === 403) {
@@ -368,36 +954,143 @@ export default function TrainingScreen({ route }: Props) {
       } else if (code === 404) {
         Alert.alert('세션 없음', '세션이 만료되었습니다.');
       } else if (code === 504) {
-        Alert.alert('서버 응답 지연', '잠시 후 다시 시도해주세요.');
+        setVoiceInputStatus('weak');
+        Alert.alert('사후 측정 지연', '사후 측정 분석 응답이 지연되었습니다. 잠시 후 다시 시도해주세요.');
+      } else if (code) {
+        setVoiceInputStatus('weak');
+        Alert.alert('분석 실패', getInputFailureMessage(detailReason ?? message ?? '분석에 실패했습니다.'));
       } else {
         Alert.alert('네트워크 오류', '네트워크를 확인하고 다시 시도해주세요.');
-        console.error('[TrainingScreen] trainingAnalyze error:', e);
       }
       setStatus('stopped');
     }
-  }, [sessionId, recordedUri, chunkIndex, chunkInfo, runId, serverIndicatorKey]);
+  }, [
+    sessionId,
+    recordedUri,
+    recordedDurationSec,
+    chunkIndex,
+    chunkInfo,
+    trainingChunkEndSec,
+    trainingSectionEndSec,
+    recordingStartSec,
+    recordingEndSec,
+    runId,
+    songId,
+    indicatorKey,
+    serverIndicatorKey,
+    sectionStartSec,
+    sectionEndSec,
+    trainingChunkStartSec,
+    status,
+  ]);
+
+  // ─── 사후 측정 ───
+  const handleAnalyze = useCallback(async () => {
+    if (!sessionId || !recordedUri) {
+      Alert.alert('알림', '녹음 데이터 또는 세션 정보가 없습니다.');
+      return;
+    }
+    if (recordedDurationSec !== null && recordedDurationSec < MIN_TRAINING_ANALYZE_SEC) {
+      setVoiceInputStatus('weak');
+      Alert.alert('녹음 너무 짧음', getTooShortMessage(recordedDurationSec));
+      return;
+    }
+    const analysisReady = recordedDurationSec !== null
+      && recordedDurationSec >= MIN_TRAINING_ANALYZE_SEC
+      && voicedFrameCount >= MIN_ANALYSIS_VOICED_FRAMES
+      && analysisInputLevel >= MIC_ANALYSIS_LEVEL_HINT_THRESHOLD;
+    if (!analysisReady) {
+      if (voicedFrameCount === 0) {
+        setVoiceInputStatus('noVoice');
+        Alert.alert(
+          '입력 부족',
+          getInputFailureMessage(),
+        );
+        return;
+      }
+      setVoiceInputStatus('weak');
+      Alert.alert(
+        '입력 확인',
+        `음성은 감지됐지만 분석에는 부족할 수 있습니다. 음정 선이 보여도 서버 분석은 실패할 수 있습니다.\n${INPUT_GUIDANCE}`,
+        [
+          { text: '다시 부르기', style: 'cancel' },
+          { text: '그래도 분석', onPress: () => { void performTrainingAnalyze(); } },
+        ],
+      );
+      return;
+    }
+    await performTrainingAnalyze();
+  }, [
+    sessionId,
+    recordedUri,
+    recordedDurationSec,
+    voicedFrameCount,
+    analysisInputLevel,
+    pitchMatchScore,
+    performTrainingAnalyze,
+  ]);
 
   const handleRetry = useCallback(() => {
     setStatus('idle');
+    setPitchLiveStatus('idle');
+    setVoiceInputStatus('idle');
+    setMicLevel(0);
+    setVoicedFrameCount(0);
+    setAnalysisInputLevel(0);
     setAfterScore(null);
+    setAfterLowConfidence(false);
     setRecordedUri(null);
+    setRecordedDurationSec(null);
+    voicedFrameCountRef.current = 0;
+    recentInputFramesRef.current = [];
+    analysisLevelSumRef.current = 0;
+    analysisFrameCountRef.current = 0;
+    maxInputLevelRef.current = 0;
   }, []);
 
-  // ─── 카운트다운 → 시작 ───
-  const startCountdown = useCallback(() => {
+  const resetAttemptState = useCallback(() => {
     setUserPitch([]);
     setCurrentTime(sectionStartSec);
     currentTimeRef.current = sectionStartSec;
-    // 실시간 피드백 리셋
     setPitchMatchScore(null);
     setPitchVerdict('unknown');
+    setPitchLiveStatus('idle');
+    setVoiceInputStatus('idle');
+    setMicLevel(0);
+    setVoicedFrameCount(0);
+    setAnalysisInputLevel(0);
     setBreathZone(null);
     setBreathScore(null);
     pitchHistRef.current = [];
     pcmBufferRef.current = [];
-    // 사후 측정 리셋
     setRecordedUri(null);
+    setRecordedDurationSec(null);
     setAfterScore(null);
+    setAfterLowConfidence(false);
+    recordingStartedAtRef.current = null;
+    recordingStartPendingRef.current = false;
+    lastVoiceAtRef.current = null;
+    lastMicUiAtRef.current = 0;
+    voicedFrameCountRef.current = 0;
+    recentInputFramesRef.current = [];
+    analysisLevelSumRef.current = 0;
+    analysisFrameCountRef.current = 0;
+    maxInputLevelRef.current = 0;
+  }, [sectionStartSec]);
+
+  const startPractice = useCallback(() => {
+    if (startingRef.current || countdownTimer.current) return;
+    startingRef.current = true;
+    resetAttemptState();
+    startingRef.current = false;
+    startMrAndRecord();
+  }, [resetAttemptState, startMrAndRecord]);
+
+  // ─── 카운트다운 → 시작 ───
+  const startCountdown = useCallback(() => {
+    if (startingRef.current || countdownTimer.current) return;
+    startingRef.current = true;
+    resetAttemptState();
     setStatus('countdown');
     let n = 3;
     setCountdown(n);
@@ -406,56 +1099,89 @@ export default function TrainingScreen({ route }: Props) {
       if (n <= 0) {
         if (countdownTimer.current) clearInterval(countdownTimer.current);
         countdownTimer.current = null;
+        startingRef.current = false;
         setCountdown(null);
         startMrAndRecord();
       } else {
         setCountdown(n);
       }
     }, 1000);
-  }, [sectionStartSec, startMrAndRecord]);
+  }, [resetAttemptState, startMrAndRecord]);
 
   // ─── 사용자 액션 ───
-  const handleStart = useCallback(() => {
-    if (countdown !== null || playing) return;
+  const handleStart = useCallback(async () => {
+    if (startingRef.current || countdown !== null || playing || status === 'preparing' || status === 'recording') return;
+    startingRef.current = true;
+    try {
+      const granted = await requestMicrophonePermission();
+      if (!granted) {
+        Alert.alert('마이크 권한 필요', '마이크 권한이 필요합니다. 설정에서 마이크 권한을 허용해 주세요.');
+        setPitchLiveStatus('idle');
+        startingRef.current = false;
+        return;
+      }
+    } catch (e) {
+      console.error('[TrainingScreen] microphone permission error:', e);
+      Alert.alert('마이크 권한 확인 실패', '마이크 권한을 확인할 수 없습니다. 다시 시도해 주세요.');
+      setPitchLiveStatus('idle');
+      startingRef.current = false;
+      return;
+    }
+    startingRef.current = false;
     startCountdown();
-  }, [countdown, playing, startCountdown]);
+  }, [countdown, playing, status, startCountdown]);
 
   const handleStop = useCallback(async () => {
-    const wasRecording = !stoppedRef.current && playing;
+    const wasRecording = !stoppedRef.current && recordingStartedRef.current;
+    attemptIdRef.current += 1;
     stoppedRef.current = true;
+    recordingStartPendingRef.current = false;
+    startingRef.current = false;
     if (countdownTimer.current) {
       clearInterval(countdownTimer.current);
       countdownTimer.current = null;
       setCountdown(null);
     }
     const s = soundRef.current;
-    if (s) {
-      try { await s.pauseAsync(); } catch {}
-    }
+    if (s) await disposeSound(s, 'manual-stop');
     if (wasRecording) {
       try {
+        const durationSec = getCurrentRecordingDurationSec();
         const result = await recorderRef.current.stop();
+        recordingStartedRef.current = false;
+        recordingStartedAtRef.current = null;
+        setRecordedDurationSec(durationSec);
         setRecordedUri(result.uri);
+        const analysisLevel = getAnalysisInputLevel();
+        setVoiceInputStatus(getInputStatus(
+          durationSec,
+          0,
+          0,
+        ));
+        setVoicedFrameCount(voicedFrameCountRef.current);
+        setAnalysisInputLevel(analysisLevel);
       } catch (e) {
         console.error('[TrainingScreen] recorder.stop (manual) error:', e);
+        recordingStartedRef.current = false;
+        recordingStartedAtRef.current = null;
       }
     } else {
       try { await recorderRef.current.cancel(); } catch {}
+      recordingStartedRef.current = false;
+      recordingStartedAtRef.current = null;
     }
     closeWs();
+    setPitchLiveStatus('idle');
     setPlaying(false);
     setStatus(wasRecording ? 'stopped' : 'idle');
-  }, [closeWs, playing]);
+  }, [closeWs, getCurrentRecordingDurationSec, getAnalysisInputLevel, disposeSound]);
 
   const handleRestart = useCallback(async () => {
-    await handleStop();
-    const s = soundRef.current;
-    if (s) {
-      try { await s.unloadAsync(); } catch {}
-      soundRef.current = null;
+    if (status === 'countdown' || status === 'preparing' || status === 'recording') {
+      await handleStop();
     }
-    startCountdown();
-  }, [handleStop, startCountdown]);
+    startPractice();
+  }, [handleStop, startPractice, status]);
 
   // ─── Loading / Error ───
   if (loading) {
@@ -474,9 +1200,19 @@ export default function TrainingScreen({ route }: Props) {
     );
   }
 
-  const isActive    = status === 'countdown' || status === 'recording';
+  const isActive    = status === 'countdown' || status === 'preparing' || status === 'recording';
   const isAnalyzing = status === 'analyzing';
   const showResult  = status === 'result' && afterScore !== null;
+  const indicatorFeedbackCard =
+    indicatorKey === 'breathiness' ? (
+      <BreathCard zone={breathZone} aiScore={breathScore} />
+    ) : indicatorKey === 'vocal_fold_contact' ? (
+      <BreathInfoCard />
+    ) : indicatorKey === 'soft_palate' ? (
+      <SoftPalateInfoCard />
+    ) : (
+      <TongueTensionInfoCard />
+    );
 
   return (
     <View style={styles.container}>
@@ -484,10 +1220,14 @@ export default function TrainingScreen({ route }: Props) {
         <Text style={styles.title}>{indicatorLabel} 훈련</Text>
 
         <View style={styles.infoBox}>
-          <Text style={styles.label}>구간</Text>
+          <Text style={styles.label}>불러야 하는 구간</Text>
           <Text style={styles.value}>
-            {chunkInfo.startSec.toFixed(1)}초 ~ {chunkInfo.endSec.toFixed(1)}초
-            {'  '}(연습: {sectionStartSec.toFixed(1)}초 ~ {sectionEndSec.toFixed(1)}초)
+            {chunkInfo.startSec.toFixed(1)}초 ~ {trainingChunkEndSec.toFixed(1)}초
+          </Text>
+
+          <Text style={styles.label}>MR 재생 범위</Text>
+          <Text style={styles.value}>
+            {sectionStartSec.toFixed(1)}초 ~ {recordingEndSec.toFixed(1)}초
           </Text>
 
           <Text style={styles.label}>가사</Text>
@@ -502,33 +1242,49 @@ export default function TrainingScreen({ route }: Props) {
         <SectionPitchGraph
           midiSegments={midiSegments}
           startSec={sectionStartSec}
-          endSec={sectionEndSec}
+          endSec={recordingEndSec}
           originalStartSec={chunkInfo.startSec}
-          originalEndSec={chunkInfo.endSec}
+          originalEndSec={trainingChunkEndSec}
           currentTimeSec={currentTime}
           userPitch={userPitch}
         />
+        {guideUnavailable && (
+          <View style={styles.guideNotice}>
+            <Text style={styles.guideNoticeText}>
+              피치 가이드를 불러오지 못했습니다. 구간훈련은 계속할 수 있습니다.
+            </Text>
+          </View>
+        )}
 
         {/* 실시간 피드백 (Phase 3) */}
         <View style={{ marginTop: SPACING.base }}>
-          <PitchCard verdict={pitchVerdict} matchScore={pitchMatchScore} />
-          {showBreath ? <BreathCard zone={breathZone} aiScore={breathScore} /> : <BreathInfoCard />}
+          <VoiceInputCard status={voiceInputStatus} level={micLevel} durationSec={recordedDurationSec} />
+          <PitchCard verdict={pitchVerdict} matchScore={pitchMatchScore} liveStatus={pitchLiveStatus} />
+          {indicatorFeedbackCard}
         </View>
 
         <View style={styles.feedbackBox}>
           <Text style={styles.label}>피드백</Text>
           <Text style={styles.feedbackText}>
-            {afterScore
+            {showResult && afterScore
               ? FEEDBACK_BY_ZONE[indicatorKey][afterScore.zone]
               : (feedbackText || '(피드백 없음)')}
           </Text>
         </View>
+
+        {feedbackVideo && !blocksFeedbackVideo && (
+          <TouchableOpacity style={styles.feedbackVideoButton} onPress={openFeedbackVideo}>
+            <Text style={styles.feedbackVideoButtonText}>추천 영상 보기</Text>
+          </TouchableOpacity>
+        )}
 
         {/* 사후 측정 결과 카드 */}
         {showResult && afterScore && (
           <ResultCard
             before={{ aiScore: scoreInfo.aiScore, zone: scoreInfo.zone }}
             after={afterScore}
+            beforeLowConfidence={beforeLowConfidence}
+            afterLowConfidence={afterLowConfidence}
           />
         )}
 
@@ -549,7 +1305,7 @@ export default function TrainingScreen({ route }: Props) {
                   <Text style={styles.bigBtnText}>이번 시도 점수 보기</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={[styles.bigBtn, styles.startBtn]} onPress={handleStart}>
+              <TouchableOpacity style={[styles.bigBtn, styles.startBtn]} onPress={handleRestart}>
                 <Text style={styles.bigBtnText}>구간 재시작</Text>
               </TouchableOpacity>
             </View>
@@ -570,6 +1326,50 @@ export default function TrainingScreen({ route }: Props) {
           <Text style={styles.countdownNum}>{countdown}</Text>
         </View>
       )}
+
+      <Modal
+        visible={feedbackVideoVisible && !!feedbackVideo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { closeFeedbackVideo(); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{feedbackVideo?.label}</Text>
+            {feedbackVideoVisible && feedbackVideo && (
+              <Video
+                key={`${indicatorKey}-${currentFeedbackZone}`}
+                ref={feedbackVideoRef}
+                source={feedbackVideo.source}
+                style={styles.feedbackVideo}
+                resizeMode={ResizeMode.CONTAIN}
+                useNativeControls
+                shouldPlay={false}
+                onPlaybackStatusUpdate={(playbackStatus) => {
+                  if (playbackStatus.isLoaded) {
+                    setFeedbackVideoPlaying(playbackStatus.isPlaying);
+                  }
+                }}
+                onError={() => setFeedbackVideoError('load')}
+              />
+            )}
+            {feedbackVideoError && (
+              <Text style={styles.videoErrorText}>영상을 불러오지 못했습니다.</Text>
+            )}
+            {feedbackVideo && (
+              <TouchableOpacity
+                style={styles.videoPlayBtn}
+                onPress={feedbackVideoPlaying ? pauseFeedbackVideo : playFeedbackVideo}
+              >
+                <Text style={styles.videoPlayText}>{feedbackVideoPlaying ? '일시정지' : '재생'}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={closeFeedbackVideo}>
+              <Text style={styles.modalCloseText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -585,6 +1385,10 @@ const styles = StyleSheet.create({
   value:            { ...TYPOGRAPHY.body, color: COLORS.textPrimary },
   feedbackBox:      { backgroundColor: COLORS.surface, borderRadius: 10, padding: SPACING.base, marginHorizontal: SPACING.base, marginTop: SPACING.base, marginBottom: SPACING.base },
   feedbackText:     { ...TYPOGRAPHY.body, color: COLORS.textSecondary, lineHeight: 22 },
+  feedbackVideoButton: { backgroundColor: COLORS.primary, borderRadius: 10, padding: SPACING.base, alignItems: 'center', marginHorizontal: SPACING.base, marginBottom: SPACING.base },
+  feedbackVideoButtonText: { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700' },
+  guideNotice:      { backgroundColor: COLORS.surface, borderRadius: 10, padding: SPACING.sm, marginHorizontal: SPACING.base, marginTop: SPACING.sm },
+  guideNoticeText:  { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, textAlign: 'center' },
   btnArea:          { paddingHorizontal: SPACING.base, marginTop: SPACING.sm },
   bigBtn:           { padding: SPACING.base, borderRadius: 10, alignItems: 'center' },
   startBtn:         { backgroundColor: COLORS.primary },
@@ -594,4 +1398,13 @@ const styles = StyleSheet.create({
   bigBtnText:       { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700', fontSize: 16 },
   overlay:          { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', alignItems: 'center' },
   countdownNum:     { fontSize: 96, fontWeight: '800', color: '#ffffff' },
+  modalOverlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.64)', justifyContent: 'center', padding: SPACING.base },
+  modalContent:     { backgroundColor: COLORS.surface, borderRadius: 12, padding: SPACING.base },
+  modalTitle:       { ...TYPOGRAPHY.body, color: COLORS.textPrimary, fontWeight: '700', marginBottom: SPACING.sm, textAlign: 'center' },
+  feedbackVideo:    { width: '100%', aspectRatio: 9 / 16, backgroundColor: '#000000', borderRadius: 8 },
+  videoErrorText:   { ...TYPOGRAPHY.caption, color: COLORS.danger, textAlign: 'center', marginTop: SPACING.sm },
+  videoPlayBtn:     { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: SPACING.sm, alignItems: 'center', marginTop: SPACING.sm },
+  videoPlayText:    { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700' },
+  modalCloseBtn:    { backgroundColor: COLORS.primary, borderRadius: 10, padding: SPACING.base, alignItems: 'center', marginTop: SPACING.base },
+  modalCloseText:   { ...TYPOGRAPHY.body, color: '#ffffff', fontWeight: '700' },
 });

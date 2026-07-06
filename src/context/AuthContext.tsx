@@ -4,10 +4,18 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type PropsWithChildren,
 } from 'react';
+import { Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as authApi from '../api/auth';
+import {
+  API_BASE_MARKER_KEY,
+  BASE_URL,
+  registerAuthExpiredHandler,
+  resetAuthExpiredNotification,
+} from '../api/client';
 import type { AuthResponse } from '../types/api';
 
 const TOKEN_KEY = 'auth_token';
@@ -30,7 +38,14 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+async function clearStoredAuth() {
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(USER_KEY);
+  await SecureStore.deleteItemAsync(API_BASE_MARKER_KEY);
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
+  const authExpiredAlertShownRef = useRef(false);
   const [state, setState] = useState<AuthState>({
     token: null,
     user: null,
@@ -43,23 +58,45 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         const storedToken = await SecureStore.getItemAsync(TOKEN_KEY);
         const storedUser = await SecureStore.getItemAsync(USER_KEY);
+        const storedApiBase = await SecureStore.getItemAsync(API_BASE_MARKER_KEY);
         if (storedToken) {
+          if (storedApiBase !== BASE_URL) {
+            await clearStoredAuth();
+            setState({ token: null, user: null, isLoading: false });
+            return;
+          }
           const user = storedUser ? JSON.parse(storedUser) : null;
           setState({ token: storedToken, user, isLoading: false });
         } else {
           setState({ token: null, user: null, isLoading: false });
         }
       } catch {
+        await clearStoredAuth();
         setState({ token: null, user: null, isLoading: false });
       }
     })();
   }, []);
+
+  const handleAuthExpired = useCallback(() => {
+    void clearStoredAuth();
+    setState({ token: null, user: null, isLoading: false });
+
+    if (!authExpiredAlertShownRef.current) {
+      authExpiredAlertShownRef.current = true;
+      Alert.alert('로그인 만료', '로그인 시간이 만료되었습니다. 다시 로그인해 주세요.');
+    }
+  }, []);
+
+  useEffect(() => registerAuthExpiredHandler(handleAuthExpired), [handleAuthExpired]);
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await authApi.login({ email, password });
     const userInfo = { user_id: data.user_id, email: data.email, nickname: data.nickname };
     await SecureStore.setItemAsync(TOKEN_KEY, data.token);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userInfo));
+    await SecureStore.setItemAsync(API_BASE_MARKER_KEY, BASE_URL);
+    authExpiredAlertShownRef.current = false;
+    resetAuthExpiredNotification();
     setState({ token: data.token, user: userInfo, isLoading: false });
   }, []);
 
@@ -69,14 +106,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const userInfo = { user_id: data.user_id, email: data.email, nickname: data.nickname };
       await SecureStore.setItemAsync(TOKEN_KEY, data.token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userInfo));
+      await SecureStore.setItemAsync(API_BASE_MARKER_KEY, BASE_URL);
+      authExpiredAlertShownRef.current = false;
+      resetAuthExpiredNotification();
       setState({ token: data.token, user: userInfo, isLoading: false });
     },
     [],
   );
 
   const logout = useCallback(async () => {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    await SecureStore.deleteItemAsync(USER_KEY);
+    await clearStoredAuth();
+    authExpiredAlertShownRef.current = false;
+    resetAuthExpiredNotification();
     setState({ token: null, user: null, isLoading: false });
   }, []);
 

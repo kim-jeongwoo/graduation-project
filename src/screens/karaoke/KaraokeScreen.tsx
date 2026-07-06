@@ -9,12 +9,20 @@ import {
   Dimensions,
 } from 'react-native';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 import Svg, { Path, Line } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS } from '../../utils/colors';
 import { useAuth } from '../../context/AuthContext';
-import { getSongKaraokeData, getSongMrUrl } from '../../api/songs';
-import { createSession, uploadSessionFile, startAnalysis } from '../../api/sessions';
+import { isAuthExpiredError } from '../../api/client';
+import { clearSongPitchGuideCache, getSongKaraokeData, getSongKaraokeLyricsOnly, getSongMrUrl } from '../../api/songs';
+import {
+  AnalyzeStatusError,
+  createSession,
+  uploadSessionFile,
+  startAnalysis,
+} from '../../api/sessions';
+import { AnalysisPollingTimeoutError, pollAnalysisStatus } from '../../api/analysis';
 import { requestMicrophonePermission } from '../../services/audio/microphone';
 import { VocalRecorder } from '../../services/audio/recorder';
 import { SONG_GUIDE_OFFSETS } from '../../constants/songGuideOffsets';
@@ -29,6 +37,16 @@ import {
 const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
 const USE_REALTIME_PITCH = true; // false = 가짜 피치 시뮬레이션
 const MOCK_RUN_ID = 'c65d43fa-ef3f-4a46-a70e-c102c61eee6c';
+const GUIDE_FAILURE_NOTICE_DELAY_SEC = 5;
+const MR_CACHE_MIN_BYTES = 1024;
+
+type MrStartStage = 'mr-download' | 'mr-load' | 'mr-play' | 'recorder-start';
+type MrStartFailureKind = 'mr' | 'recorder';
+
+type MrStartFailure = Error & {
+  stage?: MrStartStage;
+  kind?: MrStartFailureKind;
+};
 
 // ─── Pitch graph constants ───
 const SCREEN_W = Dimensions.get('window').width;
@@ -47,6 +65,37 @@ function timeToX(t: number, currentTime: number): number {
   return CURSOR_X + ((t - currentTime) / (WINDOW_BEFORE_SEC + WINDOW_AFTER_SEC)) * GRAPH_W;
 }
 
+function hashForCacheKey(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function getMrCacheUri(songId: string, mrUrl: string): string | null {
+  if (!FileSystem.cacheDirectory) return null;
+  const safeSongId = songId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `${FileSystem.cacheDirectory}mr-${safeSongId}-${hashForCacheKey(mrUrl)}.mp3`;
+}
+
+function createStartFailure(stage: MrStartStage, message: string): MrStartFailure {
+  const error = new Error(message) as MrStartFailure;
+  error.stage = stage;
+  error.kind = stage === 'recorder-start' ? 'recorder' : 'mr';
+  return error;
+}
+
+function normalizeStartFailure(error: unknown): MrStartFailure {
+  if (error instanceof Error) return error as MrStartFailure;
+  return createStartFailure('mr-load', 'MR 재생을 준비하지 못했습니다.');
+}
+
+async function deleteMrCacheFile(uri: string | null): Promise<void> {
+  if (!uri) return;
+  try { await FileSystem.deleteAsync(uri, { idempotent: true }); } catch {}
+}
+
 // ─── Nav types ───
 type AppRootParams = {
   MainTabs: undefined;
@@ -55,7 +104,7 @@ type AppRootParams = {
 type Props = NativeStackScreenProps<AppRootParams, 'Karaoke'>;
 
 // ─── Analyze step labels ───
-const ANALYZE_STEPS = ['녹음 업로드 중...', 'AI 분석 중...', '결과 정리 중...'];
+const ANALYZE_STEPS = ['녹음 업로드 중...', '분석 요청 접수 중...', 'AI 분석 중...', '결과 정리 중...'];
 
 // ─── Pitch graph component ───
 interface PitchGraphProps {
@@ -139,9 +188,9 @@ function PitchGraph({ currentTime, guideSource, midiSegments, guidePoints, userP
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visibleGuide, currentTime],
   );
+  const shouldRenderMidiGuide = guideSource === 'midi' && visibleMidi.length > 0;
 
   const userPaths = useMemo(() => {
-    if (!visibleGuide.length) return [];
     return buildPaths(visibleUser, (p) => {
       const nearby = visibleGuide.reduce<PitchPoint | null>((best, g) => {
         if (!g.voiced || g.midi === null) return best;
@@ -175,7 +224,7 @@ function PitchGraph({ currentTime, guideSource, midiSegments, guidePoints, userP
     <View style={graphStyles.container}>
       <Svg width={GRAPH_W} height={GRAPH_H}>
         {/* 가이드라인: MIDI 직선 or CREPE 곡선 */}
-        {guideSource === 'midi' ? midiLines : guidePaths}
+        {shouldRenderMidiGuide ? midiLines : guidePaths}
         {userPaths}
         <Line x1={CURSOR_X} y1={0} x2={CURSOR_X} y2={GRAPH_H}
           stroke={COLORS.primary} strokeWidth={1.5} strokeDasharray="4,3" />
@@ -209,15 +258,163 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   const [countdown, setCountdown]         = useState<number | null>(null);
   const [lyrics, setLyrics]               = useState<LyricLine[]>([]);
   const [pitchGuide, setPitchGuide]       = useState<PitchGuide | null>(null);
+  const [pitchGuideStatus, setPitchGuideStatus] = useState<'loading' | 'success' | 'failed' | null>(null);
   const [userPitch, setUserPitch]         = useState<PitchPoint[]>([]);
   const [currentTime, setCurrentTime]     = useState(0);
   const [playing, setPlaying]             = useState(false);
   const [isAnalyzing, setIsAnalyzing]     = useState(false);
   const [analyzeStep, setAnalyzeStep]     = useState(0);
+  const [paused, setPaused]               = useState(false);
+  const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
 
   const soundRef       = useRef<Audio.Sound | null>(null);
   const recorderRef    = useRef(new VocalRecorder());
   const currentTimeRef = useRef(0);
+  const startMrAndRecordRef = useRef<(() => void) | null>(null);
+  const resumeAfterCountdownRef = useRef<(() => void) | null>(null);
+  const mountedRef = useRef(false);
+  const focusedRef = useRef(false);
+  const playingRef = useRef(false);
+  const pausedRef = useRef(false);
+  const resumeCountingRef = useRef(false);
+  const isAnalyzingRef = useRef(false);
+  const attemptSeqRef = useRef(0);
+  const activeAnalyzeAttemptRef = useRef<number | null>(null);
+  const leaveConfirmedRef = useRef(false);
+  const leaveAlertVisibleRef = useRef(false);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const resumeCountdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearCountdownTimer = useCallback(() => {
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+  }, []);
+
+  const clearResumeCountdownTimer = useCallback(() => {
+    if (resumeCountdownTimerRef.current) {
+      clearInterval(resumeCountdownTimerRef.current);
+      resumeCountdownTimerRef.current = null;
+    }
+    resumeCountingRef.current = false;
+  }, []);
+
+  const invalidateAnalyzeAttempt = useCallback(() => {
+    attemptSeqRef.current += 1;
+    activeAnalyzeAttemptRef.current = null;
+  }, []);
+
+  const beginAnalyzeAttempt = useCallback(() => {
+    const attemptId = attemptSeqRef.current + 1;
+    attemptSeqRef.current = attemptId;
+    activeAnalyzeAttemptRef.current = attemptId;
+    leaveConfirmedRef.current = false;
+    return attemptId;
+  }, []);
+
+  const isActiveAnalyzeAttempt = useCallback((attemptId: number) => {
+    return mountedRef.current
+      && focusedRef.current
+      && !leaveConfirmedRef.current
+      && activeAnalyzeAttemptRef.current === attemptId
+      && !playingRef.current
+      && !recorderRef.current.active;
+  }, []);
+
+  const safeGoBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }, [navigation]);
+
+  const cleanupStartFailure = useCallback(async (sound?: Audio.Sound | null, recorderStarted = false) => {
+    const s = sound ?? soundRef.current;
+    if (s) {
+      try { s.setOnPlaybackStatusUpdate(null); } catch {}
+      try { await s.stopAsync(); } catch {}
+      try { await s.unloadAsync(); } catch {}
+      if (soundRef.current === s) soundRef.current = null;
+    }
+    if (recorderStarted || recorderRef.current.active) {
+      try { await recorderRef.current.cancel(); } catch {}
+    }
+    if (!mountedRef.current) return;
+    currentTimeRef.current = 0;
+    setCurrentTime(0);
+    playingRef.current = false;
+    pausedRef.current = false;
+    resumeCountingRef.current = false;
+    setPlaying(false);
+    setPaused(false);
+    setCountdown(null);
+    setResumeCountdown(null);
+    setLoading(false);
+    setUserPitch([]);
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    focusedRef.current = navigation.isFocused();
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      focusedRef.current = true;
+    });
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      focusedRef.current = false;
+    });
+    return () => {
+      mountedRef.current = false;
+      focusedRef.current = false;
+      clearCountdownTimer();
+      clearResumeCountdownTimer();
+      invalidateAnalyzeAttempt();
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [clearCountdownTimer, clearResumeCountdownTimer, invalidateAnalyzeAttempt, navigation]);
+
+  useEffect(() => {
+    isAnalyzingRef.current = isAnalyzing;
+  }, [isAnalyzing]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!isAnalyzingRef.current || leaveConfirmedRef.current) return;
+
+      e.preventDefault();
+      if (leaveAlertVisibleRef.current) return;
+
+      leaveAlertVisibleRef.current = true;
+      Alert.alert(
+        '분석이 진행 중입니다',
+        '지금 나가도 분석은 계속 진행될 수 있습니다. 완료된 결과는 히스토리에서 확인할 수 있습니다.',
+        [
+          {
+            text: '계속 기다리기',
+            style: 'cancel',
+            onPress: () => {
+              leaveAlertVisibleRef.current = false;
+            },
+          },
+          {
+            text: '나가기',
+            style: 'destructive',
+            onPress: () => {
+              leaveAlertVisibleRef.current = false;
+              leaveConfirmedRef.current = true;
+              invalidateAnalyzeAttempt();
+              clearCountdownTimer();
+              clearResumeCountdownTimer();
+              void cleanupStartFailure(soundRef.current, recorderRef.current.active);
+              navigation.dispatch(e.data.action);
+            },
+          },
+        ],
+      );
+    });
+
+    return unsubscribe;
+  }, [clearCountdownTimer, clearResumeCountdownTimer, cleanupStartFailure, invalidateAnalyzeAttempt, navigation]);
 
   // ─── Permission check + data load ───
   useEffect(() => {
@@ -229,30 +426,56 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         Alert.alert(
           '마이크 권한 필요',
           '녹음하려면 마이크 권한이 필요합니다.\n설정 > 앱 > 마이크 권한을 허용해주세요.',
-          [{ text: '확인', onPress: () => navigation.goBack() }],
+          [{ text: '확인', onPress: safeGoBack }],
         );
         return;
       }
 
-      // 2. Karaoke data
+      // 2. Required karaoke data: lyrics first, pitch-guide in background.
       try {
-        const { lyrics: lrc, pitchGuide: guide } = await getSongKaraokeData(songId);
+        if (songId === '004') {
+          clearSongPitchGuideCache(songId);
+        }
+        const lrc = await getSongKaraokeLyricsOnly(songId);
         if (cancelled) return;
-        console.log('[KaraokeScreen] pitchGuide.points:', guide.points.length, 'voiced:', guide.points.filter(p => p.voiced).length);
         setLyrics(lrc);
-        setPitchGuide(guide);
-        if (!USE_REALTIME_PITCH) setUserPitch(generateFakeUserPitch(guide.points));
+        setPitchGuide(null);
+        setPitchGuideStatus('loading');
+        setUserPitch([]);
         setLoading(false);
         startCountdown();
+
+        getSongKaraokeData(songId)
+          .then(({ lyrics: guideAdjustedLrc, pitchGuide: guide, pitchGuideLoadFailed }) => {
+            if (cancelled) return;
+            if (guide) {
+              setLyrics(guideAdjustedLrc);
+              setPitchGuide(guide);
+              setPitchGuideStatus('success');
+              if (!USE_REALTIME_PITCH) setUserPitch(generateFakeUserPitch(guide.points));
+              return;
+            }
+            if (pitchGuideLoadFailed) {
+              setPitchGuideStatus('failed');
+            }
+          })
+          .catch(() => {
+            if (cancelled) return;
+            setPitchGuideStatus('failed');
+          });
       } catch (e) {
+        if (isAuthExpiredError(e)) return;
         console.error('[KaraokeScreen] load error:', e);
         Alert.alert('오류', '곡 데이터를 불러오지 못했습니다.', [
-          { text: '닫기', onPress: () => navigation.goBack() },
+          { text: '닫기', onPress: safeGoBack },
         ]);
       }
     })();
     return () => {
       cancelled = true;
+      clearCountdownTimer();
+      clearResumeCountdownTimer();
+      invalidateAnalyzeAttempt();
       soundRef.current?.unloadAsync();
       recorderRef.current.cancel();
     };
@@ -260,54 +483,304 @@ export default function KaraokeScreen({ navigation, route }: Props) {
   }, [songId]);
 
   // ─── Countdown → MR + recording start ───
+  const handlePitchSamples = useCallback((samples: Float32Array) => {
+    if (pausedRef.current || resumeCountingRef.current) return;
+    const result = detectPitch(samples);
+    const t = currentTimeRef.current;
+    if (t < 0.1) return;
+    setUserPitch((prev) => {
+      const cutoff = t - 10;
+      const trimmed = cutoff > 0 ? prev.filter((p) => p.time >= cutoff) : prev;
+      if (!result.voiced || result.midi === null) return trimmed;
+      return [...trimmed, { time: t, midi: result.midi, voiced: true, freqHz: result.freq, confidence: 1 }];
+    });
+  }, []);
+
   const startCountdown = useCallback(() => {
+    invalidateAnalyzeAttempt();
+    clearCountdownTimer();
+    clearResumeCountdownTimer();
+    pausedRef.current = false;
+    setPaused(false);
     let n = 3;
     setCountdown(n);
     const iv = setInterval(() => {
+      if (!mountedRef.current || !focusedRef.current) {
+        clearInterval(iv);
+        countdownTimerRef.current = null;
+        return;
+      }
       n -= 1;
-      if (n <= 0) { clearInterval(iv); setCountdown(null); startMrAndRecord(); }
+      if (n <= 0) {
+        clearInterval(iv);
+        countdownTimerRef.current = null;
+        setCountdown(null);
+        void startMrAndRecordRef.current?.();
+      }
       else setCountdown(n);
     }, 1000);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    countdownTimerRef.current = iv;
+  }, [clearCountdownTimer, clearResumeCountdownTimer, invalidateAnalyzeAttempt]);
+
+  const deleteCurrentMrCache = useCallback(async () => {
+    const mrUrl = getSongMrUrl(songId);
+    await deleteMrCacheFile(getMrCacheUri(songId, mrUrl));
+  }, [songId]);
+
+  const createMrSound = useCallback(() => {
+    const sound = new Audio.Sound();
+    soundRef.current = sound;
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded) {
+        currentTimeRef.current = status.positionMillis / 1000;
+        if (!mountedRef.current) return;
+        setCurrentTime(status.positionMillis / 1000);
+        playingRef.current = status.isPlaying;
+        setPlaying(status.isPlaying);
+      }
+    });
+    return sound;
   }, []);
 
-  const startMrAndRecord = useCallback(async () => {
+  const loadMrSound = useCallback(async (source: { uri: string; headers?: Record<string, string> }) => {
+    const sound = createMrSound();
     try {
-      if (!USE_MOCK) {
-        await recorderRef.current.start(USE_REALTIME_PITCH ? (samples) => {
-          const result = detectPitch(samples);
-          const t = currentTimeRef.current;
-          if (t < 0.1) return;
-          setUserPitch((prev) => {
-            const cutoff = t - 10;
-            const trimmed = cutoff > 0 ? prev.filter((p) => p.time >= cutoff) : prev;
-            if (!result.voiced || result.midi === null) return trimmed;
-            return [...trimmed, { time: t, midi: result.midi, voiced: true, freqHz: result.freq, confidence: 1 }];
-          });
-        } : undefined);
-      }
-      const sound = new Audio.Sound();
-      // ① 콜백 먼저 등록 (shouldPlay:true + loadAsync 완료 후 등록 시 초기 update 누락 방지)
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded) {
-          currentTimeRef.current = status.positionMillis / 1000;
-          setCurrentTime(status.positionMillis / 1000);
-          setPlaying(status.isPlaying);
-        }
-      });
-      // ② shouldPlay:false 로딩만
       await sound.loadAsync(
-        { uri: getSongMrUrl(songId), headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        source.headers ? { uri: source.uri, headers: source.headers } : { uri: source.uri },
         { shouldPlay: false, progressUpdateIntervalMillis: 16 },
       );
-      // ③ position 0에서 명시적 재생 시작
-      await sound.playFromPositionAsync(0);
-      soundRef.current = sound;
-    } catch (e) {
-      console.error('[KaraokeScreen] startMrAndRecord error:', e);
-      Alert.alert('오류', 'MR 또는 녹음을 시작할 수 없습니다.');
+      return sound;
+    } catch {
+      try { sound.setOnPlaybackStatusUpdate(null); } catch {}
+      try { await sound.unloadAsync(); } catch {}
+      if (soundRef.current === sound) soundRef.current = null;
+      throw createStartFailure('mr-load', 'MR 파일을 로드하지 못했습니다.');
     }
-  }, [songId, token]);
+  }, [createMrSound]);
+
+  const downloadMrToCache = useCallback(async (
+    mrUrl: string,
+    cacheUri: string,
+    headers: Record<string, string>,
+  ) => {
+    try {
+      const result = await FileSystem.downloadAsync(mrUrl, cacheUri, { headers });
+      if (result.status < 200 || result.status >= 300) {
+        await deleteMrCacheFile(cacheUri);
+        throw createStartFailure('mr-download', 'MR 파일을 다운로드하지 못했습니다.');
+      }
+      const info = await FileSystem.getInfoAsync(cacheUri);
+      if (!info.exists || typeof info.size !== 'number' || info.size < MR_CACHE_MIN_BYTES) {
+        await deleteMrCacheFile(cacheUri);
+        throw createStartFailure('mr-download', 'MR 파일을 정상적으로 저장하지 못했습니다.');
+      }
+      return cacheUri;
+    } catch (error) {
+      const failure = normalizeStartFailure(error);
+      if (failure.stage === 'mr-download') throw failure;
+      await deleteMrCacheFile(cacheUri);
+      throw createStartFailure('mr-download', 'MR 파일을 다운로드하지 못했습니다.');
+    }
+  }, []);
+
+  const getCachedMrUri = useCallback(async (
+    mrUrl: string,
+    cacheUri: string,
+    headers: Record<string, string>,
+  ) => {
+    const info = await FileSystem.getInfoAsync(cacheUri);
+    if (info.exists && typeof info.size === 'number' && info.size >= MR_CACHE_MIN_BYTES) {
+      return cacheUri;
+    }
+    if (info.exists) await deleteMrCacheFile(cacheUri);
+    return downloadMrToCache(mrUrl, cacheUri, headers);
+  }, [downloadMrToCache]);
+
+  const prepareMrSound = useCallback(async () => {
+    const mrUrl = getSongMrUrl(songId);
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    const cacheUri = getMrCacheUri(songId, mrUrl);
+
+    if (!cacheUri) {
+      return loadMrSound({ uri: mrUrl, headers });
+    }
+
+    const localUri = await getCachedMrUri(mrUrl, cacheUri, headers);
+    try {
+      return await loadMrSound({ uri: localUri });
+    } catch {
+      await deleteMrCacheFile(cacheUri);
+    }
+
+    const redownloadedUri = await downloadMrToCache(mrUrl, cacheUri, headers);
+    try {
+      return await loadMrSound({ uri: redownloadedUri });
+    } catch {
+      await deleteMrCacheFile(cacheUri);
+      return loadMrSound({ uri: mrUrl, headers });
+    }
+  }, [downloadMrToCache, getCachedMrUri, loadMrSound, songId, token]);
+
+  const handleMrStartRetry = useCallback(async (stage: MrStartStage) => {
+    await cleanupStartFailure(soundRef.current, recorderRef.current.active);
+    if (stage === 'mr-download' || stage === 'mr-load') {
+      await deleteCurrentMrCache();
+    }
+    startCountdown();
+  }, [cleanupStartFailure, deleteCurrentMrCache, startCountdown]);
+
+  const showStartFailureAlert = useCallback((failure: MrStartFailure) => {
+    const stage = failure.stage ?? 'mr-load';
+    if (failure.kind === 'recorder') {
+      Alert.alert(
+        '녹음 시작 실패',
+        `마이크 권한 또는 입력 장치를 확인한 뒤 다시 시도해 주세요.\n(stage: ${stage})`,
+        [
+          { text: '닫기', style: 'cancel', onPress: safeGoBack },
+          { text: '다시 시도', onPress: () => { void handleMrStartRetry(stage); } },
+        ],
+      );
+      return;
+    }
+    Alert.alert(
+      'MR 재생 실패',
+      `반주 파일을 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.\n(stage: ${stage})`,
+      [
+        { text: '닫기', style: 'cancel', onPress: safeGoBack },
+        { text: '다시 시도', onPress: () => { void handleMrStartRetry(stage); } },
+      ],
+    );
+  }, [handleMrStartRetry, safeGoBack]);
+
+  const startMrAndRecord = useCallback(async () => {
+    let sound: Audio.Sound | null = null;
+    let recorderStarted = false;
+    try {
+      if (!USE_MOCK) {
+        const granted = await requestMicrophonePermission();
+        if (!granted) {
+          throw createStartFailure('recorder-start', '마이크 권한이 허용되지 않았습니다.');
+        }
+      }
+
+      sound = await prepareMrSound();
+
+      if (!USE_MOCK) {
+        try {
+          await recorderRef.current.start(
+            USE_REALTIME_PITCH ? handlePitchSamples : undefined,
+            { capturePcm: true },
+          );
+        } catch {
+          throw createStartFailure('recorder-start', '녹음을 시작하지 못했습니다.');
+        }
+        recorderStarted = true;
+      }
+      try {
+        await sound.playFromPositionAsync(0);
+      } catch {
+        throw createStartFailure('mr-play', 'MR 재생을 시작하지 못했습니다.');
+      }
+    } catch (e) {
+      const failure = normalizeStartFailure(e);
+      console.error('[KaraokeScreen] startMrAndRecord error:', {
+        stage: failure.stage ?? 'unknown',
+        kind: failure.kind ?? 'unknown',
+        message: failure.message,
+      });
+      await cleanupStartFailure(sound, recorderStarted);
+      if (mountedRef.current && focusedRef.current) {
+        showStartFailureAlert(failure);
+      }
+    }
+  }, [cleanupStartFailure, handlePitchSamples, prepareMrSound, showStartFailureAlert]);
+
+  useEffect(() => {
+    startMrAndRecordRef.current = startMrAndRecord;
+  }, [startMrAndRecord]);
+
+  const resumeAfterCountdown = useCallback(async () => {
+    try {
+      if (!USE_MOCK) {
+        await recorderRef.current.resumeRecording(USE_REALTIME_PITCH ? handlePitchSamples : undefined);
+      }
+      const s = soundRef.current;
+      if (s) await s.playAsync();
+      pausedRef.current = false;
+      playingRef.current = true;
+      if (!mountedRef.current) return;
+      setPaused(false);
+      setPlaying(true);
+    } catch (e) {
+      console.error('[KaraokeScreen] resume error:', e);
+      try { await recorderRef.current.pause(); } catch {}
+      pausedRef.current = true;
+      playingRef.current = false;
+      if (mountedRef.current) {
+        setPaused(true);
+        setPlaying(false);
+      }
+      Alert.alert('재개 실패', '녹음 재개를 시작하지 못했습니다. 다시 시도해 주세요.');
+    }
+  }, [handlePitchSamples]);
+
+  useEffect(() => {
+    resumeAfterCountdownRef.current = resumeAfterCountdown;
+  }, [resumeAfterCountdown]);
+
+  const startResumeCountdown = useCallback(() => {
+    if (!pausedRef.current || isAnalyzingRef.current) return;
+    invalidateAnalyzeAttempt();
+    clearCountdownTimer();
+    clearResumeCountdownTimer();
+    let n = 3;
+    resumeCountingRef.current = true;
+    setResumeCountdown(n);
+    const iv = setInterval(() => {
+      if (!mountedRef.current || !focusedRef.current || !pausedRef.current) {
+        clearInterval(iv);
+        resumeCountdownTimerRef.current = null;
+        resumeCountingRef.current = false;
+        return;
+      }
+      n -= 1;
+      if (n <= 0) {
+        clearInterval(iv);
+        resumeCountdownTimerRef.current = null;
+        resumeCountingRef.current = false;
+        setResumeCountdown(null);
+        void resumeAfterCountdownRef.current?.();
+      } else {
+        setResumeCountdown(n);
+      }
+    }, 1000);
+    resumeCountdownTimerRef.current = iv;
+  }, [clearCountdownTimer, clearResumeCountdownTimer, invalidateAnalyzeAttempt]);
+
+  const handlePauseResume = useCallback(async () => {
+    if (isAnalyzingRef.current || countdown !== null || resumeCountdown !== null) return;
+
+    if (pausedRef.current) {
+      startResumeCountdown();
+      return;
+    }
+
+    const s = soundRef.current;
+    if (!s || !recorderRef.current.active) return;
+
+    clearResumeCountdownTimer();
+    try {
+      await s.pauseAsync();
+      await recorderRef.current.pause();
+      pausedRef.current = true;
+      playingRef.current = false;
+      setPaused(true);
+      setPlaying(false);
+    } catch (e) {
+      console.error('[KaraokeScreen] pause error:', e);
+      Alert.alert('일시정지 실패', '녹음을 일시정지하지 못했습니다. 다시 시도해 주세요.');
+    }
+  }, [clearResumeCountdownTimer, countdown, resumeCountdown, startResumeCountdown]);
 
   // ─── Restart ───
   const handleRestart = useCallback(() => {
@@ -316,107 +789,210 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       {
         text: '확인',
         onPress: async () => {
-          const s = soundRef.current;
-          if (s) { await s.stopAsync(); await s.setPositionAsync(0); }
-          await recorderRef.current.cancel();
+          invalidateAnalyzeAttempt();
+          clearCountdownTimer();
+          clearResumeCountdownTimer();
+          try {
+            const s = soundRef.current;
+            if (s) {
+              try { await s.stopAsync(); } catch {}
+              try { await s.unloadAsync(); } catch {}
+              soundRef.current = null;
+            }
+            await recorderRef.current.cancel();
+          } catch (e) {
+            console.error('[KaraokeScreen] restart cleanup error:', e);
+          }
           setCurrentTime(0);
           currentTimeRef.current = 0;
+          playingRef.current = false;
+          pausedRef.current = false;
+          setPlaying(false);
+          setPaused(false);
+          setResumeCountdown(null);
           if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
           else setUserPitch([]);
           startCountdown();
         },
       },
     ]);
-  }, [pitchGuide, startCountdown]);
+  }, [clearCountdownTimer, clearResumeCountdownTimer, invalidateAnalyzeAttempt, pitchGuide, startCountdown]);
 
   // ─── Close (X) — cancel without analysis ───
   const handleClose = useCallback(async () => {
+    if (isAnalyzingRef.current) {
+      safeGoBack();
+      return;
+    }
+    invalidateAnalyzeAttempt();
+    clearCountdownTimer();
+    clearResumeCountdownTimer();
     const s = soundRef.current;
     if (s) await s.stopAsync();
     await recorderRef.current.cancel();
-    navigation.goBack();
-  }, [navigation]);
+    safeGoBack();
+  }, [clearCountdownTimer, clearResumeCountdownTimer, invalidateAnalyzeAttempt, safeGoBack]);
+
+  const handleRetryRecording = useCallback(async () => {
+    invalidateAnalyzeAttempt();
+    clearCountdownTimer();
+    clearResumeCountdownTimer();
+    const snd = soundRef.current;
+    if (snd) {
+      try { snd.setOnPlaybackStatusUpdate(null); } catch {}
+      try { await snd.stopAsync(); } catch {}
+      try { await snd.unloadAsync(); } catch {}
+      soundRef.current = null;
+    }
+    if (recorderRef.current.active) {
+      try { await recorderRef.current.cancel(); } catch {}
+    }
+    setIsAnalyzing(false);
+    setAnalyzeStep(0);
+    setCountdown(null);
+    setResumeCountdown(null);
+    setCurrentTime(0);
+    currentTimeRef.current = 0;
+    playingRef.current = false;
+    pausedRef.current = false;
+    setPlaying(false);
+    setPaused(false);
+    if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
+    else setUserPitch([]);
+    setTimeout(startCountdown, 0);
+  }, [clearCountdownTimer, clearResumeCountdownTimer, invalidateAnalyzeAttempt, pitchGuide, startCountdown]);
+
+  const showRetryRecordingAlert = useCallback((title: string, message: string) => {
+    Alert.alert(title, message, [
+      {
+        text: '다시 녹음',
+        onPress: () => { void handleRetryRecording(); },
+      },
+      { text: '닫기', style: 'cancel', onPress: safeGoBack },
+    ]);
+  }, [handleRetryRecording, safeGoBack]);
 
   // ─── STOP → analyze → EvalResult ───
   const handleStop = useCallback(async () => {
+    const attemptId = beginAnalyzeAttempt();
+    clearCountdownTimer();
+    clearResumeCountdownTimer();
     if (USE_MOCK) {
       const s = soundRef.current;
       if (s) await s.stopAsync();
-      goToEvalResult(MOCK_RUN_ID);
+      playingRef.current = false;
+      pausedRef.current = false;
+      setPlaying(false);
+      setPaused(false);
+      setResumeCountdown(null);
+      if (isActiveAnalyzeAttempt(attemptId)) goToEvalResult(MOCK_RUN_ID);
+      if (activeAnalyzeAttemptRef.current === attemptId) activeAnalyzeAttemptRef.current = null;
       return;
     }
 
     const s = soundRef.current;
     if (s) await s.stopAsync();
+    playingRef.current = false;
+    pausedRef.current = false;
+    setPlaying(false);
+    setPaused(false);
+    setResumeCountdown(null);
 
+    isAnalyzingRef.current = true;
     setIsAnalyzing(true);
     setAnalyzeStep(0);
 
     try {
       // Stop recording
       const { uri, fileName, mimeType } = await recorderRef.current.stop();
-      console.log('[KaraokeScreen] recording uri:', uri, 'type:', mimeType);
+      if (!isActiveAnalyzeAttempt(attemptId)) return;
+      if (!uri) {
+        throw new Error('녹음 파일을 만들지 못했습니다. 다시 녹음해 주세요.');
+      }
 
       // Step 0: upload
       setAnalyzeStep(0);
-      if (__DEV__) console.log('[handleStop] createSession...');
       const session = await createSession({ song_id: songId });
-      if (__DEV__) console.log('[handleStop] session:', session.session_id);
+      if (!isActiveAnalyzeAttempt(attemptId)) return;
 
-      if (__DEV__) console.log('[handleStop] uploading:', fileName, mimeType, uri.slice(0, 60));
-      await uploadSessionFile(session.session_id, uri, fileName, mimeType);
-      if (__DEV__) console.log('[handleStop] upload done');
-
-      // Step 1: analyze (synchronous, up to 90s)
-      setAnalyzeStep(1);
-      if (__DEV__) console.log('[handleStop] startAnalysis...');
-      const { run_id, status, reason } = await startAnalysis(session.session_id);
-      if (__DEV__) console.log('[handleStop] analyze result:', { run_id, status, reason });
-
-      if (status === 'no_voice') {
+      try {
+        await uploadSessionFile(session.session_id, uri, fileName, mimeType);
+      } catch (err: unknown) {
+        if (!isActiveAnalyzeAttempt(attemptId)) return;
+        if (isAuthExpiredError(err)) return;
         Alert.alert(
-          '음성이 감지되지 않았어요',
-          '마이크가 정상 동작하는지, 노래를 부르셨는지 확인해주세요.',
-          [
-            {
-              text: '다시 녹음',
-              onPress: async () => {
-                const snd = soundRef.current;
-                if (snd) { try { await snd.unloadAsync(); } catch {} soundRef.current = null; }
-                await recorderRef.current.cancel();
-                setCurrentTime(0);
-                currentTimeRef.current = 0;
-                if (!USE_REALTIME_PITCH && pitchGuide) setUserPitch(generateFakeUserPitch(pitchGuide.points));
-                else setUserPitch([]);
-                startCountdown();
-              },
-            },
-            { text: '닫기', style: 'cancel', onPress: () => navigation.goBack() },
-          ],
+          '녹음 파일 업로드 실패',
+          '녹음 파일 업로드에 실패했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
         );
         return;
       }
 
-      if (status === 'failed') {
+      // Step 1: request server-side async analysis
+      setAnalyzeStep(1);
+      const { run_id, status, reason } = await startAnalysis(session.session_id);
+      if (!isActiveAnalyzeAttempt(attemptId)) return;
+
+      if (status === 'no_voice' || status === 'invalid') {
+        showRetryRecordingAlert(
+          status === 'no_voice' ? '음성이 감지되지 않았어요' : '다시 녹음이 필요해요',
+          status === 'no_voice'
+            ? '마이크가 정상 동작하는지, 노래를 부르셨는지 확인해주세요.'
+            : '분석할 수 없는 녹음입니다. 다시 녹음해 주세요.',
+        );
+        return;
+      }
+
+      if (status === 'failed' || status === 'error') {
         throw new Error(`AI 분석에 실패했습니다. ${reason ?? '다시 시도해주세요.'}`);
       }
 
-      // Step 2: brief done state
+      // Step 2: wait until queued async analysis reaches a terminal result
       setAnalyzeStep(2);
+      await pollAnalysisStatus(run_id);
+      if (!isActiveAnalyzeAttempt(attemptId)) return;
+
+      // Step 3: brief done state
+      setAnalyzeStep(3);
       await new Promise<void>((r) => setTimeout(r, 600));
+      if (!isActiveAnalyzeAttempt(attemptId)) return;
 
       goToEvalResult(run_id);
     } catch (err: unknown) {
+      if (!isActiveAnalyzeAttempt(attemptId)) return;
+      if (isAuthExpiredError(err)) return;
+      if (err instanceof AnalyzeStatusError && (err.status === 'no_voice' || err.status === 'invalid')) {
+        showRetryRecordingAlert(
+          err.status === 'no_voice' ? '음성이 감지되지 않았어요' : '다시 녹음이 필요해요',
+          err.message,
+        );
+        return;
+      }
+      if (err instanceof AnalysisPollingTimeoutError) {
+        Alert.alert(
+          '분석 진행 중',
+          '분석이 계속 진행 중입니다. 잠시 후 히스토리에서 결과를 확인해주세요.',
+          [{ text: '확인', onPress: safeGoBack }],
+        );
+        return;
+      }
       const msg = err instanceof Error ? err.message : '다시 시도해주세요.';
+      if (msg.includes('녹음 파일')) {
+        Alert.alert('녹음 파일 생성 실패', msg);
+        return;
+      }
       Alert.alert('분석 실패', msg, [
         { text: '다시 시도', onPress: handleStop },
-        { text: '닫기', onPress: () => navigation.goBack() },
+        { text: '닫기', onPress: safeGoBack },
       ]);
     } finally {
-      setIsAnalyzing(false);
+      if (activeAnalyzeAttemptRef.current === attemptId) {
+        activeAnalyzeAttemptRef.current = null;
+        isAnalyzingRef.current = false;
+        if (mountedRef.current) setIsAnalyzing(false);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songId, navigation]);
+  }, [beginAnalyzeAttempt, clearCountdownTimer, clearResumeCountdownTimer, isActiveAnalyzeAttempt, songId, navigation, safeGoBack, showRetryRecordingAlert]);
 
   // Navigate to EvalResult (KaraokeScreen is in AppRootStack, EvalResult is in HomeStack)
   const goToEvalResult = useCallback((runId: string) => {
@@ -448,12 +1024,22 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         })),
     [pitchGuide, guideOffset],
   );
+  const adjustedGuidePoints = useMemo(
+    () => guideOffset === 0
+      ? pitchGuide?.points ?? []
+      : (pitchGuide?.points ?? []).map((p) => ({
+          ...p,
+          time: p.time + guideOffset,
+        })),
+    [pitchGuide, guideOffset],
+  );
 
   // ─── Progress ───
   const totalSec = mrDurationSec > 0
     ? mrDurationSec
     : (pitchGuide?.points[pitchGuide.points.length - 1]?.time ?? 0);
   const progress = totalSec > 0 ? Math.min(currentTime / totalSec, 1) : 0;
+  const showGuideFailureNotice = pitchGuideStatus === 'failed' && currentTime >= GUIDE_FAILURE_NOTICE_DELAY_SEC;
   const fmt = (s: number) =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -484,11 +1070,19 @@ export default function KaraokeScreen({ navigation, route }: Props) {
           currentTime={currentTime}
           guideSource={pitchGuide.guideSource}
           midiSegments={adjustedMidiSegments}
-          guidePoints={pitchGuide.points}
+          guidePoints={adjustedGuidePoints}
           userPoints={userPitch}
         />
       ) : (
         <View style={graphStyles.container} />
+      )}
+
+      {showGuideFailureNotice && (
+        <View style={styles.guideWarning}>
+          <Text style={styles.guideWarningText}>
+            피치 가이드를 불러오지 못했습니다. MR과 녹음은 계속할 수 있습니다.
+          </Text>
+        </View>
       )}
 
       {/* 가사 영역 */}
@@ -510,13 +1104,19 @@ export default function KaraokeScreen({ navigation, route }: Props) {
         <Text style={styles.timeText}>{fmt(totalSec)}</Text>
       </View>
 
-      {/* 컨트롤: ↻ 다시시작 | ■ STOP (일시정지는 P1-C에서 추가) */}
+      {/* 컨트롤: 다시시작 | 일시정지/재개 | 종료 후 분석 */}
       <View style={styles.controls}>
         <TouchableOpacity style={styles.ctrlBtn} onPress={handleRestart}>
           <Text style={styles.ctrlIcon}>↻</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.stopBtn} onPress={handleStop}>
-          <Text style={styles.stopIcon}>■</Text>
+        <TouchableOpacity
+          style={[styles.pauseBtn, paused && styles.resumeBtn]}
+          onPress={handlePauseResume}
+        >
+          <Text style={styles.pauseIcon}>{paused ? '▶' : '||'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.finishBtn} onPress={() => { void handleStop(); }}>
+          <Text style={styles.finishText}>종료 후 분석</Text>
         </TouchableOpacity>
       </View>
 
@@ -524,6 +1124,12 @@ export default function KaraokeScreen({ navigation, route }: Props) {
       {countdown !== null && (
         <View style={styles.overlay}>
           <Text style={styles.countdownNum}>{countdown}</Text>
+        </View>
+      )}
+
+      {resumeCountdown !== null && (
+        <View pointerEvents="none" style={styles.resumeCountdownOverlay}>
+          <Text style={styles.resumeCountdownNum}>{resumeCountdown}</Text>
         </View>
       )}
 
@@ -543,7 +1149,9 @@ export default function KaraokeScreen({ navigation, route }: Props) {
               />
             ))}
           </View>
-          <Text style={styles.analyzeHint}>분석 중... (1~2분 소요)</Text>
+          <Text style={styles.analyzeHint}>
+            곡 길이와 분석 구간 수에 따라 시간이 걸릴 수 있습니다.
+          </Text>
         </View>
       )}
     </View>
@@ -572,6 +1180,19 @@ const styles = StyleSheet.create({
     height: 96, justifyContent: 'center', alignItems: 'center',
     paddingHorizontal: 24, gap: 8, backgroundColor: COLORS.background,
   },
+  guideWarning: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: COLORS.card,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  guideWarningText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
   currentLyric: {
     fontSize: 22, fontWeight: '700', color: COLORS.textPrimary,
     textAlign: 'center', lineHeight: 30,
@@ -590,7 +1211,7 @@ const styles = StyleSheet.create({
 
   controls: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    paddingBottom: 48, paddingTop: 8, gap: 32,
+    paddingBottom: 48, paddingTop: 8, gap: 16,
   },
   ctrlBtn: {
     width: 56, height: 56, borderRadius: 28,
@@ -599,12 +1220,25 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.cardBorder,
   },
   ctrlIcon: { fontSize: 22, color: COLORS.textPrimary },
-  stopBtn: {
+  pauseBtn: {
     width: 68, height: 68, borderRadius: 34,
-    backgroundColor: '#c62828',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center', alignItems: 'center',
   },
-  stopIcon: { fontSize: 26, color: '#fff' },
+  resumeBtn: {
+    backgroundColor: '#2e7d32',
+  },
+  pauseIcon: { fontSize: 25, color: '#fff', fontWeight: '800' },
+  finishBtn: {
+    height: 48,
+    minWidth: 104,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    backgroundColor: '#c62828',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  finishText: { fontSize: 13, color: '#fff', fontWeight: '800' },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -612,6 +1246,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', gap: 20,
   },
   countdownNum: { fontSize: 96, fontWeight: '800', color: '#fff' },
+  resumeCountdownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resumeCountdownNum: {
+    fontSize: 88,
+    fontWeight: '800',
+    color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.65)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
 
   analyzeStepText: {
     fontSize: 20, fontWeight: '700', color: '#fff', marginTop: 8,

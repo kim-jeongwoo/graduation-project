@@ -6,6 +6,14 @@ import type { Zone } from '../../types/analyze';
 
 // ─── 음정 ───
 export type PitchVerdict = 'accurate' | 'slight_off' | 'wrong' | 'unknown';
+export type PitchLiveStatus =
+  | 'idle'
+  | 'serverConnecting'
+  | 'serverUnavailable'
+  | 'micWaiting'
+  | 'noVoice'
+  | 'active';
+export type VoiceInputStatus = 'idle' | 'leadIn' | 'waiting' | 'weak' | 'ready' | 'noVoice';
 
 export function pitchVerdictFromScore(score: number | null): PitchVerdict {
   if (score === null) return 'unknown';
@@ -28,14 +36,43 @@ const PITCH_TEXT: Record<PitchVerdict, string> = {
   unknown:    '측정 중...',
 };
 
+const PITCH_STATUS_TEXT: Record<PitchLiveStatus, string> = {
+  idle:              '시작하면 실시간 음정이 표시됩니다.',
+  serverConnecting:  '실시간 분석 연결 중...',
+  serverUnavailable: '실시간 분석 연결이 불안정합니다. 사후 측정은 계속 진행할 수 있습니다.',
+  micWaiting:        '마이크 입력을 기다리는 중입니다.',
+  noVoice:           '음성이 감지되지 않습니다. 조금 더 크게 불러보세요.',
+  active:            '',
+};
+
+const VOICE_INPUT_TEXT: Record<VoiceInputStatus, string> = {
+  idle:    '시작하면 입력 상태가 표시됩니다.',
+  leadIn:  '곧 녹음이 시작됩니다.',
+  waiting: '입력 대기 중',
+  weak:    '음성은 감지되지만 분석에는 부족할 수 있습니다.',
+  ready:   '입력이 충분한 것으로 추정됩니다.',
+  noVoice: '입력이 부족합니다. 조금 더 크게 불러보세요.',
+};
+
+const VOICE_INPUT_COLOR: Record<VoiceInputStatus, string> = {
+  idle:    COLORS.textMuted,
+  leadIn:  COLORS.textMuted,
+  waiting: COLORS.textMuted,
+  weak:    '#ffb780',
+  ready:   '#59dda5',
+  noVoice: '#ffb4ab',
+};
+
 interface PitchCardProps {
   verdict: PitchVerdict;
   matchScore: number | null;  // 0~1
+  liveStatus?: PitchLiveStatus;
 }
 
-export function PitchCard({ verdict, matchScore }: PitchCardProps) {
+export function PitchCard({ verdict, matchScore, liveStatus = 'active' }: PitchCardProps) {
   const color = PITCH_COLOR[verdict];
-  const text  = PITCH_TEXT[verdict];
+  const statusText = PITCH_STATUS_TEXT[liveStatus];
+  const text  = liveStatus === 'active' ? PITCH_TEXT[verdict] : statusText;
   const fillPct = matchScore !== null ? Math.max(0, Math.min(1, matchScore)) * 100 : 0;
   return (
     <View style={styles.card}>
@@ -44,6 +81,32 @@ export function PitchCard({ verdict, matchScore }: PitchCardProps) {
         <View style={[styles.gaugeFill, { width: `${fillPct}%`, backgroundColor: color }]} />
       </View>
       <Text style={[styles.verdictText, { color }]}>{text}</Text>
+    </View>
+  );
+}
+
+interface VoiceInputCardProps {
+  status: VoiceInputStatus;
+  level: number;  // 0~1
+  durationSec: number | null;
+}
+
+export function VoiceInputCard({ status, level, durationSec }: VoiceInputCardProps) {
+  const color = VOICE_INPUT_COLOR[status];
+  const fillPct = Math.max(0, Math.min(1, level)) * 100;
+  return (
+    <View style={styles.card}>
+      <Text style={styles.label}>입력 상태</Text>
+      <View style={styles.gaugeTrack}>
+        <View style={[styles.gaugeFill, { width: `${fillPct}%`, backgroundColor: color }]} />
+      </View>
+      <View style={styles.row}>
+        <Text style={[styles.verdictText, { color }]}>{VOICE_INPUT_TEXT[status]}</Text>
+        {durationSec !== null && (
+          <Text style={styles.scoreText}>{durationSec.toFixed(1)}초</Text>
+        )}
+      </View>
+      <Text style={styles.helpText}>입력 상태는 최근 음량/음성 여부, 음정 일치율은 피치 정확도를 나타냅니다.</Text>
     </View>
   );
 }
@@ -57,9 +120,9 @@ const BREATH_COLOR: Record<Zone | 'unknown', string> = {
 };
 
 const BREATH_TEXT: Record<Zone | 'unknown', string> = {
-  appropriate:  '호흡 적절',
-  excessive:    '성대를 너무 모으고 있어요',
-  insufficient: '호흡이 새는 소리가 많아요',
+  appropriate:  '호흡 균형 적절',
+  excessive:    '압축/눌림 경향',
+  insufficient: '숨소리 과다 경향',
   unknown:      '측정 중...',
 };
 
@@ -98,6 +161,28 @@ export function BreathInfoCard() {
       <Text style={styles.infoText}>
         성대 접촉은 녹음 종료 후 측정됩니다.{'\n'}
         노래 끝나면 '이번 시도 점수 보기' 버튼을 눌러주세요.
+      </Text>
+    </View>
+  );
+}
+
+export function SoftPalateInfoCard() {
+  return (
+    <View style={styles.card}>
+      <Text style={styles.label}>연구개 위치</Text>
+      <Text style={styles.infoText}>
+        연구개 위치 지표는 녹음 종료 후 측정됩니다. 같은 구간을 다시 부르며 결과 변화를 확인해보세요.
+      </Text>
+    </View>
+  );
+}
+
+export function TongueTensionInfoCard() {
+  return (
+    <View style={styles.card}>
+      <Text style={styles.label}>혀경직도</Text>
+      <Text style={styles.infoText}>
+        혀/구강 공간 경직도 지표는 녹음 종료 후 측정됩니다. 같은 구간을 다시 부르며 결과 변화를 확인해보세요.
       </Text>
     </View>
   );
@@ -144,5 +229,10 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     lineHeight: 20,
+  },
+  helpText: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    lineHeight: 16,
   },
 });
