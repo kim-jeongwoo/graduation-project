@@ -53,7 +53,7 @@
 
 ## 2. Production이 실제 로드하는 checkpoint 경로 / CHECKPOINT_PATH override
 
-- 코드 기본값 [server.py:31-36](../dml-server/model_server/server.py#L31):
+- 코드 기본값 [server.py:31-36](../model_server/server.py#L31):
   ```python
   CHECKPOINT_PATH = os.getenv(
       "CHECKPOINT_PATH",
@@ -62,8 +62,8 @@
       ),
   )
   ```
-- 로드 지점 [server.py:65-69](../dml-server/model_server/server.py#L65): `@app.on_event("startup")` → `EGGPredictor(CHECKPOINT_PATH)` + `AnalysisPipeline(CHECKPOINT_PATH, ...)`.
-- 가중치 로드 [predictor.py:48-49](../dml-server/model_server/predictor.py#L48): `torch.load(checkpoint_path, map_location=..., weights_only=False)` → `load_state_dict(ckpt["model_state_dict"])`. (동일 패턴 [analysis_pipeline.py:314](../dml-server/model_server/analysis_pipeline.py#L314))
+- 로드 지점 [server.py:65-69](../model_server/server.py#L65): `@app.on_event("startup")` → `EGGPredictor(CHECKPOINT_PATH)` + `AnalysisPipeline(CHECKPOINT_PATH, ...)`.
+- 가중치 로드 [predictor.py:48-49](../model_server/predictor.py#L48): `torch.load(checkpoint_path, map_location=..., weights_only=False)` → `load_state_dict(ckpt["model_state_dict"])`. (동일 패턴 [analysis_pipeline.py:314](../model_server/analysis_pipeline.py#L314))
 - **env override 여부: 있음.** systemd `EnvironmentFile=.../model_server/.env` 로드([dml-server.service] 아래), `.env`에 `CHECKPOINT_PATH` 1줄 정의됨 (내용은 규칙상 비공개, 존재만 확인).
 - **실제 로드 경로 확정** (실행 프로세스 PID 3767914 `/proc/<pid>/environ`에서 해당 변수만 추출):
   - `CHECKPOINT_PATH=/home/dmlserver/projects/egg_prediction/checkpoints/exp20_progressive/best_model.pt`
@@ -77,9 +77,9 @@
 ## 3. /analyze, /analyze-chunk 응답에 EGG model_version / checkpoint hash 포함 여부
 
 - 전체 grep 결과 응답에 존재하는 버전 필드는 **`score_mapper_version`("v2")뿐** — EGG 모델 자체 버전/해시 아님.
-  - `/analyze` 성공 응답: [server.py:177-181](../dml-server/model_server/server.py#L177) `{**result, ...}`. `result`는 `pipeline.analyze()` 반환 — 여기에 `score_mapper_version: "v2"` ([analysis_pipeline.py:684](../dml-server/model_server/analysis_pipeline.py#L684), [timeline_analysis.py:272](../dml-server/model_server/services/timeline_analysis.py#L272)) 만 있음. EGG model_version/checkpoint hash 필드 **없음**.
-  - `/analyze-chunk` 응답 [server.py:381-393](../dml-server/model_server/server.py#L381): `score_mapper_version: result.get("score_mapper_version")` 만. EGG 모델 버전/해시 **없음**.
-  - `/health` [server.py:74-81](../dml-server/model_server/server.py#L74): `status/model_loaded/gpu_available/device` 만. 버전/해시 **없음**.
+  - `/analyze` 성공 응답: [server.py:177-181](../model_server/server.py#L177) `{**result, ...}`. `result`는 `pipeline.analyze()` 반환 — 여기에 `score_mapper_version: "v2"` ([analysis_pipeline.py:684](../model_server/analysis_pipeline.py#L684), [timeline_analysis.py:272](../model_server/services/timeline_analysis.py#L272)) 만 있음. EGG model_version/checkpoint hash 필드 **없음**.
+  - `/analyze-chunk` 응답 [server.py:381-393](../model_server/server.py#L381): `score_mapper_version: result.get("score_mapper_version")` 만. EGG 모델 버전/해시 **없음**.
+  - `/health` [server.py:74-81](../model_server/server.py#L74): `status/model_loaded/gpu_available/device` 만. 버전/해시 **없음**.
 
 **결론: EGG 모델 자체 version 또는 checkpoint hash는 어떤 응답에도 없음.** (존재하는 것은 score_mapper_version="v2" 뿐)
 
@@ -87,8 +87,8 @@
 
 ## 4. ChunkTooShortError → 최종 HTTP status
 
-- 정의 [chunk_analysis.py:30-35](../dml-server/model_server/services/chunk_analysis.py#L30): `duration < MIN_CHUNK_SEC(=3.0)` 시 raise ([chunk_analysis.py:66-67](../dml-server/model_server/services/chunk_analysis.py#L66)).
-- 핸들러 [server.py:293-302](../dml-server/model_server/server.py#L293):
+- 정의 [chunk_analysis.py:30-35](../model_server/services/chunk_analysis.py#L30): `duration < MIN_CHUNK_SEC(=3.0)` 시 raise ([chunk_analysis.py:66-67](../model_server/services/chunk_analysis.py#L66)).
+- 핸들러 [server.py:293-302](../model_server/server.py#L293):
   ```python
   except ChunkTooShortError as e:
       return JSONResponse(
@@ -105,15 +105,15 @@
 
 ## 5. no_voice 판정 상수 실측
 
-전부 [analysis_pipeline.py](../dml-server/model_server/analysis_pipeline.py) 및 [chunk_analysis.py](../dml-server/model_server/services/chunk_analysis.py) 원문.
+전부 [analysis_pipeline.py](../model_server/analysis_pipeline.py) 및 [chunk_analysis.py](../model_server/services/chunk_analysis.py) 원문.
 
-- frame hop: `HOP = 256` ([analysis_pipeline.py:52](../dml-server/model_server/analysis_pipeline.py#L52)), `TARGET_SR = 16000` → hop = 256/16000 = **0.016s**.
-  - `voiced_s = voiced_frames * HOP / TARGET_SR` ([analysis_pipeline.py:369](../dml-server/model_server/analysis_pipeline.py#L369))
-- `min_voiced_s` 기본값: `MIN_VOICED_S = 5.0` ([analysis_pipeline.py:57](../dml-server/model_server/analysis_pipeline.py#L57)), `analyze(self, audio_data, min_voiced_s=MIN_VOICED_S)` ([analysis_pipeline.py:353](../dml-server/model_server/analysis_pipeline.py#L353)).
-  - **`/analyze` 전곡**: override 없이 호출 ([server.py:149](../dml-server/model_server/server.py#L149) `pipeline.analyze(audio_bytes)`) → `min_voiced_s = 5.0` 고정. (프롬프트의 `duration*0.4`는 여기 미적용)
-  - **`/analyze-chunk`**: `min_voiced_s = duration × 0.4` 계산 후 전달. `VOICED_FRACTION = 0.4` ([chunk_analysis.py:27](../dml-server/model_server/services/chunk_analysis.py#L27), `min_voiced_s = duration * VOICED_FRACTION` [chunk_analysis.py:69](../dml-server/model_server/services/chunk_analysis.py#L69)) → `pipeline.analyze(wav_bytes, min_voiced_s=min_voiced_s)` ([server.py:308](../dml-server/model_server/server.py#L308)).
-- **Guard A** ([analysis_pipeline.py:380-387](../dml-server/model_server/analysis_pipeline.py#L380)): `if voiced_s < min_voiced_s:` → `SilentInputError(guard="A")`.
-- **Guard B** ([analysis_pipeline.py:389-401](../dml-server/model_server/analysis_pipeline.py#L389)):
+- frame hop: `HOP = 256` ([analysis_pipeline.py:52](../model_server/analysis_pipeline.py#L52)), `TARGET_SR = 16000` → hop = 256/16000 = **0.016s**.
+  - `voiced_s = voiced_frames * HOP / TARGET_SR` ([analysis_pipeline.py:369](../model_server/analysis_pipeline.py#L369))
+- `min_voiced_s` 기본값: `MIN_VOICED_S = 5.0` ([analysis_pipeline.py:57](../model_server/analysis_pipeline.py#L57)), `analyze(self, audio_data, min_voiced_s=MIN_VOICED_S)` ([analysis_pipeline.py:353](../model_server/analysis_pipeline.py#L353)).
+  - **`/analyze` 전곡**: override 없이 호출 ([server.py:149](../model_server/server.py#L149) `pipeline.analyze(audio_bytes)`) → `min_voiced_s = 5.0` 고정. (프롬프트의 `duration*0.4`는 여기 미적용)
+  - **`/analyze-chunk`**: `min_voiced_s = duration × 0.4` 계산 후 전달. `VOICED_FRACTION = 0.4` ([chunk_analysis.py:27](../model_server/services/chunk_analysis.py#L27), `min_voiced_s = duration * VOICED_FRACTION` [chunk_analysis.py:69](../model_server/services/chunk_analysis.py#L69)) → `pipeline.analyze(wav_bytes, min_voiced_s=min_voiced_s)` ([server.py:308](../model_server/server.py#L308)).
+- **Guard A** ([analysis_pipeline.py:380-387](../model_server/analysis_pipeline.py#L380)): `if voiced_s < min_voiced_s:` → `SilentInputError(guard="A")`.
+- **Guard B** ([analysis_pipeline.py:389-401](../model_server/analysis_pipeline.py#L389)):
   ```python
   if voiced_ratio > 0.95:
       cpp_pre = [_cpp_frame(audio, i) for i in range(n_frames) if vad_mask[i]]
@@ -123,7 +123,7 @@
           raise SilentInputError(guard="B", ...)
   ```
   → 조건: `voiced_ratio > 0.95` **AND** `cpp_pre_mean < 0.15`.
-- SilentInputError → 응답: `/analyze` [server.py:150-158](../dml-server/model_server/server.py#L150) `status:"no_voice"` (HTTP 200, streaming), `/analyze-chunk` [server.py:309-323](../dml-server/model_server/server.py#L309) `status:"no_voice"` (HTTP 200).
+- SilentInputError → 응답: `/analyze` [server.py:150-158](../model_server/server.py#L150) `status:"no_voice"` (HTTP 200, streaming), `/analyze-chunk` [server.py:309-323](../model_server/server.py#L309) `status:"no_voice"` (HTTP 200).
 
 **결론: 프롬프트 값과 코드 일치. 단 `min_voiced_s = duration*0.4`는 `/analyze-chunk` 한정이고 `/analyze` 전곡은 고정 5.0s. Guard B 임계 voiced_ratio>0.95 & cpp_mean<0.15 일치.**
 
@@ -131,21 +131,21 @@
 
 ## 6. indicators_v2 phone indicator / feature_order 차원 / force_positive
 
-주의: production 파이프라인이 실제 사용하는 v2 경로는 [analysis_pipeline.py:43](../dml-server/model_server/analysis_pipeline.py#L43) `from score_mapper_v2 import ScoreMapperV2` → `scripts/sidetrack/score_mapper_v2.py` → `import indicators_v2 as iv`.
+주의: production 파이프라인이 실제 사용하는 v2 경로는 [analysis_pipeline.py:43](../model_server/analysis_pipeline.py#L43) `from score_mapper_v2 import ScoreMapperV2` → `scripts/sidetrack/score_mapper_v2.py` → `import indicators_v2 as iv`.
 
 ### phone indicator 개수/이름 (33개)
-- `INDICATORS` dict [indicators_v2.py:512-546](../dml-server/scripts/sidetrack/indicators_v2.py#L512), `compute_all()` [indicators_v2.py:549-554](../dml-server/scripts/sidetrack/indicators_v2.py#L549) 이 산출. **총 33개**:
+- `INDICATORS` dict [indicators_v2.py:512-546](../scripts/sidetrack/indicators_v2.py#L512), `compute_all()` [indicators_v2.py:549-554](../scripts/sidetrack/indicators_v2.py#L549) 이 산출. **총 33개**:
   `hnr, h1_h2, h1_a1, h1_a3, F1, F2, F3, F1_bw, F2_bw, F3_bw, jitter_local, jitter_rap, shimmer_local, shimmer_apq3, flatness_b1_200_500, flatness_b2_500_1k, flatness_b3_1k_2k, flatness_b4_2k_4k, flatness_b5_4k_8k, band_ratio_low_mid, band_ratio_high_mid, anti_formant_250_500, anti_formant_500_800, F2_F1_ratio, F2_F1_distance, F2_stability, formant_transition_speed, spectral_entropy, spectral_centroid_variability, f0_std, f0_range, a1_p0, singers_formant_ratio`
-- `score_mapper_v2.py` 주석과 일치: "33 phone indicator" ([score_mapper_v2.py:49,52](../dml-server/scripts/sidetrack/score_mapper_v2.py#L49)).
+- `score_mapper_v2.py` 주석과 일치: "33 phone indicator" ([score_mapper_v2.py:49,52](../scripts/sidetrack/score_mapper_v2.py#L49)).
 
 ### feature_order 차원 (문서 "38차원" 검증 → 확인)
-- feature_order는 `mapping_params_v2.json`에서 로드 ([score_mapper_v2.py:84](../dml-server/scripts/sidetrack/score_mapper_v2.py#L84) `feat_order = self.params["feature_order"]`).
+- feature_order는 `mapping_params_v2.json`에서 로드 ([score_mapper_v2.py:84](../scripts/sidetrack/score_mapper_v2.py#L84) `feat_order = self.params["feature_order"]`).
 - 실측: `data/vocal_academy/results/sidetrack/mapping_params_v2.json` → `len(feature_order) = 38`. **"38차원" 일치.**
   - 동 파일 top keys: `version, feature_order, feature_translation, deferred_indicators, models, shown_indicators_v2, academic_analysis_only, deferred_indicators_v2`. `feature_translation` len=7. `models` 6개: `접촉강도, 호흡식별, 연구개위치, 혀경직도, 비강사용, 전방공명`.
 
 ### force_positive 적용 항목
 - **production v2 경로(`score_mapper_v2.py` / `mapping_params_v2.json`)에는 `force_positive` 없음.** (grep 0건)
-- `force_positive`는 별도 이론기반 매핑 경로에만 존재: [j1_theory_based_mapping.py:45,80,92,96,171,201,266](../dml-server/scripts/j1_theory_based_mapping.py#L45), 값은 `data/vocal_academy/results/theory_mapping.json`:
+- `force_positive`는 별도 이론기반 매핑 경로에만 존재: [j1_theory_based_mapping.py:45,80,92,96,171,201,266](../scripts/j1_theory_based_mapping.py#L45), 값은 `data/vocal_academy/results/theory_mapping.json`:
   - True: `흉성두성, 접촉강도, 호흡식별, 상압하압`
   - False: `비강사용, 전방공명, 연구개위치`
 
