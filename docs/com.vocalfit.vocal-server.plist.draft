@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DRAFT ONLY — 아직 적용하지 마세요. 정우 승인 후 아래 [적용 절차]대로 설치.
+  이 파일은 docs/ 에 있으므로 launchd가 자동 로드하지 않습니다.
+  기존 editor plist(com.vocalfit.guide-editor.plist) 형식을 그대로 따름.
+
+  [적용 절차] (승인 후)
+    cp docs/com.vocalfit.vocal-server.plist.draft \
+       ~/Library/LaunchAgents/com.vocalfit.vocal-server.plist
+    launchctl load  ~/Library/LaunchAgents/com.vocalfit.vocal-server.plist
+    # 상태 확인
+    launchctl list | grep vocal-server
+    curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/admin/health   # 200 기대
+
+  [해제]
+    launchctl unload ~/Library/LaunchAgents/com.vocalfit.vocal-server.plist
+
+  [주의]
+    - 적용 전 반드시 현재 수동 nohup 프로세스를 먼저 정리:
+        pkill -TERM -f "uvicorn app.main"
+      (수동 프로세스가 :8000을 점유 중이면 launchd 기동이 'Address already in use'로 실패)
+    - KeepAlive=true → 크래시/재부팅 시 자동 재기동. 수동 재시작 스크립트와 병행 시
+      restart_server.sh의 pkill 로직과 KeepAlive가 서로 재시작을 유발할 수 있으니,
+      launchd 도입 후에는 재시작을 'launchctl kickstart -k' 방식으로 통일 권장.
+    - .env 는 WorkingDirectory 기준으로 로드됨(현재 앱이 CWD의 .env 읽음). WorkingDirectory 필수.
+    - uvicorn 경로는 venv 바이너리(/Users/kimjeongwoo/vocal-server/vocalserver/bin/uvicorn).
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.vocalfit.vocal-server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/kimjeongwoo/vocal-server/vocalserver/bin/uvicorn</string>
+    <string>app.main:app</string>
+    <string>--host</string>
+    <string>0.0.0.0</string>
+    <string>--port</string>
+    <string>8000</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/kimjeongwoo/vocal-server/vocal-server</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/kimjeongwoo/vocal-server/vocal-server/vocal_server_launchagent.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kimjeongwoo/vocal-server/vocal-server/vocal_server_launchagent.err.log</string>
+</dict>
+</plist>
