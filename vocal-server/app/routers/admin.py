@@ -28,6 +28,7 @@ from app.models.models import (
     TrainingFavorite,
     User,
 )
+from app.routers.sessions import _build_song_field
 from app.schemas.schemas import AdminUserResponse, SessionBrief
 from app.state import app_state
 
@@ -556,7 +557,34 @@ def list_user_sessions(user_id: uuid.UUID, db: DBSession = Depends(get_db)):
         .order_by(Session.created_at.desc())
         .all()
     )
-    return sessions
+
+    result = []
+    for s in sessions:
+        latest_run = (
+            db.query(AnalysisRun)
+            .filter(AnalysisRun.session_id == s.session_id)
+            .order_by(AnalysisRun.requested_at.desc())
+            .first()
+        )
+        if latest_run is None:
+            analysis_status = "no_analysis"
+        elif latest_run.status in ("queued", "running"):
+            analysis_status = latest_run.status
+        elif latest_run.status in ("completed", "success"):
+            analysis_status = "completed"
+        else:
+            analysis_status = "failed"
+
+        result.append(SessionBrief(
+            session_id=s.session_id,
+            song_title=s.song_title,
+            song=_build_song_field(s),
+            status=s.status,
+            analysis_status=analysis_status,
+            started_at=s.started_at,
+            created_at=s.created_at,
+        ))
+    return result
 
 
 # ─────────────────────────────────────────────

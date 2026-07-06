@@ -290,3 +290,23 @@ python test_integration.py
 # pycache 클리어 (reload 미반영 시)
 find app -name __pycache__ -exec rm -rf {} +
 ```
+
+---
+
+## 11. admin 관련 기록 (2026-07-07)
+
+### GET /admin/users/{user_id}/sessions response validation 불일치 수정
+- Codex 코드 감사(HANDOVER_TO_CLAUDE.md)에서 발견. `response_model=list[SessionBrief]`인데 함수가 raw `Session` ORM row를 그대로 반환 → `SessionBrief.analysis_status`(required)가 `Session`에 없어 `ResponseValidationError`(500) 발생.
+- read-only 확인: ① user_detail.html/users.html/logs.html은 이 API 엔드포인트를 호출하지 않음(세션 목록은 서버사이드 Jinja 렌더링, `sessions` context var로 별도 조립) → 실사용 경로 없음. ② TestClient로 세션 보유 사용자 대상 재현 → `analysis_status` 필드 누락 500 확인.
+- 수정: `GET /sessions`(일반 사용자용, `app/routers/sessions.py`)의 `SessionBrief` 구성 로직(최신 `AnalysisRun` 조회 → `analysis_status` 매핑, `_build_song_field` 재사용)을 admin 엔드포인트에 동일 적용. 응답 필드 계약 변경 없음, 신규 필드 추가 없음.
+- 검증: TestClient로 인증 후 200 + 전체 필드(`session_id`,`song_title`,`song`,`status`,`analysis_status`,`started_at`,`created_at`) 확인, 미인증 401 유지, `/admin/api/users` 무영향 확인. production 재기동은 미실행(정우 승인 후 별도 진행).
+
+### admin 백로그 동결 (정우 지시, 해동 시점 미정)
+동결 항목: 비밀번호 reset, 강제 로그아웃, CSV export(학생 활동/분석 세션/누적 시도), 활동·점수 차트류.
+- 비밀번호 reset / 강제 로그아웃: auth/JWT/세션에 직접 영향 → 착수 시 read-only 설계 선행 필요.
+- 나머지 2건(CSV export, 차트류)은 조회 전용이라 상대적으로 리스크 낮음.
+- 상태: 전체 동결. 정우 지시 시에만 해동.
+
+### admin 운영 사실
+- Phase A admin은 이 워크스페이스(vocal-server) 유지보수 담당 범위.
+- admin 접근자는 정우 단독. 평가자 5명은 admin 미접근, `ADMIN_PASSWORD` 공유 이력 없음.
