@@ -945,3 +945,28 @@ P1 사전 검증 양쪽 통과 확인:
 - single uvicorn worker 유지: `server.py`의 uvicorn 기본 단일 worker 실행, cloudflared target `http://localhost:8001` 변경 없음.
 - 운영 안정화: `Restart=always`, `RestartSec=10`, `RuntimeMaxSec=3600`, stdout/stderr `/var/log/dml-server.log` append 기록.
 - 검증: local `/health` 및 production `https://dml.vocal-fit.com/health` OK. `/analyze` StreamingResponse P2-A/status body 정책 변경 없음.
+
+## 16. 2026.07 재검증 (진단 2단계) — 성능 추정치 신뢰성 (2026-08-11 기록)
+
+산출물·상세: `data/vocal_academy/results/sidetrack/rediag/` (README 포함, 재검증 수행 2026-07-26).
+
+**결론 — 9항목 판정**
+- 유의 2: **접촉강도**(p=0.0231, nested 0.506) · **혀경직도**(p=0.0136, nested 0.562)
+- 미확보: 호흡식별(p=0.3325, CI 0 포함) · **연구개위치(p=0.0536 + 배포 −0.62 vs nested +0.60 부호 반전)**
+- deferred 3(흉성두성·공명개방·상압하압): 중첩 CV ≈ 0 붕괴 — 미배포 판단 재확인
+- 비강사용·전방공명: academic_only 유지
+
+**반복 방지 원칙 2가지 (필독)**
+1. **검증셋으로 모델(config)을 선택하면 그 검증 성능은 성능 추정치로 재사용 불가.**
+   n=17에서 21개 config 중 최대 |r|은 우연만으로 p50 ≈ 0.38, p95 ≈ 0.62까지 나온다 (s1 순열 분포).
+   → **5/10 21명 코호트는 이미 선택에 소진되었으므로 향후 성능 추정에 쓸 수 없다.** 새 성능 주장은 새 코호트(After 등)에서만.
+2. **unit 단위 KFold는 화자 누설을 만든다.** 배포 당시 train_5fold가 unit KFold였음이 재현으로 확정
+   (비강사용 0.6394 ≈ 재현 0.6330; 화자 단위 전환 시 접촉강도 0.47 → 0.10).
+   → 분할은 항상 **화자 단위**. 논문에 기존 train CV 수치를 쓸 땐 누설 사실 병기.
+
+**재현성 자산**
+- `rediag/retrain_v2.py` — mapping_params_v2/phone_to_oral_mapper_v2 재학습 파이프라인 복원본.
+  입력 4종(indicators_v2_training.csv, trainer_scores.csv, extra_metrics.json, spectral_analysis.json) 저장소 추적 추가.
+  출력은 `*_REGENERATED.*` 전용 — **배포 파일 무수정 원칙 유지.**
+- mapper 학습집합 확정: 25쌍/16화자 (제외 4 unit: (6,'8') _sm 결측 평균대체 / (9,'10')·(13,'4')·(15,'2') 5/10 누설 화자)
+- 구조 한계 기록: p=38 > n=24, rank 23, a1_p0·h1_a1 완전 중복(r=−1.0)
