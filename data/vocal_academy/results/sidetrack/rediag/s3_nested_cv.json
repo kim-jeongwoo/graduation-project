@@ -1,0 +1,114 @@
+{
+ "A_val_selection_nested": {
+  "비강사용": {
+   "deployed_val_total": -0.8,
+   "nested_val_total_mean": 0.6763394620329064,
+   "nested_val_total_std": 0.18154900566426976,
+   "nested_full21_mean": 0.5955094789079645,
+   "n_repeat": 20
+  },
+  "흉성두성": {
+   "deployed_val_total": null,
+   "nested_val_total_mean": -0.033588271543420437,
+   "nested_val_total_std": 0.2434092074943428,
+   "nested_full21_mean": -0.01883036675887205,
+   "n_repeat": 20
+  },
+  "접촉강도": {
+   "deployed_val_total": 0.7327,
+   "nested_val_total_mean": 0.5064982127643562,
+   "nested_val_total_std": 0.11809571675471452,
+   "nested_full21_mean": 0.5888849742327062,
+   "n_repeat": 20
+  },
+  "호흡식별": {
+   "deployed_val_total": 0.4343,
+   "nested_val_total_mean": 0.3619636918484959,
+   "nested_val_total_std": 0.282445214717995,
+   "nested_full21_mean": 0.37049060723236543,
+   "n_repeat": 20
+  },
+  "전방공명": {
+   "deployed_val_total": -0.6797,
+   "nested_val_total_mean": 0.39451976847994097,
+   "nested_val_total_std": 0.1047258969294007,
+   "nested_full21_mean": 0.3651377309573882,
+   "n_repeat": 20
+  },
+  "연구개위치": {
+   "deployed_val_total": -0.6236,
+   "nested_val_total_mean": 0.6025164613556099,
+   "nested_val_total_std": 0.021920141224673933,
+   "nested_full21_mean": 0.5521189712209005,
+   "n_repeat": 20
+  },
+  "공명개방": {
+   "deployed_val_total": null,
+   "nested_val_total_mean": -0.0329171585148824,
+   "nested_val_total_std": 0.23133241937189344,
+   "nested_full21_mean": 0.015632344243142755,
+   "n_repeat": 20
+  },
+  "혀경직도": {
+   "deployed_val_total": 0.6936,
+   "nested_val_total_mean": 0.5622759075061882,
+   "nested_val_total_std": 0.08058597653972717,
+   "nested_full21_mean": 0.5890795190984163,
+   "n_repeat": 20
+  },
+  "상압하압": {
+   "deployed_val_total": null,
+   "nested_val_total_mean": 0.057640380025090775,
+   "nested_val_total_std": 0.24245951819505462,
+   "nested_full21_mean": 0.16233044643928835,
+   "n_repeat": 20
+  }
+ },
+ "B_train_cohort_nested": {
+  "비강사용": {
+   "deployed_train_5fold": 0.6394,
+   "unit_kfold_reproduced": 0.6330453626825655,
+   "speaker_nested_cv": 0.5604592374272069
+  },
+  "흉성두성": {
+   "deployed_train_5fold": null,
+   "unit_kfold_reproduced": NaN,
+   "speaker_nested_cv": 0.17597560396325843
+  },
+  "접촉강도": {
+   "deployed_train_5fold": 0.47,
+   "unit_kfold_reproduced": 0.40268193468882335,
+   "speaker_nested_cv": 0.10290335092335322
+  },
+  "호흡식별": {
+   "deployed_train_5fold": -0.1297,
+   "unit_kfold_reproduced": 0.09360108489608543,
+   "speaker_nested_cv": -0.011304682167715229
+  },
+  "전방공명": {
+   "deployed_train_5fold": 0.5351,
+   "unit_kfold_reproduced": 0.5277128515839847,
+   "speaker_nested_cv": 0.624997550418691
+  },
+  "연구개위치": {
+   "deployed_train_5fold": 0.0073,
+   "unit_kfold_reproduced": 0.2832776120784557,
+   "speaker_nested_cv": 0.21019656550066002
+  },
+  "공명개방": {
+   "deployed_train_5fold": null,
+   "unit_kfold_reproduced": NaN,
+   "speaker_nested_cv": -0.32214846661974145
+  },
+  "혀경직도": {
+   "deployed_train_5fold": -0.0009,
+   "unit_kfold_reproduced": -0.06678386074034531,
+   "speaker_nested_cv": 0.2660205064867745
+  },
+  "상압하압": {
+   "deployed_train_5fold": null,
+   "unit_kfold_reproduced": NaN,
+   "speaker_nested_cv": 0.05647653081614842
+  }
+ }
+}

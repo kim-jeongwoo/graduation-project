@@ -1,0 +1,61 @@
+{
+ "candidates": {
+  "oral_all(34)": {
+   "n": 34,
+   "median_rel_err_mean": 0.011116212357529224,
+   "median_rel_err_std": 0.07722019258684658
+  },
+  "oral_paired_with_phone(29)": {
+   "n": 29,
+   "median_rel_err_mean": 0.007852671079117123,
+   "median_rel_err_std": 0.11087225653144721
+  },
+  "oral_labelled": {
+   "n": 34,
+   "median_rel_err_mean": 0.011116212357529224,
+   "median_rel_err_std": 0.07722019258684658
+  },
+  "oral_labelled_and_paired": {
+   "n": 29,
+   "median_rel_err_mean": 0.007852671079117123,
+   "median_rel_err_std": 0.11087225653144721
+  },
+  "oral_singers_1_12": {
+   "n": 24,
+   "median_rel_err_mean": 0.0,
+   "median_rel_err_std": 0.0
+  },
+  "oral_singers_13_22": {
+   "n": 10,
+   "median_rel_err_mean": 0.03779512201559983,
+   "median_rel_err_std": 0.27629059426616914
+  },
+  "oral_not_leaked": {
+   "n": 29,
+   "median_rel_err_mean": 0.011502238078638677,
+   "median_rel_err_std": 0.07636504628674093
+  },
+  "SPKavg_oral_all": {
+   "n": 22,
+   "median_rel_err_mean": 0.02095180674439681,
+   "median_rel_err_std": 0.1542107324564272
+  },
+  "SPKavg_oral_paired": {
+   "n": 19,
+   "median_rel_err_mean": 0.020453001664225225,
+   "median_rel_err_std": 0.20697674251605253
+  }
+ },
+ "greedy_best": {
+  "n": 33,
+  "median_rel_err_mean": 0.00793459630070646,
+  "median_rel_err_std": 0.06171474352347907,
+  "excluded_units": [
+   [
+    "22",
+    "4",
+    "oral"
+   ]
+  ]
+ }
+}

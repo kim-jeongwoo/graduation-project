@@ -1,0 +1,43 @@
+{
+ "접촉강도": {
+  "model_type": "Ridge",
+  "max_abs_coef_diff": 1.7832957333041577e-15,
+  "coef_corr": 0.9999999999999997,
+  "intercept_diff": 0.0,
+  "verdict": "✅ 완전재현"
+ },
+ "호흡식별": {
+  "model_type": "Ridge",
+  "max_abs_coef_diff": 4.191091917959966e-15,
+  "coef_corr": 1.0,
+  "intercept_diff": 4.440892098500626e-16,
+  "verdict": "✅ 완전재현"
+ },
+ "연구개위치": {
+  "model_type": "ElasticNet",
+  "max_abs_coef_diff": 4.440892098500626e-16,
+  "coef_corr": 1.0,
+  "intercept_diff": 0.0,
+  "verdict": "✅ 완전재현"
+ },
+ "혀경직도": {
+  "model_type": "GB",
+  "max_abs_pred_diff": 0.0,
+  "pred_corr": 1.0,
+  "verdict": "✅ 완전재현"
+ },
+ "비강사용": {
+  "model_type": "ElasticNet",
+  "max_abs_coef_diff": 2.7755575615628914e-16,
+  "coef_corr": 1.0,
+  "intercept_diff": 0.0,
+  "verdict": "✅ 완전재현"
+ },
+ "전방공명": {
+  "model_type": "Lasso",
+  "max_abs_coef_diff": 7.771561172376096e-16,
+  "coef_corr": 1.0,
+  "intercept_diff": 0.0,
+  "verdict": "✅ 완전재현"
+ }
+}

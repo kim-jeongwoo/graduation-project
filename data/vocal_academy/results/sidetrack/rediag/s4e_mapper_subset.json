@@ -1,0 +1,221 @@
+{
+ "paired_units": 29,
+ "paired_speakers": 19,
+ "speaker_drop_search": [
+  {
+   "n_drop_spk": 0,
+   "err_mean": 0.006431961768790454,
+   "err_std": 0.03928870378294954,
+   "n_units": 29,
+   "n_spk": 19,
+   "dropped": []
+  },
+  {
+   "n_drop_spk": 1,
+   "err_mean": 0.0036800055821556038,
+   "err_std": 0.028104080859045276,
+   "n_units": 28,
+   "n_spk": 18,
+   "dropped": [
+    19
+   ]
+  },
+  {
+   "n_drop_spk": 2,
+   "err_mean": 0.002261762685111713,
+   "err_std": 0.035536118626897074,
+   "n_units": 27,
+   "n_spk": 17,
+   "dropped": [
+    9,
+    13
+   ]
+  },
+  {
+   "n_drop_spk": 3,
+   "err_mean": 0.0002473831449536521,
+   "err_std": 0.019372113263004344,
+   "n_units": 26,
+   "n_spk": 16,
+   "dropped": [
+    9,
+    13,
+    15
+   ]
+  },
+  {
+   "n_drop_spk": 4,
+   "err_mean": 0.0024127350714107485,
+   "err_std": 0.015417531861559695,
+   "n_units": 25,
+   "n_spk": 15,
+   "dropped": [
+    8,
+    13,
+    15,
+    21
+   ]
+  }
+ ],
+ "exact_subset": {
+  "n_units": 25,
+  "n_speakers": 16,
+  "dropped_units": [
+   [
+    "6",
+    "8"
+   ],
+   [
+    "9",
+    "10"
+   ],
+   [
+    "13",
+    "4"
+   ],
+   [
+    "15",
+    "2"
+   ]
+  ]
+ },
+ "refit_exact": 27,
+ "n_targets": 27,
+ "per_target": {
+  "shimmer_local": {
+   "max_abs_coef_diff": 2.1141942363467336e-18,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "shimmer_apq3": {
+   "max_abs_coef_diff": 6.2341624917916505e-19,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "anti_formant_250_500": {
+   "max_abs_coef_diff": 1.2975731600306517e-15,
+   "coef_corr": 0.9999999999999998,
+   "verdict": "✅"
+  },
+  "spectral_centroid_variability": {
+   "max_abs_coef_diff": 1.2434497875801753e-14,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "hnr": {
+   "max_abs_coef_diff": 2.7755575615628914e-16,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "h1_a1": {
+   "max_abs_coef_diff": 8.326672684688674e-17,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "a1_p0": {
+   "max_abs_coef_diff": 8.326672684688674e-17,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "flatness_b1_200_500": {
+   "max_abs_coef_diff": 5.898059818321144e-17,
+   "coef_corr": 0.9999999999999999,
+   "verdict": "✅"
+  },
+  "f0_range": {
+   "max_abs_coef_diff": 1.652011860642233e-13,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "F2_F1_distance": {
+   "max_abs_coef_diff": 8.881784197001252e-15,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "F2_F1_ratio": {
+   "max_abs_coef_diff": 3.469446951953614e-18,
+   "coef_corr": 0.9999999999999999,
+   "verdict": "✅"
+  },
+  "band_ratio_high_mid": {
+   "max_abs_coef_diff": 2.168404344971009e-18,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "jitter_rap": {
+   "max_abs_coef_diff": 5.149960319306146e-19,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "anti_formant_500_800": {
+   "max_abs_coef_diff": 1.6653345369377348e-16,
+   "coef_corr": 0.9999999999999998,
+   "verdict": "✅"
+  },
+  "h1_a3": {
+   "max_abs_coef_diff": 6.661338147750939e-16,
+   "coef_corr": 0.9999999999999998,
+   "verdict": "✅"
+  },
+  "spectral_entropy": {
+   "max_abs_coef_diff": 4.85722573273506e-17,
+   "coef_corr": 0.9999999999999998,
+   "verdict": "✅"
+  },
+  "h1_h2": {
+   "max_abs_coef_diff": 8.326672684688674e-17,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "F2_stability": {
+   "max_abs_coef_diff": 5.421010862427522e-19,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "F2": {
+   "max_abs_coef_diff": 2.7000623958883807e-13,
+   "coef_corr": 0.9999999999999996,
+   "verdict": "✅"
+  },
+  "singers_formant_ratio": {
+   "max_abs_coef_diff": 2.168404344971009e-19,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "cq_mean": {
+   "max_abs_coef_diff": 2.2497195079074217e-18,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "cq_peak": {
+   "max_abs_coef_diff": 4.336808689942018e-19,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "cpp_score_mapper": {
+   "max_abs_coef_diff": 3.903127820947816e-18,
+   "coef_corr": 0.9999999999999998,
+   "verdict": "✅"
+  },
+  "spectral_centroid_score_mapper": {
+   "max_abs_coef_diff": 5.329070518200751e-15,
+   "coef_corr": 0.9999999999999999,
+   "verdict": "✅"
+  },
+  "spectral_tilt_score_mapper": {
+   "max_abs_coef_diff": 5.204170427930421e-18,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "a1_p0_score_mapper": {
+   "max_abs_coef_diff": 2.55351295663786e-15,
+   "coef_corr": 1.0,
+   "verdict": "✅"
+  },
+  "sfr_score_mapper": {
+   "max_abs_coef_diff": 3.469446951953614e-18,
+   "coef_corr": 0.9999999999999998,
+   "verdict": "✅"
+  }
+ }
+}

@@ -1,0 +1,133 @@
+{
+ "reconstruction_accuracy": {
+  "a1_p0_sm": {
+   "n": 28,
+   "mapper_all": 0.9807095588606279,
+   "direct_all": 0.8574673435113315,
+   "mapper_oos": 0.9590817785431983,
+   "direct_oos": 0.9256006567487196,
+   "n_oos": 3
+  },
+  "cpp_sm": {
+   "n": 28,
+   "mapper_all": 0.9505446954515762,
+   "direct_all": 0.9687979416920273,
+   "mapper_oos": 0.9999968954375607,
+   "direct_oos": 0.9988239948927398,
+   "n_oos": 3
+  },
+  "sfr_sm": {
+   "n": 28,
+   "mapper_all": 0.965367459185778,
+   "direct_all": 0.9992111379197673,
+   "mapper_oos": 0.9754296782694286,
+   "direct_oos": 0.9998762852616178,
+   "n_oos": 3
+  },
+  "spectral_centroid_sm": {
+   "n": 28,
+   "mapper_all": 0.7995302787042284,
+   "direct_all": 0.6663036426823076,
+   "mapper_oos": -0.008198845216985386,
+   "direct_oos": 0.7175494844094357,
+   "n_oos": 3
+  },
+  "spectral_tilt_sm": {
+   "n": 28,
+   "mapper_all": 0.8138831740423105,
+   "direct_all": 0.997156801879949,
+   "mapper_oos": 0.5855192457409322,
+   "direct_oos": 0.9981760473948875,
+   "n_oos": 3
+  }
+ },
+ "val_comparison": {
+  "비강사용": {
+   "deployed_mapper": -0.7999851437454459,
+   "deployed_direct": -0.785666813446145,
+   "nested_mapper": 0.6763394620329064,
+   "nested_mapper_sd": 0.18154900566426976,
+   "nested_direct": 0.676798055931091,
+   "nested_direct_sd": 0.033080181535078954,
+   "delta_nested": 0.0004585938981845894
+  },
+  "흉성두성": {
+   "deployed_mapper": NaN,
+   "deployed_direct": NaN,
+   "nested_mapper": 0.04082225940977119,
+   "nested_mapper_sd": 0.15562964624866654,
+   "nested_direct": -0.030546409643968608,
+   "nested_direct_sd": 0.16598099271024103,
+   "delta_nested": -0.0713686690537398
+  },
+  "접촉강도": {
+   "deployed_mapper": 0.7326776855715897,
+   "deployed_direct": 0.5402720100069057,
+   "nested_mapper": 0.5455068778080244,
+   "nested_mapper_sd": 0.05012720352065941,
+   "nested_direct": 0.7416250968990953,
+   "nested_direct_sd": 0.067005068133984,
+   "delta_nested": 0.19611821909107086
+  },
+  "호흡식별": {
+   "deployed_mapper": 0.4343152010055754,
+   "deployed_direct": 0.4176178018153441,
+   "nested_mapper": 0.3705868383337043,
+   "nested_mapper_sd": 0.18681897494196845,
+   "nested_direct": 0.3821176283933349,
+   "nested_direct_sd": 0.36277459375411214,
+   "delta_nested": 0.011530790059630591
+  },
+  "전방공명": {
+   "deployed_mapper": -0.6797291055408401,
+   "deployed_direct": -0.6815537273779668,
+   "nested_mapper": 0.40522823005366265,
+   "nested_mapper_sd": 0.12878660908721834,
+   "nested_direct": 0.3924241164580243,
+   "nested_direct_sd": 0.13061259475551537,
+   "delta_nested": -0.012804113595638378
+  },
+  "연구개위치": {
+   "deployed_mapper": -0.6235650296699465,
+   "deployed_direct": -0.5974177038575039,
+   "nested_mapper": 0.5667870824395103,
+   "nested_mapper_sd": 0.11132576259453503,
+   "nested_direct": 0.45443855438408304,
+   "nested_direct_sd": 0.18701745091958838,
+   "delta_nested": -0.11234852805542722
+  },
+  "공명개방": {
+   "deployed_mapper": NaN,
+   "deployed_direct": NaN,
+   "nested_mapper": -0.15460930672262682,
+   "nested_mapper_sd": 0.17225781100664966,
+   "nested_direct": 0.15373930503013172,
+   "nested_direct_sd": 0.2804389985350635,
+   "delta_nested": 0.3083486117527585
+  },
+  "혀경직도": {
+   "deployed_mapper": 0.6935936103913959,
+   "deployed_direct": 0.628582758538553,
+   "nested_mapper": 0.5430217469644427,
+   "nested_mapper_sd": 0.10018431492060365,
+   "nested_direct": 0.4268483867743306,
+   "nested_direct_sd": 0.1564295560454997,
+   "delta_nested": -0.1161733601901121
+  },
+  "상압하압": {
+   "deployed_mapper": NaN,
+   "deployed_direct": NaN,
+   "nested_mapper": -0.024645058287512425,
+   "nested_mapper_sd": 0.20403400187871784,
+   "nested_direct": 0.2329134794712786,
+   "nested_direct_sd": 0.14972603156492245,
+   "delta_nested": 0.257558537758791
+  }
+ },
+ "summary": {
+  "nested_mean_mapper": 0.32989312578132024,
+  "nested_mean_direct": 0.3811509126330445,
+  "shown4_mapper": 0.5064756363864205,
+  "shown4_direct": 0.501257416612711
+ }
+}

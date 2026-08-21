@@ -1,0 +1,46 @@
+{
+ "접촉강도": {
+  "deployed": 0.7327,
+  "p_selection_aware": 0.0231,
+  "ci95": [
+   0.19296163470939806,
+   0.9213588894169469
+  ],
+  "nested_abs": 0.5064982127643562,
+  "sign_correct": true,
+  "significant": true
+ },
+ "호흡식별": {
+  "deployed": 0.4343,
+  "p_selection_aware": 0.3325,
+  "ci95": [
+   -0.05416665438720122,
+   0.8044156505417437
+  ],
+  "nested_abs": 0.3619636918484959,
+  "sign_correct": true,
+  "significant": false
+ },
+ "연구개위치": {
+  "deployed": -0.6236,
+  "p_selection_aware": 0.0536,
+  "ci95": [
+   -0.8692155926041555,
+   -0.24174513350642393
+  ],
+  "nested_abs": 0.6025164613556099,
+  "sign_correct": false,
+  "significant": false
+ },
+ "혀경직도": {
+  "deployed": 0.6936,
+  "p_selection_aware": 0.0136,
+  "ci95": [
+   0.3659841413297997,
+   0.9298978212283663
+  ],
+  "nested_abs": 0.5622759075061882,
+  "sign_correct": true,
+  "significant": true
+ }
+}
