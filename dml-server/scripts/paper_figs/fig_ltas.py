@@ -74,13 +74,17 @@ def main():
 
     apply_style()
     fig, ax = plt.subplots(figsize=(CM_W, CM_W * 0.68))
-    ax.plot(freqs, 10 * np.log10(svd_ltas + 1e-12), color=C_MEAS,
+    svd_db = 10 * np.log10(svd_ltas + 1e-12)
+    ac_db  = 10 * np.log10(ac_ltas  + 1e-12)
+    ax.fill_between(freqs, svd_db, ac_db, color="#bfbfbf", alpha=0.35, linewidth=0)
+    ax.plot(freqs, svd_db, color=C_MEAS,
             label=f"SVD test ($n$ = {n_svd} speakers)")
-    ax.plot(freqs, 10 * np.log10(ac_ltas + 1e-12), color=C_PRED,
+    ax.plot(freqs, ac_db,  color=C_PRED,
             label=f"Academy phone ($n$ = {n_ac} singers)")
     ax.set_xlabel("Frequency (kHz)")
     ax.set_ylabel("Power spectral density (dB)")
     ax.set_xlim(0, 8000)
+    ax.set_ylim(-80, -20)
     ax.set_xticks([0, 2000, 4000, 6000, 8000])
     ax.set_xticklabels(["0", "2", "4", "6", "8"])
     ax.legend(loc="upper right", frameon=True, edgecolor="black",

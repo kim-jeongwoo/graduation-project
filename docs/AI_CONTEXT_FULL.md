@@ -4,7 +4,7 @@
 > 한 번에 주입하기 위한 단일 파일이며, 아래 문서들의 **원문을 요약 없이 그대로** 이어붙였다.
 > 사람이 읽을 정리본은 [`docs/LESSONS_LEARNED.md`](LESSONS_LEARNED.md) 를 볼 것.
 
-- **생성**: 2026-07-31 19:36 · `python docs/build_docs.py` 로 재생성 가능
+- **생성**: 2026-08-05 12:14 · `python docs/build_docs.py` 로 재생성 가능
 - **포함 파일**: 36개
 - **원문 무손실**: 각 파일은 `## ▶ FILE:` 구분선 뒤에 바이트 단위 그대로 들어 있다 (편집·요약·생략 없음).
 - **주의**: 문서 간 내용이 상충할 수 있다. 날짜가 늦은 기술이 우선하며,
@@ -30,7 +30,7 @@
 | `dml-server/HANDOVER_TO_GPT.md` | 14,030 B | C |
 | `dml-server/docs/HANDOVER_TO_CLAUDE_dmlserver.md` | 32,251 B | C |
 | `vocal-server/docs/vocal_server_code_audit_2026-06-16.md` | 45,582 B | D |
-| `vocal-server/PROGRESS.md` | 14,889 B | D |
+| `vocal-server/PROGRESS.md` | 16,889 B | D |
 | `vocal-app/docs/V2_CLOSEOUT_CHECKLIST.md` | 2,850 B | D |
 | `docs/CHANGELOG.md` | 15,582 B | D |
 | `docs/VOCAL_APP_CURRENT_STATE.md` | 14,278 B | D |
@@ -49,7 +49,7 @@
 | `docs/research/30-egg-model-contribution.md` | 1,197 B | E |
 | `docs/research/31-final-validation-report.md` | 4,778 B | E |
 | `docs/research/32-graduation-final-summary.md` | 4,842 B | E |
-| `docs/research/40-rediag-selection-bias-2026-07.md` | 22,831 B | E |
+| `docs/research/40-rediag-selection-bias-2026-07.md` | 22,982 B | E |
 | `docs/research/33-validation-feedback-report.md` | 112,089 B | F |
 
 ## 읽는 순서 권장
@@ -5767,7 +5767,7 @@ DML full analyze 응답은 `analysis_runs.result_json` JSONB 컬럼에 원문 �
 
 ----------------------------------------------------------------------------------------------------
 ## ▶ FILE: `vocal-server/PROGRESS.md`
-<!-- bytes=14889 sha8=adce42b0 -->
+<!-- bytes=16889 sha8=bb5deb21 -->
 ----------------------------------------------------------------------------------------------------
 
 # vocal-server 진행 상황 인수인계
@@ -6062,6 +6062,26 @@ python test_integration.py
 # pycache 클리어 (reload 미반영 시)
 find app -name __pycache__ -exec rm -rf {} +
 ```
+
+---
+
+## 11. admin 관련 기록 (2026-07-07)
+
+### GET /admin/users/{user_id}/sessions response validation 불일치 수정
+- Codex 코드 감사(HANDOVER_TO_CLAUDE.md)에서 발견. `response_model=list[SessionBrief]`인데 함수가 raw `Session` ORM row를 그대로 반환 → `SessionBrief.analysis_status`(required)가 `Session`에 없어 `ResponseValidationError`(500) 발생.
+- read-only 확인: ① user_detail.html/users.html/logs.html은 이 API 엔드포인트를 호출하지 않음(세션 목록은 서버사이드 Jinja 렌더링, `sessions` context var로 별도 조립) → 실사용 경로 없음. ② TestClient로 세션 보유 사용자 대상 재현 → `analysis_status` 필드 누락 500 확인.
+- 수정: `GET /sessions`(일반 사용자용, `app/routers/sessions.py`)의 `SessionBrief` 구성 로직(최신 `AnalysisRun` 조회 → `analysis_status` 매핑, `_build_song_field` 재사용)을 admin 엔드포인트에 동일 적용. 응답 필드 계약 변경 없음, 신규 필드 추가 없음.
+- 검증: TestClient로 인증 후 200 + 전체 필드(`session_id`,`song_title`,`song`,`status`,`analysis_status`,`started_at`,`created_at`) 확인, 미인증 401 유지, `/admin/api/users` 무영향 확인. production 재기동은 미실행(정우 승인 후 별도 진행).
+
+### admin 백로그 동결 (정우 지시, 해동 시점 미정)
+동결 항목: 비밀번호 reset, 강제 로그아웃, CSV export(학생 활동/분석 세션/누적 시도), 활동·점수 차트류.
+- 비밀번호 reset / 강제 로그아웃: auth/JWT/세션에 직접 영향 → 착수 시 read-only 설계 선행 필요.
+- 나머지 2건(CSV export, 차트류)은 조회 전용이라 상대적으로 리스크 낮음.
+- 상태: 전체 동결. 정우 지시 시에만 해동.
+
+### admin 운영 사실
+- Phase A admin은 이 워크스페이스(vocal-server) 유지보수 담당 범위.
+- admin 접근자는 정우 단독. 평가자 5명은 admin 미접근, `ADMIN_PASSWORD` 공유 이력 없음.
 
 
 
@@ -8201,7 +8221,7 @@ B1-A Cohen's d 분석 (oral vs phone, 학습 22명 내):
 
 ----------------------------------------------------------------------------------------------------
 ## ▶ FILE: `docs/research/40-rediag-selection-bias-2026-07.md`
-<!-- bytes=22831 sha8=b160b285 -->
+<!-- bytes=22982 sha8=d0d0e028 -->
 ----------------------------------------------------------------------------------------------------
 
 # 검증 신뢰성 재확인 + 재현성 복구 (진단 2단계)
@@ -8280,11 +8300,11 @@ GB{max_depth 3, 5}
 |---|---|---|
 | 호흡식별 | ElasticNet(alpha=1.0), val_total **+0.6935** | **Ridge(alpha=0.001)**, val_total **+0.4343** |
 
-배포 alpha=0.001은 24-config 그리드에 존재하지 않는다(Ridge 그리드는 0.01~100). 그리드 탐색 후 사후 수동 조정된 값이며, JSON의 `caveats: ["regularization_softened_for_range_v2_fix", ...]`가 그 흔적이다.
+배포 alpha=0.001은 24개 raw config 그리드에는 존재하지 않는다(실효 21개 후보 모델만 남음; Ridge 그리는 0.01~100). 그리드 탐색 후 사후 수동 조정된 값이며, JSON의 `caveats: ["regularization_softened_for_range_v2_fix", ...]`가 그 흔적이다.
 
 ### 2-3. Permutation null
 
-5/10 라벨을 화자 단위로 셔플한 뒤 동일한 선택 절차(21개 config 중 |corr| 최대)를 반복. val 라벨 셔플 10,000회 + train 라벨까지 셔플해 재적합하는 보조 null 200회.
+5/10 라벨을 화자 단위로 셔플한 뒤 동일한 선택 절차(24개 raw config 중 전 계수 0 붕괴 3개를 제외한 실효 21개 후보 모델의 |corr| 최대)를 반복. val 라벨 셔플 10,000회 + train 라벨까지 셔플해 재적합하는 보조 null 200회.
 
 | 항목 | 배포 r | 우연 max\|r\| p50 | p95 | p99 | 최대 | p(배포모델) | p(단일모델 가정) | p(full refit null) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -8300,7 +8320,7 @@ GB{max_depth 3, 5}
 
 ¹ full-null 열은 그리드 최대(0.6935) 기준이며 배포 모델(0.4343) 기준이 아니다.
 
-**핵심 수치**: n=17에서 21개 모델 중 최댓값을 고르면 우연만으로도 |r| ≈ 0.62(95%), 0.71(99%)이 나온다. 중앙값도 0.33~0.40이다.
+**핵심 수치**: n=17에서 24개 raw config 중 실효 21개 후보 모델의 최댓값을 고르면 우연만으로도 |r| ≈ 0.62(95%), 0.71(99%)이 나온다. 중앙값도 0.33~0.40이다.
 
 ---
 
